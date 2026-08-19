@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate example route plan
+        working-directory: skills/codex-luna-subagent-router
+        run: python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
+
+      - name: Run unit tests
+        working-directory: skills/codex-luna-subagent-router
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Verify manifest
+        run: sha256sum -c MANIFEST.sha256
+
+      - name: Validate Agent Skill layout when supported
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh skill publish --help >/dev/null 2>&1; then
+            gh skill publish --dry-run
+          else
+            echo "Installed GitHub CLI does not expose gh skill yet; skipping preview validator."
+          fi

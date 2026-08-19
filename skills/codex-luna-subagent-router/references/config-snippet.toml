@@ -1,0 +1,12 @@
+# 合并到 ~/.codex/config.toml，或项目级 .codex/config.toml。
+# 作用：即使某次 spawn 遗漏 model，默认仍是 Luna。
+# 本 Skill 仍要求每个 Worker 显式选择固定 profile 或显式传参。
+
+[agents]
+enabled = true
+default_subagent_model = "gpt-5.6-luna"
+max_concurrent_threads_per_session = 6
+
+# 故意不设置：
+# default_subagent_reasoning_effort = "..."
+# 原因：思考强度必须由主 Agent 依据每个子任务分别选择。

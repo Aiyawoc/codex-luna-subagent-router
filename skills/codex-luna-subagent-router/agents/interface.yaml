@@ -1,0 +1,20 @@
+interface:
+  display_name: "Luna SubAgent 自动路由"
+  short_description: "精确固定 Luna 与逐任务 reasoning，使用 fresh 任务包防止旧上下文污染"
+  default_prompt: "使用 $codex-luna-subagent-router 评估净收益、生成路由计划、披露配置并派遣 fresh Luna Worker。"
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets:
+    - "openai"
+  activation:
+    mode: "implicit-with-standing-user-authorization"
+    paths: []
+  execution:
+    context: "fork"
+    shell: "bash"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+    remote_metadata_policy: "deny"
+  degradation:
+    openai: "When exact Luna model and per-task reasoning cannot be proven, keep the task in the main agent; never silently inherit or change models."

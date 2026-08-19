@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "id": "simple-answer",
+      "prompt": "解释这个函数为什么返回空数组。",
+      "expected_mode": "lead_only"
+    },
+    {
+      "id": "small-edit",
+      "prompt": "修正 README 中的一个拼写错误。",
+      "expected_mode": "lead_only"
+    },
+    {
+      "id": "single-verifier",
+      "prompt": "独立复核这次数据库迁移是否能安全回滚。",
+      "expected_mode": "delegate",
+      "expected_workers": 1,
+      "minimum_effort": "xhigh"
+    },
+    {
+      "id": "parallel-exploration",
+      "prompt": "分别分析认证、缓存和队列模块的异常路径。",
+      "expected_mode": "delegate",
+      "expected_workers": 3
+    },
+    {
+      "id": "stale-thread",
+      "prompt": "本轮改为分析支付模块，不要继续上一次 UI 任务。",
+      "expected_context": "fresh_new_thread"
+    },
+    {
+      "id": "explicit-other-model",
+      "prompt": "审查任务明确使用 Sol，其余 Worker 仍用 Luna。",
+      "expected_override_source": "user"
+    }
+  ]
+}
