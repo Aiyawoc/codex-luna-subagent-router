@@ -9,6 +9,8 @@ Usage:
 
 The script installs the Skill and four optional Luna custom-agent profiles.
 It does not edit config.toml, AGENTS.md, or custom routing tables.
+The Codex guided flow asks first whether to enable the experimental
+default_mode_request_user_input setting, then asks about authorization and routing.
 For the recommended Codex-guided setup, read references/codex-guided-install.md.
 EOF
 }
@@ -85,5 +87,6 @@ echo "Installed Luna profiles: $AGENTS_BASE/luna-{medium,high,xhigh,max}.toml"
 echo
 echo "Next steps:"
 echo "1. Recommended: ask Codex to follow $DEST_SKILL/references/codex-guided-install.md."
-echo "2. Optional guardrail: merge $DEST_SKILL/references/config-snippet.toml only if you want a global Luna default."
-echo "3. Restart Codex only if the new Skill or profiles do not appear automatically."
+echo "2. The guided flow will first ask whether to enable Default-mode structured questions."
+echo "3. Optional guardrail: merge $DEST_SKILL/references/config-snippet.toml only if you want a global Luna default."
+echo "4. Fully restart Codex after enabling the question-mode setting."

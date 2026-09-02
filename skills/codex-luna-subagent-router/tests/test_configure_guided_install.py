@@ -13,8 +13,10 @@ from configure_guided_install import (  # noqa: E402
     ConfigurationError,
     END_MARKER,
     LEGACY_AUTHORIZATION_V1_0,
+    REQUEST_USER_INPUT_FEATURE,
     START_MARKER,
     configure,
+    merge_request_user_input_feature,
     merge_authorization,
 )
 
@@ -117,6 +119,109 @@ class GuidedInstallTests(unittest.TestCase):
         self.assertEqual(result["delegation"]["action"], "skipped")
         self.assertFalse((self.codex_home / "AGENTS.md").exists())
         self.assertFalse((self.project / "AGENTS.md").exists())
+
+    def test_request_user_input_creates_user_config_when_enabled(self) -> None:
+        result = self.run_configure(request_user_input="enable")
+
+        target = self.codex_home / "config.toml"
+        self.assertEqual(result["request_user_input"]["action"], "created")
+        self.assertEqual(Path(result["request_user_input"]["path"]), target)
+        self.assertEqual(
+            target.read_text(encoding="utf-8"),
+            f"[features]\n{REQUEST_USER_INPUT_FEATURE} = true\n",
+        )
+
+    def test_request_user_input_is_idempotent(self) -> None:
+        first = self.run_configure(request_user_input="enable")
+        target = Path(first["request_user_input"]["path"])
+        original = target.read_text(encoding="utf-8")
+
+        second = self.run_configure(request_user_input="enable")
+
+        self.assertEqual(second["request_user_input"]["action"], "unchanged")
+        self.assertEqual(target.read_text(encoding="utf-8"), original)
+
+    def test_request_user_input_dry_run_does_not_write_config(self) -> None:
+        result = self.run_configure(request_user_input="enable", dry_run=True)
+
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["request_user_input"]["action"], "created")
+        self.assertFalse(self.codex_home.exists())
+
+    def test_request_user_input_preserves_existing_features_and_comments(self) -> None:
+        target = self.codex_home / "config.toml"
+        target.parent.mkdir(parents=True)
+        target.write_text(
+            "[agents]\n"
+            "enabled = true\n\n"
+            "[features]\n"
+            "# Keep this feature.\n"
+            "code_mode = { enabled = true }\n\n"
+            "[mcp_servers.example]\n"
+            "command = \"example\"\n",
+            encoding="utf-8",
+        )
+
+        self.run_configure(request_user_input="enable")
+        text = target.read_text(encoding="utf-8")
+
+        self.assertIn("# Keep this feature.", text)
+        self.assertIn('command = "example"', text)
+        self.assertIn(f"{REQUEST_USER_INPUT_FEATURE} = true", text)
+        self.assertEqual(text.count(REQUEST_USER_INPUT_FEATURE), 1)
+
+    def test_request_user_input_promotes_existing_false_value(self) -> None:
+        existing = (
+            "[features]\n"
+            "default_mode_request_user_input = false # user choice\n"
+            "\n[agents]\n"
+            "enabled = true\n"
+        )
+        merged, action = merge_request_user_input_feature(existing)
+
+        self.assertEqual(action, "updated")
+        self.assertIn(
+            "default_mode_request_user_input = true # user choice",
+            merged,
+        )
+        self.assertIn("enabled = true", merged)
+
+    def test_request_user_input_updates_root_dotted_value(self) -> None:
+        existing = "features.default_mode_request_user_input = false\n"
+
+        merged, action = merge_request_user_input_feature(existing)
+
+        self.assertEqual(action, "updated")
+        self.assertEqual(
+            merged,
+            "features.default_mode_request_user_input = true\n",
+        )
+
+    def test_request_user_input_decline_does_not_create_or_change_config(self) -> None:
+        target = self.codex_home / "config.toml"
+        target.parent.mkdir(parents=True)
+        original = "[features]\ndefault_mode_request_user_input = false\n"
+        target.write_text(original, encoding="utf-8")
+
+        result = self.run_configure(request_user_input="none")
+
+        self.assertEqual(result["request_user_input"]["action"], "skipped")
+        self.assertEqual(target.read_text(encoding="utf-8"), original)
+
+    def test_request_user_input_rejects_invalid_toml(self) -> None:
+        with self.assertRaisesRegex(ConfigurationError, "not valid TOML"):
+            merge_request_user_input_feature("[features\n")
+
+    def test_request_user_input_rejects_symlink_config(self) -> None:
+        actual = self.root / "real-config.toml"
+        actual.write_text("[agents]\nenabled = true\n", encoding="utf-8")
+        target = self.codex_home / "config.toml"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(actual)
+
+        with self.assertRaisesRegex(ConfigurationError, "symbolic-link"):
+            self.run_configure(request_user_input="enable")
+        self.assertEqual(actual.read_text(encoding="utf-8"), "[agents]\nenabled = true\n")
 
     def test_user_routing_table_records_additional_responsibilities(self) -> None:
         result = self.run_configure(

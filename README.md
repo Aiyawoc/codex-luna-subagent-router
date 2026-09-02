@@ -15,7 +15,7 @@ A Codex / ChatGPT desktop Code-mode Agent Skill that delegates only when a SubAg
 - Results with a stale task ID or stale objective are rejected as `STALE_CONTEXT` rather than merged.
 - Workers are leaf executors and may not create more SubAgents, threads, or background tasks.
 - Material ambiguity is resolved with the user before dispatch, and the answer is copied into a new RoutePlan and every affected task packet.
-- Codex can guide installation of standing delegation authorization and optional per-effort Luna responsibilities.
+- Codex can first ask about Default-mode structured questions, then guide installation of standing delegation authorization and optional per-effort Luna responsibilities.
 
 ## Repository layout
 
@@ -44,17 +44,20 @@ Send this prompt in the Codex desktop app, CLI, or IDE:
 
 ```text
 Use $skill-installer to install the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v1.1.0/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v1.1.1/skills/codex-luna-subagent-router
 
 After installation, read references/codex-guided-install.md from the installed Skill and continue its Codex guided setup.
 ```
 
-Codex asks for two decisions:
+Codex asks for three decisions in this order:
 
-1. Install standing automatic-delegation authorization globally, for the current project, or not at all.
-2. Whether to add user-defined responsibilities for Luna `medium/high/xhigh/max` to a custom routing table.
+1. Whether to enable Default-mode structured questions: `enable (experimental)` or `leave unchanged`.
+2. Install standing automatic-delegation authorization globally, for the current project, or not at all.
+3. Whether to add user-defined responsibilities for Luna `medium/high/xhigh/max` to a custom routing table.
 
-When `request_user_input` is available in the current Default or Plan surface, the guide uses structured choices. Otherwise it asks the same questions in chat and waits rather than guessing.
+The first question cannot depend on the setting it is about to enable: the guide uses the currently available structured-input tool, or asks in ordinary chat when that tool is unavailable. If the user chooses enable, the configurator writes `[features].default_mode_request_user_input = true` to the user-level `$CODEX_HOME/config.toml` (normally `~/.codex/config.toml`) and requires a full Codex restart. The current official configuration reference does not list this key, so the guide treats it as an experimental client/version-dependent setting; an unsupported client continues with ordinary-chat fallback.
+
+When `request_user_input` is available in the current Default or Plan surface, the guide uses structured choices for the remaining questions. Otherwise it asks the same questions in chat and waits rather than guessing.
 
 Managed destinations are:
 
@@ -64,6 +67,7 @@ Managed destinations are:
 | Project authorization | `<repo>/AGENTS.md` |
 | User routing table | `$CODEX_HOME/codex-luna-subagent-router/routing.json` |
 | Project routing table | `<repo>/.codex/codex-luna-subagent-router/routing.json` |
+| Default-mode question setting | `$CODEX_HOME/config.toml` under `[features].default_mode_request_user_input` |
 
 Custom responsibilities use a `raise_only` merge policy: they may raise the built-in minimum effort, but cannot lower it or weaken model, fresh-context, disclosure, authorization, or task-packet gates.
 
@@ -81,7 +85,7 @@ For project scope:
 ./skills/codex-luna-subagent-router/install.sh --project /path/to/repository
 ```
 
-The installer copies the Skill and four optional custom Luna profiles. It does not modify `config.toml` or `AGENTS.md`.
+The installer copies the Skill and four optional custom Luna profiles. It does not modify `config.toml` or `AGENTS.md`; the Codex guided flow writes the question setting, authorization block, or routing table only after the user explicitly chooses those options.
 
 Afterward, ask Codex to read `references/codex-guided-install.md` from the installed Skill to configure authorization and optional routing preferences.
 
@@ -103,6 +107,15 @@ max_concurrent_threads_per_session = 6
 ```
 
 Do not set a single global `default_subagent_reasoning_effort`; reasoning is intentionally selected per worker.
+
+Default-mode structured questions are an optional experimental setting, written only when the first guided-install question is answered affirmatively:
+
+```toml
+[features]
+default_mode_request_user_input = true
+```
+
+Fully restart Codex after writing it. If the current client does not support the key, ordinary-chat fallback remains available.
 
 The guided installer merges the following authorization as a managed block when the user selects global or project scope:
 

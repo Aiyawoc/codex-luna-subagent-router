@@ -20,7 +20,7 @@ description: 在 Codex 或 ChatGPT 桌面端 Code 模式中，仅当独立分工
 
 ## 模式选择
 
-- 用户要求安装、升级、初始化或配置本 Skill 时，进入 **Codex 引导安装模式**，读取 [Codex 引导安装](references/codex-guided-install.md)。安装是主 Agent 的线性配置任务，不创建 SubAgent。
+- 用户要求安装、升级、初始化或配置本 Skill 时，进入 **Codex 引导安装模式**，读取 [Codex 引导安装](references/codex-guided-install.md)。安装是主 Agent 的线性配置任务，不创建 SubAgent；安装向导的第一个问题必须询问是否启用实验性的 `default_mode_request_user_input`，只有用户选择开启时才写入用户级 `config.toml`。
 - 其他匹配请求进入 **运行时路由模式**，遵循本文其余规则。
 
 ## 何时使用

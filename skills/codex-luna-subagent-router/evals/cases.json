@@ -44,6 +44,7 @@
       "prompt": "请由 Codex 安装并引导配置这个 Skill。",
       "expected_mode": "guided_install",
       "expected_questions": [
+        "request_user_input_mode",
         "delegation_scope",
         "custom_routing"
       ],

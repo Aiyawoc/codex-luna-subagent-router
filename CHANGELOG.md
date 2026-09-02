@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1 — 2026-09-02
+
+- 将 `default_mode_request_user_input` 设为 Codex 引导安装的第一个可选问题。
+- 用户明确选择开启时，安全合并用户级 `config.toml` 的 `[features]` 设置；拒绝或不修改时保留现有配置。
+- 增加 TOML 有效性、重复键、符号链接、幂等写入和既有内容保留测试。
+- 明确该开关的实验性和版本依赖，并保留 `request_user_input` 不可用时的普通对话回退。
+
 ## 1.1.0 — 2026-09-02
 
 - 将 Codex `$skill-installer` 设为推荐安装入口，并增加安装、升级与配置专用引导模式。

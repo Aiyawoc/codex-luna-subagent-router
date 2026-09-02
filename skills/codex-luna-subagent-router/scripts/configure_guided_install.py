@@ -6,13 +6,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
+    tomllib = None
+
 LEVELS = ("medium", "high", "xhigh", "max")
+REQUEST_USER_INPUT_FEATURE = "default_mode_request_user_input"
 START_MARKER = "<!-- codex-luna-subagent-router:delegation-authorization:start -->"
 END_MARKER = "<!-- codex-luna-subagent-router:delegation-authorization:end -->"
 LEGACY_HEADING = "## Luna SubAgent 自动路由授权"
@@ -29,6 +36,191 @@ LEGACY_AUTHORIZATION_V1_0 = """## Luna SubAgent 自动路由授权
 
 class ConfigurationError(ValueError):
     """Raised when guided-install input or a managed target is invalid."""
+
+
+_TABLE_HEADER_RE = re.compile(r"^\s*(\[\[?)([^\]]+?)(\]\]?)(?:\s*#.*)?$")
+_FEATURE_ASSIGNMENT_RE = re.compile(
+    r"^(\s*(?:default_mode_request_user_input|\"default_mode_request_user_input\"|"
+    r"'default_mode_request_user_input')\s*=\s*)(true|false)(\s*(?:#.*)?)(\r?\n?)$"
+)
+_DOTTED_FEATURE_ASSIGNMENT_RE = re.compile(
+    r"^(\s*features\.default_mode_request_user_input\s*=\s*)(true|false)"
+    r"(\s*(?:#.*)?)(\r?\n?)$"
+)
+_ROOT_FEATURES_ASSIGNMENT_RE = re.compile(r"^\s*features\s*=")
+
+
+def _table_header(line: str) -> tuple[str, str] | None:
+    """Return (kind, name) for a simple TOML table header, if present."""
+
+    content = line.rstrip("\r\n")
+    match = _TABLE_HEADER_RE.match(content)
+    if not match:
+        return None
+    opening, name, closing = match.groups()
+    if opening == "[" and closing != "]":
+        return None
+    if opening == "[[" and closing != "]]":
+        return None
+    if opening == "[" and closing == "]":
+        return "table", name.strip()
+    if opening == "[[" and closing == "]]":
+        return "array", name.strip()
+    return None
+
+
+def _existing_feature_value(text: str) -> bool | None:
+    """Return the current feature value from valid TOML text, if defined."""
+
+    if tomllib is None:
+        return None
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigurationError(f"config.toml is not valid TOML: {exc}") from exc
+
+    features = data.get("features")
+    if features is None:
+        return None
+    if not isinstance(features, dict):
+        raise ConfigurationError(
+            "config.toml has a non-table features value; review it manually before enabling "
+            f"{REQUEST_USER_INPUT_FEATURE}"
+        )
+    value = features.get(REQUEST_USER_INPUT_FEATURE)
+    if value is not None and not isinstance(value, bool):
+        raise ConfigurationError(
+            f"config.toml {REQUEST_USER_INPUT_FEATURE} must be a boolean"
+        )
+    return value
+
+
+def merge_request_user_input_feature(existing: str) -> tuple[str, str]:
+    """Enable the experimental Default-mode user-input feature safely.
+
+    The guided installer only ever enables this setting.  A declined choice
+    skips this function, preserving an existing value (including ``true``).
+    Existing TOML formatting and unrelated content remain untouched.
+    """
+
+    if not existing:
+        return (
+            f"[features]\n{REQUEST_USER_INPUT_FEATURE} = true\n",
+            "created",
+        )
+
+    parsed_value = _existing_feature_value(existing)
+    lines = existing.splitlines(keepends=True)
+    current_table: str | None = None
+    feature_header: int | None = None
+    first_nested_feature_header: int | None = None
+    feature_section_end = len(lines)
+    direct_matches: list[tuple[int, re.Match[str]]] = []
+    dotted_matches: list[tuple[int, re.Match[str]]] = []
+    root_features_assignments: list[int] = []
+
+    for index, line in enumerate(lines):
+        header = _table_header(line)
+        if header is not None:
+            kind, name = header
+            if kind == "array" and (name == "features" or name.startswith("features.")):
+                raise ConfigurationError(
+                    "config.toml uses an array-of-tables for features; review it manually before "
+                    f"enabling {REQUEST_USER_INPUT_FEATURE}"
+                )
+            if kind == "table" and name == "features":
+                if feature_header is not None:
+                    raise ConfigurationError(
+                        "config.toml contains duplicate [features] tables"
+                    )
+                feature_header = index
+            elif kind == "table" and name.startswith("features."):
+                if first_nested_feature_header is None:
+                    first_nested_feature_header = index
+            if feature_header is not None and index > feature_header and feature_section_end == len(lines):
+                feature_section_end = index
+            current_table = name if kind == "table" else None
+            continue
+
+        if current_table == "features":
+            match = _FEATURE_ASSIGNMENT_RE.match(line)
+            if match:
+                direct_matches.append((index, match))
+        elif current_table is None:
+            dotted_match = _DOTTED_FEATURE_ASSIGNMENT_RE.match(line)
+            if dotted_match:
+                dotted_matches.append((index, dotted_match))
+            if _ROOT_FEATURES_ASSIGNMENT_RE.match(line):
+                root_features_assignments.append(index)
+
+    if len(direct_matches) + len(dotted_matches) > 1:
+        raise ConfigurationError(
+            f"config.toml contains duplicate {REQUEST_USER_INPUT_FEATURE} assignments"
+        )
+
+    if direct_matches:
+        index, match = direct_matches[0]
+        current_value = parsed_value
+        if current_value is None and tomllib is None:
+            current_value = match.group(2) == "true"
+        if current_value is True:
+            return existing, "unchanged"
+        if current_value is not False:
+            raise ConfigurationError(
+                f"unable to verify the boolean value of {REQUEST_USER_INPUT_FEATURE}"
+            )
+        lines[index] = f"{match.group(1)}true{match.group(3)}{match.group(4)}"
+        return "".join(lines), "updated"
+
+    if dotted_matches:
+        index, match = dotted_matches[0]
+        current_value = parsed_value
+        if current_value is None and tomllib is None:
+            current_value = match.group(2) == "true"
+        if current_value is True:
+            return existing, "unchanged"
+        if current_value is not False:
+            raise ConfigurationError(
+                f"unable to verify the boolean value of {REQUEST_USER_INPUT_FEATURE}"
+            )
+        lines[index] = f"{match.group(1)}true{match.group(3)}{match.group(4)}"
+        return "".join(lines), "updated"
+
+    if parsed_value is True:
+        return existing, "unchanged"
+    if parsed_value is False:
+        raise ConfigurationError(
+            f"{REQUEST_USER_INPUT_FEATURE} is defined in an inline or otherwise unmanaged "
+            "features value; review it manually before enabling"
+        )
+    if root_features_assignments:
+        raise ConfigurationError(
+            "config.toml defines features as a root value without an editable [features] table; "
+            f"review it manually before enabling {REQUEST_USER_INPUT_FEATURE}"
+        )
+
+    if feature_header is not None:
+        insertion = feature_section_end
+        if insertion and not lines[insertion - 1].endswith(("\n", "\r")):
+            lines[insertion - 1] += "\n"
+        lines.insert(insertion, f"{REQUEST_USER_INPUT_FEATURE} = true\n")
+        return "".join(lines), "updated"
+
+    if first_nested_feature_header is not None:
+        insertion = first_nested_feature_header
+        prefix = ["[features]\n", f"{REQUEST_USER_INPUT_FEATURE} = true\n", "\n"]
+        lines[insertion:insertion] = prefix
+        return "".join(lines), "created"
+
+    separator = "" if existing.endswith(("\n", "\r")) else "\n"
+    spacing = "" if existing.endswith(("\n\n", "\r\n\r\n")) else "\n"
+    return (
+        existing
+        + separator
+        + spacing
+        + f"[features]\n{REQUEST_USER_INPUT_FEATURE} = true\n",
+        "created",
+    )
 
 
 def _default_codex_home() -> Path:
@@ -166,7 +358,12 @@ def configure(
     responsibilities: dict[str, list[str]],
     dry_run: bool,
     replace_routing: bool = False,
+    request_user_input: str = "none",
 ) -> dict[str, Any]:
+    if request_user_input not in {"enable", "none"}:
+        raise ConfigurationError(
+            "request_user_input must be either 'enable' or 'none'"
+        )
     needs_project = delegation == "project" or routing_scope == "project"
     project = _resolve_existing_directory(project_root, "--project-root") if needs_project else None
 
@@ -174,11 +371,28 @@ def configure(
     snippet = (skill_root / "references" / "AGENTS-snippet.md").read_text(encoding="utf-8")
     result: dict[str, Any] = {
         "dry_run": dry_run,
+        "request_user_input": {
+            "scope": "user",
+            "action": "skipped",
+            "path": None,
+        },
         "delegation": {"scope": delegation, "action": "skipped", "path": None},
         "routing_table": {"scope": routing_scope, "action": "skipped", "path": None},
     }
 
     pending_writes: list[tuple[Path, str]] = []
+
+    if request_user_input == "enable":
+        config_path = codex_home / "config.toml"
+        existing_config = _read_optional_regular_file(config_path)
+        merged_config, action = merge_request_user_input_feature(existing_config or "")
+        result["request_user_input"] = {
+            "scope": "user",
+            "action": action,
+            "path": str(config_path),
+        }
+        if existing_config != merged_config:
+            pending_writes.append((config_path, merged_config))
 
     if delegation != "none":
         agents_path = codex_home / "AGENTS.md" if delegation == "global" else project / "AGENTS.md"
@@ -263,6 +477,15 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Replace a different existing managed routing table after explicit user confirmation.",
     )
+    parser.add_argument(
+        "--request-user-input",
+        choices=("enable", "none"),
+        default="none",
+        help=(
+            "Enable the experimental Default-mode request_user_input feature in the user "
+            "config; 'none' preserves the current setting."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit a machine-readable result.")
     return parser
 
@@ -282,6 +505,7 @@ def main(argv: list[str] | None = None) -> int:
             responsibilities=responsibilities,
             dry_run=args.dry_run,
             replace_routing=args.replace_routing,
+            request_user_input=args.request_user_input,
         )
     except (ConfigurationError, OSError, UnicodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -292,7 +516,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         prefix = "DRY RUN" if args.dry_run else "OK"
         print(f"{prefix}: guided configuration completed")
-        for key in ("delegation", "routing_table"):
+        for key in ("request_user_input", "delegation", "routing_table"):
             item = result[key]
             target = f" -> {item['path']}" if item["path"] else ""
             print(f"- {key}: {item['scope']} / {item['action']}{target}")

@@ -15,7 +15,7 @@
 - task ID 或任务目标不匹配时，将结果判定为 `STALE_CONTEXT` 并拒绝采纳；
 - Worker 是叶子执行者，不得继续创建 SubAgent、Thread 或后台任务；
 - 关键歧义必须先向用户提问，回答合并进新 RoutePlan 和全部任务包后才能派遣；
-- 支持由 Codex 引导安装长期授权和 Luna 四档自定义职责。
+- 支持由 Codex 先选择 Default 模式提问开关，再引导安装长期授权和 Luna 四档自定义职责。
 
 ## 仓库结构
 
@@ -52,17 +52,20 @@
 
 ```text
 使用 $skill-installer 从以下地址安装 Skill：
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v1.1.0/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v1.1.1/skills/codex-luna-subagent-router
 
 安装后读取该 Skill 的 references/codex-guided-install.md，继续完成 Codex 引导设置。
 ```
 
-Codex 会询问两个核心选择：
+Codex 会按以下顺序询问三个选择：
 
-1. 长期自动委派授权：`全局 / 当前项目 / 不安装`；
-2. 是否把 Luna `medium/high/xhigh/max` 各档额外负责的内容写入自定义路由表。
+1. 是否开启 Default 模式结构化提问：`开启（实验性） / 不修改`；
+2. 长期自动委派授权：`全局 / 当前项目 / 不安装`；
+3. 是否把 Luna `medium/high/xhigh/max` 各档额外负责的内容写入自定义路由表。
 
-当 `request_user_input` 在当前 Default 或 Plan 模式可用时，引导会使用结构化选项；不可用或无法等待时，会改用普通对话询问，不会猜测。
+第一个问题不能依赖刚刚要开启的功能本身：引导会先用当前可用的结构化提问，若不可用则使用普通对话。选择开启后，配置器只在用户级 `$CODEX_HOME/config.toml`（默认 `~/.codex/config.toml`）中写入 `[features].default_mode_request_user_input = true`，并要求完全重启 Codex 才能让新设置生效。当前官方配置参考未列出该键，因此它按实验性开关处理；若当前客户端不识别，Skill 会继续回退到普通对话，不影响其余配置。
+
+当 `request_user_input` 在当前 Default 或 Plan 模式可用时，后续引导会使用结构化选项；不可用或无法等待时，会改用普通对话询问，不会猜测。
 
 引导配置使用托管边界，不覆盖既有内容：
 
@@ -72,6 +75,7 @@ Codex 会询问两个核心选择：
 | 项目授权 | `<repo>/AGENTS.md` |
 | 用户路由表 | `$CODEX_HOME/codex-luna-subagent-router/routing.json` |
 | 项目路由表 | `<repo>/.codex/codex-luna-subagent-router/routing.json` |
+| Default 模式提问开关 | `$CODEX_HOME/config.toml` 中的 `[features].default_mode_request_user_input` |
 
 自定义职责采用 `raise_only`：只能提高内置最低思考强度，不能降低强度，也不能改变 Luna 默认模型、合法档位、fresh context、披露或任务包硬门。
 
@@ -96,7 +100,7 @@ cd codex-luna-subagent-router
 - Skill 到 `~/.agents/skills/codex-luna-subagent-router`，或项目的 `.agents/skills/`；
 - 四个 Luna Agent 配置到 `$CODEX_HOME/agents/`（默认 `~/.codex/agents/`），或项目的 `.codex/agents/`。
 
-脚本不会自动修改 `config.toml` 或 `AGENTS.md`。
+脚本不会自动修改 `config.toml` 或 `AGENTS.md`；只有 Codex 引导流程在用户明确选择后，才会写入提问开关、授权块或自定义路由表。
 
 安装后可让 Codex 读取：
 
@@ -124,6 +128,15 @@ max_concurrent_threads_per_session = 6
 ```
 
 不要设置固定的 `default_subagent_reasoning_effort`，否则会削弱主 Agent 按子任务动态选择强度的能力。
+
+提问模式是可选的实验性设置，仅在引导第一问选择开启后写入：
+
+```toml
+[features]
+default_mode_request_user_input = true
+```
+
+写入后需要完全重启 Codex；若客户端版本不支持该键，继续使用普通对话回退。
 
 引导安装会根据用户的全局/项目选择，以托管块方式合并下面的授权内容：
 

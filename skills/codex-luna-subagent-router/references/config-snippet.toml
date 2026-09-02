@@ -7,6 +7,12 @@ enabled = true
 default_subagent_model = "gpt-5.6-luna"
 max_concurrent_threads_per_session = 6
 
+# Optional experimental Default-mode structured-question support.
+# The guided installer writes this only after the user explicitly chooses
+# “开启（实验性）”; a full Codex restart is required before it can take effect.
+# [features]
+# default_mode_request_user_input = true
+
 # 故意不设置：
 # default_subagent_reasoning_effort = "..."
 # 原因：思考强度必须由主 Agent 依据每个子任务分别选择。
