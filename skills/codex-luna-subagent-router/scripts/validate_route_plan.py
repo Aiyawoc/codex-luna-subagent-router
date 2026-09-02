@@ -12,6 +12,7 @@ from typing import Any
 
 ALLOWED_LEVELS = ("medium", "high", "xhigh", "max")
 ALLOWED_SURFACES = ("native_subagent", "app_thread")
+ALLOWED_USER_INPUT_STATES = ("not_needed", "resolved")
 PROFILE_BY_LEVEL = {
     "medium": "luna_medium",
     "high": "luna_high",
@@ -66,6 +67,23 @@ def _paths_overlap(left: str, right: str) -> bool:
     return left.startswith(right + "/") or right.startswith(left + "/")
 
 
+def _validate_clarifications(value: Any, path: str, errors: list[str]) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        errors.append(f"{path}: must be a list")
+        return []
+    result: list[dict[str, str]] = []
+    for index, item in enumerate(value):
+        item_path = f"{path}[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{item_path}: must be an object")
+            continue
+        question = _require_string(item, "question", item_path, errors)
+        answer = _require_string(item, "answer", item_path, errors)
+        if question and answer:
+            result.append({"question": question, "answer": answer})
+    return result
+
+
 def _validate_dependencies(workers: list[dict[str, Any]], errors: list[str]) -> None:
     ids = {worker.get("task_id") for worker in workers if isinstance(worker.get("task_id"), str)}
     graph: dict[str, list[str]] = {}
@@ -111,8 +129,8 @@ def validate_plan(data: Any) -> list[str]:
     if not isinstance(data, dict):
         return ["root: plan must be a JSON object"]
 
-    if data.get("schema_version") != "1.0":
-        errors.append('schema_version: must equal "1.0"')
+    if data.get("schema_version") != "1.1":
+        errors.append('schema_version: must equal "1.1"')
 
     root_request_id = _require_string(data, "root_request_id", "root", errors)
     if root_request_id and not ID_RE.fullmatch(root_request_id):
@@ -124,6 +142,17 @@ def validate_plan(data: Any) -> list[str]:
         errors.append('root.on_route_rejected: must equal "lead_only"; silent model fallback is forbidden')
     if data.get("stale_context_policy") != "reject_and_respawn_fresh":
         errors.append('root.stale_context_policy: must equal "reject_and_respawn_fresh"')
+
+    user_input_state = data.get("user_input_state")
+    if user_input_state not in ALLOWED_USER_INPUT_STATES:
+        errors.append(
+            "root.user_input_state: must be not_needed or resolved; pending user input cannot be dispatched"
+        )
+    clarifications = _validate_clarifications(data.get("clarifications"), "root.clarifications", errors)
+    if user_input_state == "not_needed" and clarifications:
+        errors.append("root.clarifications: must be empty when user_input_state=not_needed")
+    if user_input_state == "resolved" and not clarifications:
+        errors.append("root.clarifications: must contain at least one answered item when user_input_state=resolved")
 
     max_attempts = data.get("max_attempts_per_task")
     if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or not (1 <= max_attempts <= 2):
@@ -237,6 +266,13 @@ def validate_plan(data: Any) -> list[str]:
 
         for key in ("current_user_request", "normalized_goal", "subtask_goal", "output_contract"):
             _require_string(packet, key, packet_path, errors)
+        packet_clarifications = _validate_clarifications(
+            packet.get("clarifications"), f"{packet_path}.clarifications", errors
+        )
+        if packet_clarifications != clarifications:
+            errors.append(
+                f"{packet_path}.clarifications: must exactly match the resolved root clarifications"
+            )
         for key in (
             "in_scope",
             "out_of_scope",
@@ -274,7 +310,14 @@ def render_notice(data: dict[str, Any]) -> str:
     workers = data.get("workers", [])
     approval_mode = data.get("approval_mode")
     suffix = "等待用户确认后执行。" if approval_mode == "require_user_confirmation" else "通知后直接执行。"
-    lines = [f"准备创建 {len(workers)} 个 SubAgent；{suffix}", ""]
+    state = data.get("user_input_state")
+    clarification_count = len(data.get("clarifications", []))
+    clarification_summary = (
+        f"已合并 {clarification_count} 项用户澄清"
+        if state == "resolved"
+        else "无需额外用户澄清"
+    )
+    lines = [f"准备创建 {len(workers)} 个 SubAgent；{suffix}", f"用户输入：{clarification_summary}", ""]
     for index, worker in enumerate(workers, start=1):
         effort = worker.get("reasoning_effort", "unknown")
         complexity = worker.get("complexity", "unknown")

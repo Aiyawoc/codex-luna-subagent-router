@@ -7,13 +7,15 @@
 ## 核心效果
 
 - 主 Agent 保持用户当前选择的 Sol 或 Luna；
-- 仅在独立执行、并行处理或独立复核具有明确净收益时创建 SubAgent；
+- 仅在独立执行、并行处理或独立复核具有明确净收益，且本轮请求或适用 `AGENTS.md` 已授权时创建 SubAgent；
 - 用户未为某个 Worker 指定模型时，必须显式使用 `gpt-5.6-luna`；
 - 主 Agent 按子任务独立选择中/高/极高/最高，即 `medium/high/xhigh/max`；
 - 创建前向用户展示每个 Worker 的任务简报、复杂度、模型、强度、任务 ID、上下文模式和理由；
 - 每次 attempt 使用新线程、唯一任务 ID 与自包含的本轮任务包；
 - task ID 或任务目标不匹配时，将结果判定为 `STALE_CONTEXT` 并拒绝采纳；
-- Worker 是叶子执行者，不得继续创建 SubAgent、Thread 或后台任务。
+- Worker 是叶子执行者，不得继续创建 SubAgent、Thread 或后台任务；
+- 关键歧义必须先向用户提问，回答合并进新 RoutePlan 和全部任务包后才能派遣；
+- 支持由 Codex 引导安装长期授权和 Luna 四档自定义职责。
 
 ## 仓库结构
 
@@ -36,25 +38,44 @@
         │   ├── luna-xhigh.toml
         │   └── luna-max.toml
         ├── references/
-        ├── scripts/validate_route_plan.py
+        ├── scripts/
+        │   ├── configure_guided_install.py
+        │   └── validate_route_plan.py
         ├── examples/route-plan.valid.json
-        ├── tests/test_validate_route_plan.py
+        ├── tests/
         └── evals/cases.json
 ```
 
-## 使用 GitHub CLI 安装
+## 推荐：让 Codex 引导安装
 
-GitHub CLI 的 Agent Skills 功能目前属于预览功能。安装固定的 `v1.0.0` 版本到 Codex 用户级目录：
+在 Codex 桌面端、CLI 或 IDE 中发送：
 
-```bash
-gh skill install Aiyawoc/codex-luna-subagent-router \
-  codex-luna-subagent-router \
-  --agent codex \
-  --scope user \
-  --pin v1.0.0
+```text
+使用 $skill-installer 从以下地址安装 Skill：
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v1.1.0/skills/codex-luna-subagent-router
+
+安装后读取该 Skill 的 references/codex-guided-install.md，继续完成 Codex 引导设置。
 ```
 
-## 手动安装
+Codex 会询问两个核心选择：
+
+1. 长期自动委派授权：`全局 / 当前项目 / 不安装`；
+2. 是否把 Luna `medium/high/xhigh/max` 各档额外负责的内容写入自定义路由表。
+
+当 `request_user_input` 在当前 Default 或 Plan 模式可用时，引导会使用结构化选项；不可用或无法等待时，会改用普通对话询问，不会猜测。
+
+引导配置使用托管边界，不覆盖既有内容：
+
+| 选择 | 写入位置 |
+| --- | --- |
+| 全局授权 | `$CODEX_HOME/AGENTS.md`，默认 `~/.codex/AGENTS.md` |
+| 项目授权 | `<repo>/AGENTS.md` |
+| 用户路由表 | `$CODEX_HOME/codex-luna-subagent-router/routing.json` |
+| 项目路由表 | `<repo>/.codex/codex-luna-subagent-router/routing.json` |
+
+自定义职责采用 `raise_only`：只能提高内置最低思考强度，不能降低强度，也不能改变 Luna 默认模型、合法档位、fresh context、披露或任务包硬门。
+
+## 手动安装（备选）
 
 全局安装：
 
@@ -73,11 +94,19 @@ cd codex-luna-subagent-router
 安装脚本会复制：
 
 - Skill 到 `~/.agents/skills/codex-luna-subagent-router`，或项目的 `.agents/skills/`；
-- 四个 Luna Agent 配置到 `~/.codex/agents/`，或项目的 `.codex/agents/`。
+- 四个 Luna Agent 配置到 `$CODEX_HOME/agents/`（默认 `~/.codex/agents/`），或项目的 `.codex/agents/`。
 
 脚本不会自动修改 `config.toml` 或 `AGENTS.md`。
 
-## 配置防护栏
+安装后可让 Codex 读取：
+
+```text
+skills/codex-luna-subagent-router/references/codex-guided-install.md
+```
+
+继续完成授权和自定义路由设置。
+
+## 可选配置防护栏
 
 把下面文件中的 `[agents]` 内容合并到适用的 Codex 配置：
 
@@ -96,7 +125,7 @@ max_concurrent_threads_per_session = 6
 
 不要设置固定的 `default_subagent_reasoning_effort`，否则会削弱主 Agent 按子任务动态选择强度的能力。
 
-为了提供长期自动委派授权，把下面文件合并到全局或项目 `AGENTS.md`：
+引导安装会根据用户的全局/项目选择，以托管块方式合并下面的授权内容：
 
 ```text
 skills/codex-luna-subagent-router/references/AGENTS-snippet.md
@@ -107,6 +136,8 @@ skills/codex-luna-subagent-router/references/AGENTS-snippet.md
 ```text
 使用 $codex-luna-subagent-router 处理这个任务。
 ```
+
+没有本轮明确委派请求、也没有适用的长期授权时，Skill 可以评估委派收益，但不会实际创建 Worker。
 
 ## 四个固定 Worker
 

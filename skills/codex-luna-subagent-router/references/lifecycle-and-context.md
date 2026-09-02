@@ -4,6 +4,7 @@
 
 ```text
 PLANNED
+  -> USER_INPUT_RESOLVED
   -> NOTICE_SHOWN
   -> SPAWN_PENDING
   -> RUNNING
@@ -20,16 +21,19 @@ PLANNED
 - `FAILED`：任务明确失败。
 - `UNKNOWN`：无法确认 Agent 身份或状态；不得采纳、追问或伪装成成功。
 
+没有关键歧义时，`USER_INPUT_RESOLVED` 由 `user_input_state=not_needed` 满足；发生提问时，只有获得用户答案、合并进新 RoutePlan 和全部受影响任务包后才满足。`pending` 状态不得进入 `NOTICE_SHOWN`。
+
 ## 创建前
 
 1. 为本轮用户消息创建 `root_request_id`。
 2. 每个 Worker attempt 创建全新 `task_id`。
 3. 生成完整任务包，不依赖 Worker 历史。
-4. 选择新线程：
+4. 若用户在计划生成后补充或改变答案，作废旧计划并从当前请求重新生成，不能只修改派遣提示中的一处文字。
+5. 选择新线程：
    - 若 live schema 提供 `fork_turns`，设为 `"none"`；
    - 若不提供，不传该字段，但仍创建新 Agent；
    - 永远不要使用完整历史继承来替代任务包。
-5. 校验路由计划并向用户展示通知。
+6. 校验路由计划并向用户展示通知。
 
 ## 禁止复用的情形
 

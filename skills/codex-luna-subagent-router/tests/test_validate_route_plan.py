@@ -34,6 +34,39 @@ class RoutePlanValidationTests(unittest.TestCase):
         self.assertIn("gpt-5.6-luna", notice)
         self.assertIn("luna_high", notice)
         self.assertIn("req-example-001-w1-a1", notice)
+        self.assertIn("无需额外用户澄清", notice)
+
+    def test_pending_user_input_is_rejected(self) -> None:
+        plan = self.plan()
+        plan["user_input_state"] = "pending"
+        self.assertInvalidContains(plan, "pending user input")
+
+    def test_resolved_input_requires_answered_clarification(self) -> None:
+        plan = self.plan()
+        plan["user_input_state"] = "resolved"
+        self.assertInvalidContains(plan, "at least one answered item")
+
+    def test_resolved_clarification_must_reach_every_packet(self) -> None:
+        plan = self.plan()
+        clarification = {
+            "question": "本次只分析还是直接修复？",
+            "answer": "直接修复并运行回归测试。",
+        }
+        plan["user_input_state"] = "resolved"
+        plan["clarifications"] = [clarification]
+        for worker in plan["workers"]:
+            worker["task_packet"]["clarifications"] = [copy.deepcopy(clarification)]
+
+        self.assertEqual(validate_plan(plan), [])
+        self.assertIn("已合并 1 项用户澄清", render_notice(plan))
+
+    def test_packet_clarification_mismatch_is_rejected(self) -> None:
+        plan = self.plan()
+        clarification = {"question": "是否直接修改？", "answer": "是"}
+        plan["user_input_state"] = "resolved"
+        plan["clarifications"] = [clarification]
+        plan["workers"][0]["task_packet"]["clarifications"] = [copy.deepcopy(clarification)]
+        self.assertInvalidContains(plan, "must exactly match")
 
     def test_non_luna_without_user_override_is_rejected(self) -> None:
         plan = self.plan()

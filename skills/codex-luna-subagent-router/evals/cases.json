@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "cases": [
     {
       "id": "simple-answer",
@@ -33,6 +33,27 @@
       "id": "explicit-other-model",
       "prompt": "审查任务明确使用 Sol，其余 Worker 仍用 Luna。",
       "expected_override_source": "user"
+    },
+    {
+      "id": "material-ambiguity",
+      "prompt": "处理同步异常，但没有说明只分析还是直接修改。",
+      "expected_user_input": "ask_before_dispatch"
+    },
+    {
+      "id": "guided-install-global",
+      "prompt": "请由 Codex 安装并引导配置这个 Skill。",
+      "expected_mode": "guided_install",
+      "expected_questions": [
+        "delegation_scope",
+        "custom_routing"
+      ],
+      "expected_workers": 0
+    },
+    {
+      "id": "custom-routing-raise-only",
+      "prompt": "用户路由表把架构变更列为 medium，但内置最低要求为 xhigh。",
+      "expected_effort": "xhigh",
+      "expected_merge_policy": "raise_only"
     }
   ]
 }

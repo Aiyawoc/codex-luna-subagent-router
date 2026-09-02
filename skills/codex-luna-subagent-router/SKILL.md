@@ -1,6 +1,6 @@
 ---
 name: codex-luna-subagent-router
-description: 在 Codex 或 ChatGPT 桌面端 Code 模式中，仅当独立分工、并行执行或独立复核具有明确净收益时，自动创建 SubAgent；主 Agent 保持当前 Sol/Luna 模型，未被用户另行指定的 SubAgent 一律显式使用 gpt-5.6-luna，并按任务难度逐个选择 medium/high/xhigh/max。派遣前必须向用户披露每个 SubAgent 的任务简报、复杂度、模型、思考强度和理由；每次派遣都创建新线程并发送自包含的本轮任务包，禁止沿用旧 SubAgent 目标。简单问答、短小单文件修改、强顺序任务和不可逆外部操作不触发。
+description: 在 Codex 或 ChatGPT 桌面端 Code 模式中，仅当独立分工、并行执行或独立复核具有明确净收益且当前请求或适用 AGENTS.md 已授权时，创建精确固定为 Luna 的 SubAgent；逐任务选择 medium/high/xhigh/max，派遣前披露配置，并以 fresh 线程和自包含任务包隔离旧目标。也用于通过 Codex 安装、升级或配置本 Skill：引导用户选择全局/项目/不安装长期自动委派授权，并可把 Luna 四档的额外职责写入自定义路由表。简单问答、短小单文件修改、强顺序任务和不可逆外部操作不触发委派。
 ---
 
 # Codex Luna SubAgent Router
@@ -18,9 +18,21 @@ description: 在 Codex 或 ChatGPT 桌面端 Code 模式中，仅当独立分工
 
 除非用户明确为某个 SubAgent 指定其他模型，否则不得自动改用 Sol、Terra、Auto 或继承主 Agent 模型。Luna 路由不可用时，由主 Agent 接管该子任务并如实说明，禁止静默换模。
 
+## 模式选择
+
+- 用户要求安装、升级、初始化或配置本 Skill 时，进入 **Codex 引导安装模式**，读取 [Codex 引导安装](references/codex-guided-install.md)。安装是主 Agent 的线性配置任务，不创建 SubAgent。
+- 其他匹配请求进入 **运行时路由模式**，遵循本文其余规则。
+
 ## 何时使用
 
-只有委派的预期收益明显高于创建、监督和集成成本时才使用。以下情况通常适合：
+只有同时满足以下两项才可实际创建 Worker：
+
+1. 委派的预期收益明显高于创建、监督和集成成本；
+2. 用户本轮明确要求委派，或适用的全局/项目 `AGENTS.md` 含本 Skill 的长期自动委派授权。
+
+Skill 被隐式匹配不等于用户已经授予长期自动委派权限。没有上述授权时可以评估并说明适合的分工，但保持 `lead_only`。
+
+已获授权后，以下情况通常适合：
 
 - 存在一个边界清晰、可独立验收的大型探索、实现或验证子任务；
 - 存在两个以上互不依赖、可并行的交付单元；
@@ -45,16 +57,18 @@ Worker 可以准备不可逆操作所需材料，但不得执行最终外部动�
 ## 强制执行流程
 
 1. **锚定当前请求。** 以用户最新消息为最高优先级，提取本轮目标、仍有效约束、资源、当前工作区状态和验收标准。不要把旧 SubAgent 对话当作任务来源。
-2. **判断是否委派。** 选择 `lead_only` 或一个及以上独立 Worker。只有净收益为正才委派。
-3. **预检实际能力。** 检查当前 Surface 是否能创建新 SubAgent，并能通过自定义 Agent 配置或当前 live spawn schema 显式固定模型和思考强度。主 Agent 若没有协作工具，直接 `lead_only`。
-4. **选择复杂度和思考强度。** 对每个子任务分别确定复杂度与 `medium/high/xhigh/max`，读取 [路由策略](references/routing-policy.md)。
-5. **生成路由计划。** 每个 Worker 分配唯一 `task_id`、新线程、明确所有权、任务包和验收标准。Shell 可用时，用 `scripts/validate_route_plan.py` 校验；禁止在校验失败后派遣。
-6. **先通知用户。** 实际创建前展示每个 Worker 的任务简报、复杂度、模型、思考强度、上下文模式、任务 ID 和创建理由。默认通知后继续，无需等待确认；用户明确要求审批时必须等待。
-7. **创建全新 Worker。** 优先选择已安装的 `luna_medium`、`luna_high`、`luna_xhigh` 或 `luna_max` 自定义 Agent。若这些配置不可用，仅在 live schema 明确支持时，逐个显式传入 `model=gpt-5.6-luna` 与对应 reasoning 参数。
-8. **发送完整任务包。** 按 [任务包协议](references/task-packet.md) 构造独立可执行的当前任务。若 live schema 提供 `fork_turns`，新任务固定使用 `fork_turns="none"`；若未提供该字段，不得臆造参数，仍必须使用新线程和自包含任务包。
-9. **核对身份与目标。** Worker 结果必须以 `TASK_ACK <task_id>` 开头并复述当前子目标。主 Agent 先核对 `task_id` 和目标，再检查结论、变更和验证结果。
-10. **处理上下文污染。** 发现旧目标、错误任务 ID、无关项目或过期约束时，将结果标记为 `STALE_CONTEXT`，拒绝采纳；不得把新任务继续发送到污染线程。使用新 `task_id` 创建全新 Worker，每个子任务最多两次尝试。
-11. **集成与收口。** 主 Agent 亲自解决冲突、运行必要验证并形成最终答案。最终给出简洁、可审计的路由摘要。
+2. **解决关键歧义。** 缺失信息会显著影响范围、方案、权限、风险或验收时，读取 [用户澄清与自定义路由](references/user-input-and-custom-routing.md)。优先使用当前 Surface 的 `request_user_input`；不可用时在普通对话中提问并等待。收到回答后作废旧计划，把回答合并进新计划和全部任务包，禁止先创建 Worker 再补上下文。
+3. **核对委派授权。** 确认当前请求明确要求委派，或适用 `AGENTS.md` 已提供长期授权。仅隐式命中 Skill 时不得视为授权。
+4. **判断是否委派。** 选择 `lead_only` 或一个及以上独立 Worker。只有授权有效且净收益为正才委派。
+5. **预检实际能力。** 检查当前 Surface 是否能创建新 SubAgent，并能通过自定义 Agent 配置或当前 live spawn schema 显式固定模型和思考强度。主 Agent 若没有协作工具，直接 `lead_only`。
+6. **选择复杂度和思考强度。** 对每个子任务分别确定复杂度与 `medium/high/xhigh/max`，读取 [路由策略](references/routing-policy.md)。加载有效的用户/项目自定义路由表；自定义职责只能提高内置最低强度，不能降低或绕过硬门。
+7. **生成路由计划。** 每个 Worker 分配唯一 `task_id`、新线程、明确所有权、任务包和验收标准。记录 `user_input_state` 和本轮澄清。Shell 可用时，用 `scripts/validate_route_plan.py` 校验；禁止在校验失败后派遣。
+8. **先通知用户。** 实际创建前展示每个 Worker 的任务简报、复杂度、模型、思考强度、上下文模式、任务 ID 和创建理由。默认通知后继续，无需等待确认；用户明确要求审批时必须等待。
+9. **创建全新 Worker。** 优先选择已安装的 `luna_medium`、`luna_high`、`luna_xhigh` 或 `luna_max` 自定义 Agent。若这些配置不可用，仅在 live schema 明确支持时，逐个显式传入 `model=gpt-5.6-luna` 与对应 reasoning 参数。
+10. **发送完整任务包。** 按 [任务包协议](references/task-packet.md) 构造独立可执行的当前任务。若 live schema 提供 `fork_turns`，新任务固定使用 `fork_turns="none"`；若未提供该字段，不得臆造参数，仍必须使用新线程和自包含任务包。
+11. **核对身份与目标。** Worker 结果必须以 `TASK_ACK <task_id>` 开头并复述当前子目标。主 Agent 先核对 `task_id` 和目标，再检查结论、变更和验证结果。
+12. **处理上下文污染。** 发现旧目标、错误任务 ID、无关项目或过期约束时，将结果标记为 `STALE_CONTEXT`，拒绝采纳；不得把新任务继续发送到污染线程。使用新 `task_id` 创建全新 Worker，每个子任务最多两次尝试。
+13. **集成与收口。** 主 Agent 亲自解决冲突、运行必要验证并形成最终答案。最终给出简洁、可审计的路由摘要。
 
 ## 复杂度与思考强度
 

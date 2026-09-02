@@ -1,6 +1,8 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "root_request_id": "req-example-001",
+  "user_input_state": "not_needed",
+  "clarifications": [],
   "approval_mode": "notify_and_proceed",
   "on_route_rejected": "lead_only",
   "stale_context_policy": "reject_and_respawn_fresh",
@@ -29,6 +31,7 @@
         "root_request_id": "req-example-001",
         "task_id": "req-example-001-w1-a1",
         "current_user_request": "分析当前项目的认证、缓存和队列模块，定位状态不同步的原因。",
+        "clarifications": [],
         "normalized_goal": "定位状态不同步的根因并给出可验证证据。",
         "subtask_goal": "仅分析认证模块的状态同步路径。",
         "in_scope": [
@@ -85,6 +88,7 @@
         "root_request_id": "req-example-001",
         "task_id": "req-example-001-w2-a1",
         "current_user_request": "分析当前项目的认证、缓存和队列模块，定位状态不同步的原因。",
+        "clarifications": [],
         "normalized_goal": "定位状态不同步的根因并给出可验证证据。",
         "subtask_goal": "仅分析缓存模块的失效、刷新和并发更新路径。",
         "in_scope": [

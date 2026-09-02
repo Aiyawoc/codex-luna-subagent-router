@@ -8,7 +8,8 @@ Usage:
   ./install.sh --project /path/to/repository
 
 The script installs the Skill and four optional Luna custom-agent profiles.
-It does not edit config.toml or AGENTS.md.
+It does not edit config.toml, AGENTS.md, or custom routing tables.
+For the recommended Codex-guided setup, read references/codex-guided-install.md.
 EOF
 }
 
@@ -42,7 +43,7 @@ SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ "$MODE" == "global" ]]; then
   SKILLS_BASE="${CODEX_SKILLS_DIR:-$HOME/.agents/skills}"
-  AGENTS_BASE="${CODEX_AGENTS_DIR:-$HOME/.codex/agents}"
+  AGENTS_BASE="${CODEX_AGENTS_DIR:-${CODEX_HOME:-$HOME/.codex}/agents}"
 else
   PROJECT="$(cd "$PROJECT" && pwd)"
   SKILLS_BASE="$PROJECT/.agents/skills"
@@ -60,18 +61,21 @@ import sys
 src = Path(sys.argv[1]).resolve()
 dst = Path(sys.argv[2]).resolve()
 if src == dst:
-    raise SystemExit("Source and destination are the same directory")
-if dst.exists():
-    shutil.rmtree(dst)
+    raise SystemExit(0)
 
 def ignore(path: str, names: list[str]) -> set[str]:
     return {name for name in names if name in {'.git', '__pycache__', 'dist'}}
 
+if dst.exists():
+    shutil.rmtree(dst)
 shutil.copytree(src, dst, ignore=ignore)
 PY
 
 cp "$SOURCE_DIR"/assets/codex-agents/*.toml "$AGENTS_BASE"/
-chmod +x "$DEST_SKILL/install.sh" "$DEST_SKILL/scripts/validate_route_plan.py"
+chmod +x \
+  "$DEST_SKILL/install.sh" \
+  "$DEST_SKILL/scripts/configure_guided_install.py" \
+  "$DEST_SKILL/scripts/validate_route_plan.py"
 
 python3 "$DEST_SKILL/scripts/validate_route_plan.py" \
   "$DEST_SKILL/examples/route-plan.valid.json" >/dev/null
@@ -80,6 +84,6 @@ echo "Installed Skill: $DEST_SKILL"
 echo "Installed Luna profiles: $AGENTS_BASE/luna-{medium,high,xhigh,max}.toml"
 echo
 echo "Next steps:"
-echo "1. Merge $DEST_SKILL/references/config-snippet.toml into your Codex config.toml."
-echo "2. Merge $DEST_SKILL/references/AGENTS-snippet.md into the applicable AGENTS.md for standing authorization."
+echo "1. Recommended: ask Codex to follow $DEST_SKILL/references/codex-guided-install.md."
+echo "2. Optional guardrail: merge $DEST_SKILL/references/config-snippet.toml only if you want a global Luna default."
 echo "3. Restart Codex only if the new Skill or profiles do not appear automatically."

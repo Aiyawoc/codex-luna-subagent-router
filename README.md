@@ -7,13 +7,15 @@ A Codex / ChatGPT desktop Code-mode Agent Skill that delegates only when a SubAg
 ## What it enforces
 
 - The lead Agent stays on the user's selected Sol or Luna model.
-- SubAgents are created only for useful independent execution, parallel work, or verification.
+- SubAgents are created only for useful independent execution, parallel work, or verification, and only when the current request or an applicable `AGENTS.md` grants delegation authority.
 - Unless the user overrides a specific worker, every worker is explicitly routed to `gpt-5.6-luna`.
 - The lead Agent chooses one of `medium`, `high`, `xhigh`, or `max` for each task.
 - Before dispatch, the user sees each worker's brief, complexity, model, reasoning effort, task ID, context mode, and rationale.
 - Every attempt uses a fresh thread, a unique task ID, and a self-contained current-task packet.
 - Results with a stale task ID or stale objective are rejected as `STALE_CONTEXT` rather than merged.
 - Workers are leaf executors and may not create more SubAgents, threads, or background tasks.
+- Material ambiguity is resolved with the user before dispatch, and the answer is copied into a new RoutePlan and every affected task packet.
+- Codex can guide installation of standing delegation authorization and optional per-effort Luna responsibilities.
 
 ## Repository layout
 
@@ -36,19 +38,36 @@ A Codex / ChatGPT desktop Code-mode Agent Skill that delegates only when a SubAg
         └── evals/
 ```
 
-## Install with GitHub CLI
+## Recommended: guided installation by Codex
 
-GitHub CLI's Agent Skills commands are currently in preview. To install the pinned release for Codex at user scope:
+Send this prompt in the Codex desktop app, CLI, or IDE:
 
-```bash
-gh skill install Aiyawoc/codex-luna-subagent-router \
-  codex-luna-subagent-router \
-  --agent codex \
-  --scope user \
-  --pin v1.0.0
+```text
+Use $skill-installer to install the Skill from:
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v1.1.0/skills/codex-luna-subagent-router
+
+After installation, read references/codex-guided-install.md from the installed Skill and continue its Codex guided setup.
 ```
 
-## Manual installation
+Codex asks for two decisions:
+
+1. Install standing automatic-delegation authorization globally, for the current project, or not at all.
+2. Whether to add user-defined responsibilities for Luna `medium/high/xhigh/max` to a custom routing table.
+
+When `request_user_input` is available in the current Default or Plan surface, the guide uses structured choices. Otherwise it asks the same questions in chat and waits rather than guessing.
+
+Managed destinations are:
+
+| Choice | Destination |
+| --- | --- |
+| Global authorization | `$CODEX_HOME/AGENTS.md` (normally `~/.codex/AGENTS.md`) |
+| Project authorization | `<repo>/AGENTS.md` |
+| User routing table | `$CODEX_HOME/codex-luna-subagent-router/routing.json` |
+| Project routing table | `<repo>/.codex/codex-luna-subagent-router/routing.json` |
+
+Custom responsibilities use a `raise_only` merge policy: they may raise the built-in minimum effort, but cannot lower it or weaken model, fresh-context, disclosure, authorization, or task-packet gates.
+
+## Manual installation (alternative)
 
 ```bash
 git clone https://github.com/Aiyawoc/codex-luna-subagent-router.git
@@ -64,7 +83,9 @@ For project scope:
 
 The installer copies the Skill and four optional custom Luna profiles. It does not modify `config.toml` or `AGENTS.md`.
 
-## Configuration guardrail
+Afterward, ask Codex to read `references/codex-guided-install.md` from the installed Skill to configure authorization and optional routing preferences.
+
+## Optional configuration guardrail
 
 Merge the following file into the applicable Codex configuration:
 
@@ -83,13 +104,15 @@ max_concurrent_threads_per_session = 6
 
 Do not set a single global `default_subagent_reasoning_effort`; reasoning is intentionally selected per worker.
 
-For standing authorization, merge:
+The guided installer merges the following authorization as a managed block when the user selects global or project scope:
 
 ```text
 skills/codex-luna-subagent-router/references/AGENTS-snippet.md
 ```
 
 into the applicable global or project `AGENTS.md`.
+
+Without either an explicit delegation request in the current turn or applicable standing authorization, the Skill may evaluate a possible split but does not spawn a worker.
 
 ## Validate
 
