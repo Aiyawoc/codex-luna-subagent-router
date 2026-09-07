@@ -6,7 +6,7 @@
 
 > **让任意主模型把合适的工作交给“最便宜且足够完成任务”的 SubAgent，从而降低整个任务的预期总成本。**
 
-当前版本：**2.1.1**
+当前版本：**2.1.2**
 
 ## 两种路由模式
 
@@ -71,10 +71,12 @@ v1 的可靠性机制继续保留：
 推荐由 Codex 使用 `$skill-installer` 安装：
 
 ```text
-Use $skill-installer to install the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.1/skills/codex-luna-subagent-router
+Use $skill-installer to install or upgrade the Skill from:
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.2/skills/codex-luna-subagent-router
 
-After installation, read references/codex-guided-install.md and continue the guided setup.
+If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
+
+After installation or upgrade, read references/codex-guided-install.md and continue the guided setup/migration.
 ```
 
 手动安装：
@@ -90,6 +92,14 @@ After installation, read references/codex-guided-install.md and continue the gui
 ```
 
 安装脚本复制 Skill 与常用精确 Agent profiles，不主动修改 `config.toml`、`AGENTS.md` 或 `routing.json`。
+
+### 从旧版本升级
+
+**任何旧版本升级到当前版本时，都应更新整套安装内容，不要只替换 `SKILL.md`。** 旧版本中的根 Skill、`agents/`、`references/`、`scripts/`、`examples/`、`evals/`、`assets/`、安装脚本及所有随包 Agent profiles 应来自同一个新版本，避免混用不同版本的路由规则和 profile。
+
+推荐做法：重新执行当前版本的 `$skill-installer` 全量升级；如果当前 Surface 不能保证完整覆盖，则从新版本重新运行 `install.sh`。安装脚本会替换已安装的整个 Skill 目录，并覆盖当前版本随包提供的 Agent profiles。
+
+用户自己的 `config.toml`、非本 Skill 管理的 `AGENTS.md` 内容以及路由选择不会因为全量更新安装包而直接删除；升级完安装内容后，继续运行 `references/codex-guided-install.md`，由引导流程更新托管授权块、执行旧路由迁移/备份并重新确认当前路由模式。
 
 ## 引导配置
 
