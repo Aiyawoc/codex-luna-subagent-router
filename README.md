@@ -1,109 +1,138 @@
 # Codex Cost-Aware SubAgent Router
 
-An Agent Skill for Codex / ChatGPT desktop Code workflows. Its goal is not to maximize subagent usage. It is to:
+简体中文 | [English](README.en.md)
 
-> **Delegate suitable work to the cheapest subagent configuration that is still likely to complete the task reliably, reducing expected total task cost.**
+一个面向 Codex / ChatGPT 桌面端 Code 工作流的 Agent Skill。它的目标不是尽量多创建 SubAgent，而是：
 
-Current version: **2.1.0**
+> **让任意主模型把合适的工作交给“最便宜且足够完成任务”的 SubAgent，从而降低整个任务的预期总成本。**
 
-## Two routing modes
+当前版本：**2.1.1**
 
-### `luna_only` — maximum economy
+## 两种路由模式
 
-- Automatic workers are restricted to `gpt-5.6-luna`.
-- The lead selects `low / medium / high / xhigh / max` per task.
-- If Luna is not sufficient, the lead keeps the task instead of automatically upgrading to a more expensive model.
+### `luna_only` — 极致经济
 
-### `adaptive` — cost-aware automatic routing
+- 自动 Worker 只使用 `gpt-5.6-luna`；
+- 按任务选择 `low / medium / high / xhigh / max`；
+- Luna 不足时由主 Agent 自己完成，不自动升级到更贵模型；
+- 适合希望严格控制 SubAgent 成本的用户。
 
-The lead chooses the cheapest sufficient model + reasoning combination across:
+### `adaptive` — 自动综合
+
+主 Agent 根据目标复杂度、任务类型、失败代价、上下文规模和重试风险，在以下层级中选择最低足够组合：
 
 ```text
 gpt-5.6-luna
 → gpt-5.6-terra
-→ gpt-5.6        # Sol tier
+→ gpt-5.6        # Sol 层
 → gpt-6-astra
 ```
 
-Typical roles:
+典型用途：
 
-- Luna: clear, narrow, repeatable leaf work.
-- Terra: read-heavy exploration, scans, large-file review, supporting-document processing.
-- `gpt-5.6`: demanding multi-step implementation, debugging, or review.
-- Astra: bounded tasks that genuinely require the highest capability tier.
+- Luna：清晰、窄范围、重复的叶子任务；
+- Terra：read-heavy scan、探索、大文件 review、支持材料归纳；
+- `gpt-5.6`：困难多步实现、调试、复核；
+- Astra：真正需要最高能力的困难架构、深度反证和高失败代价独立审查。
 
-Adaptive optimizes expected completion cost, not raw per-call price. A stronger model can be cheaper overall when a cheaper worker is likely to fail and retry.
+Adaptive 不是“优先用强模型”，而是优化 **ExpectedCost(task)**。如果 Luna 大概率会多次失败，直接使用更强模型可能反而更省。
 
-## Cost guardrails
+## 核心成本规则
 
-- The main agent keeps the user's selected model and reasoning level.
-- Delegation must pass an expected-cost/benefit gate.
-- Expensive leads can down-route bounded work more aggressively.
-- Cheap leads are more conservative about Luna-to-Luna delegation.
-- At most two attempts per subtask.
-- At most three workers in one wave.
-- Task packets are `minimal_sufficient`.
-- Worker results are `concise_sufficient`.
-- If exact model + reasoning routing cannot be proven, the lead handles the task; no silent inheritance or substitution.
+- 主 Agent 保持用户当前选择的模型和推理强度；
+- 派遣前先比较 `ExpectedCost(delegate)` 与 `ExpectedCost(lead)`；
+- 高价 Lead 可更积极把扫描/整理/窄范围执行下放给 Luna/Terra；
+- 低价 Lead 对 Luna→Luna 委派更谨慎；
+- 每个子任务最多 2 个 attempt，只允许一次自动重试/升级；
+- 每波最多 3 个 Worker；
+- task packet 采用 `minimal_sufficient`，不复制无关历史或大段源码；
+- Worker 返回 `concise_sufficient` 结果；
+- model + reasoning 无法精确固定时，由 Lead 接管，禁止静默继承主模型。
 
-## GPT-6 Astra instruction cleanup
+## GPT-6 Astra / 指令精简
 
-v2.1 follows OpenAI's Astra guidance and Eric Provencher's skill/prompt practices with **progressive disclosure**. The root `SKILL.md` is now a small router; model routing, lifecycle, task-packet, install, and Astra-specific guidance are loaded only when relevant. Standing `AGENTS.md` authorization keeps only stable authorization and routing boundaries.
+v2.1 按 Astra 官方 Guidance 与 Eric Provencher 的实践改为 **progressive disclosure**：根 `SKILL.md` 只负责判断是否值得路由，只有确定需要时才读取对应 reference。Astra 专属的持续性、委派和测试校准放在 `references/astra-guidance.md`，其他模型不会加载。长期 `AGENTS.md` 也只保留自动委派授权和稳定边界。
 
-RoutePlan and Worker packets are compact as well: fixed defaults need not be repeated and resolved clarifications are forwarded only to Workers they affect. This reduces persistent context, packet overhead, and per-Worker prompt tokens.
+RoutePlan 与 Worker task packet 同样支持 compact 表达：固定默认策略不需要重复写入，澄清只传给真正受影响的 Worker。这样可以减少常驻上下文、任务包和每个 Worker profile 的固定 token。
 
-## Context isolation
+## Fresh 上下文隔离
 
-The v1 reliability rules remain:
+v1 的可靠性机制继续保留：
 
-- Fresh thread and fresh `task_id` for new objectives or retries.
-- `fork_turns=none` when the surface supports it.
-- Worker results begin with `TASK_ACK <task_id>`.
-- Stale task ID/objective results are rejected as `STALE_CONTEXT`.
-- Workers cannot create more subagents.
-- Same-wave overlapping writes are forbidden.
+- 新任务 / 新重试 → 新线程 + 新 `task_id`
+- `fork_turns=none`（Surface 支持时）
+- Worker 首行必须 `TASK_ACK <task_id>`
+- task_id / 当前目标不匹配 → `STALE_CONTEXT`
+- Worker 不得继续创建 SubAgent
+- 同波禁止重叠写入
 
-## Install
+## 安装
 
-Recommended Codex install:
+推荐由 Codex 使用 `$skill-installer` 安装：
 
 ```text
 Use $skill-installer to install the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.0/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.1/skills/codex-luna-subagent-router
 
 After installation, read references/codex-guided-install.md and continue the guided setup.
 ```
 
-Manual global install:
+手动安装：
 
 ```bash
 ./skills/codex-luna-subagent-router/install.sh --global
 ```
 
-The installer copies the Skill and common exact-routing profiles. It does not edit `config.toml`, `AGENTS.md`, or `routing.json`.
+或项目级：
 
-## Guided setup
+```bash
+./skills/codex-luna-subagent-router/install.sh --project /path/to/repository
+```
 
-The guided flow asks only three core questions:
+安装脚本复制 Skill 与常用精确 Agent profiles，不主动修改 `config.toml`、`AGENTS.md` 或 `routing.json`。
 
-1. Whether to enable experimental `default_mode_request_user_input`.
-2. Standing delegation authorization: global / current project / none.
-3. Routing mode: `luna_only` / `adaptive`.
+## 引导配置
 
-v1 upgrades recommend `luna_only` by default. Legacy `additional_responsibilities` routing is backed up as `routing.v1.backup.json`.
+向导只询问三个核心选择：
 
-## Built-in profiles
+1. 是否开启实验性的 `default_mode_request_user_input`；
+2. 长期自动委派授权：全局 / 当前项目 / 不安装；
+3. 路由模式：`luna_only` / `adaptive`。
 
-| Model | Profiles |
+v1 升级时默认推荐 `luna_only`，原 `additional_responsibilities` 路由表会备份为 `routing.v1.backup.json`。
+
+示例：
+
+```bash
+cd skills/codex-luna-subagent-router
+
+python3 scripts/configure_guided_install.py \
+  --delegation global \
+  --routing-scope user \
+  --routing-mode luna_only
+```
+
+Adaptive：
+
+```bash
+python3 scripts/configure_guided_install.py \
+  --delegation global \
+  --routing-scope user \
+  --routing-mode adaptive
+```
+
+## 内置 profiles
+
+| 模型 | profiles |
 | --- | --- |
 | Luna | `luna_low`, `luna_medium`, `luna_high`, `luna_xhigh`, `luna_max` |
 | Terra | `terra_medium`, `terra_high` |
-| `gpt-5.6` Sol tier | `sol_high`, `sol_xhigh` |
+| `gpt-5.6` Sol 层 | `sol_high`, `sol_xhigh` |
 | GPT-6 Astra | `astra_high`, `astra_xhigh`, `astra_max` |
 
-Unbundled combinations require a live spawn schema that explicitly supports and verifies the requested model + reasoning.
+未预装组合只有在当前 live spawn schema 明确支持并验证精确 model + reasoning 后才允许。
 
-## Validate
+## 验证
 
 ```bash
 cd skills/codex-luna-subagent-router
@@ -111,8 +140,12 @@ python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
 python3 -m unittest discover -s tests -v
 ```
 
-Design references:
+仓库 CI 还会校验 `MANIFEST.sha256`。
 
-- https://developers.openai.com/api/docs/guides/latest-model
+## 设计依据
+
+- GPT-6 Astra model guidance: https://developers.openai.com/api/docs/guides/latest-model
 - Eric Provencher, “Rethinking skills and prompts for GPT-6 Astra”: https://x.com/pvncher/status/2095991462416490862
-- https://developers.openai.com/codex/agent-configuration/subagents
+- Codex Subagents: https://developers.openai.com/codex/agent-configuration/subagents
+
+官方 Codex 文档指出：每个 SubAgent 都会独立消耗模型与工具 token，所以 SubAgent 工作流通常比可比的单 Agent 运行消耗更多 token；因此本 Skill 把“是否委派”本身也作为成本决策。
