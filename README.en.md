@@ -6,19 +6,37 @@ An Agent Skill for Codex / ChatGPT desktop Code workflows. Its goal is not to ma
 
 > **Delegate suitable work to the cheapest subagent configuration that is still likely to complete the task reliably, reducing expected total task cost.**
 
-Current version: **2.1.2**
+Current version: **2.1.3**
 
 ## Two routing modes
 
+Neither mode changes the main Agent's model or reasoning level. The difference is **which models automatic SubAgents may use and how tightly the SubAgent cost boundary is constrained**.
+
+| Characteristic | `luna_only` | `adaptive` |
+| --- | --- | --- |
+| Core position | Maximum economy and the most predictable SubAgent cost boundary | Automatically balance cost and capability using the cheapest sufficient combination |
+| Automatic Worker models | `gpt-5.6-luna` only | Luna / Terra / `gpt-5.6` Sol tier / Astra |
+| Reasoning selection | The Lead selects Luna `low/medium/high/xhigh/max` | The Lead selects both model and lowest sufficient reasoning |
+| Routing relative to the Lead | Delegates only to Luna; insufficient tasks stay with the Lead | Can down-route to cheaper models or locally escalate difficult subtasks |
+| Cost predictability | Highest; automatic Workers never exceed Luna pricing | More flexible; expensive Workers are used only when expected total cost/benefit justifies them |
+| Best fit | Strict budget control, strong main Agent, lots of cheap delegation | Users who want any main model to automatically choose the right SubAgent capability tier |
+
 ### `luna_only` — maximum economy
 
-- Automatic workers are restricted to `gpt-5.6-luna`.
-- The lead selects `low / medium / high / xhigh / max` per task.
-- If Luna is not sufficient, the lead keeps the task instead of automatically upgrading to a more expensive model.
+Characteristic: **automatic SubAgents never cross the Luna cost boundary.**
+
+- Automatic Workers are restricted to `gpt-5.6-luna`.
+- The Lead selects `low / medium / high / xhigh / max` per task.
+- When Luna is sufficient, an expensive Lead can still offload clear, repetitive, or scan-heavy work cheaply.
+- If Luna is not sufficient, the Lead keeps the task instead of automatically upgrading to Terra / Sol / Astra.
+- This gives the most predictable SubAgent spending, but it will not automatically bring in a stronger Worker for a hard subproblem.
+- Best for users who want strict SubAgent budget control or already run a strong main Agent.
 
 ### `adaptive` — cost-aware automatic routing
 
-The lead chooses the cheapest sufficient model + reasoning combination across:
+Characteristic: **the Lead re-evaluates the capability needed for each subtask and may route both downward and upward relative to the main Agent.**
+
+The Lead chooses the cheapest sufficient model + reasoning combination across:
 
 ```text
 gpt-5.6-luna
@@ -34,7 +52,9 @@ Typical roles:
 - `gpt-5.6`: demanding multi-step implementation, debugging, or review.
 - Astra: bounded tasks that genuinely require the highest capability tier.
 
-Adaptive optimizes expected completion cost, not raw per-call price. A stronger model can be cheaper overall when a cheaper worker is likely to fail and retry.
+Adaptive can let an Astra/Sol Lead down-route simple work to Luna/Terra, while a Luna/Terra Lead can escalate only a small number of difficult, well-bounded subtasks to Sol/Astra. It does not prefer stronger models; it optimizes **ExpectedCost(task)**. If a cheap model is likely to fail and retry, starting with a stronger model can cost less overall.
+
+Choose `luna_only` when **cost ceilings and predictability** matter most. Choose `adaptive` when you want the Lead to **automatically balance cost, capability, and failure risk**.
 
 ## Cost guardrails
 
@@ -71,7 +91,7 @@ Recommended Codex install or upgrade:
 
 ```text
 Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.2/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.3/skills/codex-luna-subagent-router
 
 If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
 
@@ -100,7 +120,9 @@ The guided flow asks only three core questions:
 
 1. Whether to enable experimental `default_mode_request_user_input`.
 2. Standing delegation authorization: global / current project / none.
-3. Routing mode: `luna_only` / `adaptive`.
+3. Routing mode:
+   - `luna_only`: maximum economy; automatic Workers use Luna only, while hard tasks stay with the main Agent for the most predictable cost boundary.
+   - `adaptive`: automatically choose the cheapest sufficient Luna / Terra / Sol / Astra combination; it may down-route cheap work or locally escalate difficult subtasks.
 
 v1 upgrades recommend `luna_only` by default. Legacy `additional_responsibilities` routing is backed up as `routing.v1.backup.json`.
 
