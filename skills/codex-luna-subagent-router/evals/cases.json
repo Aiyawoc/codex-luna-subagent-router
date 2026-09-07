@@ -1,60 +1,21 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "2.0",
+  "objective": "minimize_expected_total_cost",
   "cases": [
-    {
-      "id": "simple-answer",
-      "prompt": "解释这个函数为什么返回空数组。",
-      "expected_mode": "lead_only"
-    },
-    {
-      "id": "small-edit",
-      "prompt": "修正 README 中的一个拼写错误。",
-      "expected_mode": "lead_only"
-    },
-    {
-      "id": "single-verifier",
-      "prompt": "独立复核这次数据库迁移是否能安全回滚。",
-      "expected_mode": "delegate",
-      "expected_workers": 1,
-      "minimum_effort": "xhigh"
-    },
-    {
-      "id": "parallel-exploration",
-      "prompt": "分别分析认证、缓存和队列模块的异常路径。",
-      "expected_mode": "delegate",
-      "expected_workers": 3
-    },
-    {
-      "id": "stale-thread",
-      "prompt": "本轮改为分析支付模块，不要继续上一次 UI 任务。",
-      "expected_context": "fresh_new_thread"
-    },
-    {
-      "id": "explicit-other-model",
-      "prompt": "审查任务明确使用 Sol，其余 Worker 仍用 Luna。",
-      "expected_override_source": "user"
-    },
-    {
-      "id": "material-ambiguity",
-      "prompt": "处理同步异常，但没有说明只分析还是直接修改。",
-      "expected_user_input": "ask_before_dispatch"
-    },
-    {
-      "id": "guided-install-global",
-      "prompt": "请由 Codex 安装并引导配置这个 Skill。",
-      "expected_mode": "guided_install",
-      "expected_questions": [
-        "request_user_input_mode",
-        "delegation_scope",
-        "custom_routing"
-      ],
-      "expected_workers": 0
-    },
-    {
-      "id": "custom-routing-raise-only",
-      "prompt": "用户路由表把架构变更列为 medium，但内置最低要求为 xhigh。",
-      "expected_effort": "xhigh",
-      "expected_merge_policy": "raise_only"
-    }
+    {"id":"simple-answer","prompt":"解释这个函数为什么返回空数组。","expected_mode":"lead_only"},
+    {"id":"small-edit","prompt":"修正 README 中的一个拼写错误。","expected_mode":"lead_only"},
+    {"id":"expensive-lead-downroute","prompt":"当前主 Agent 很强，请扫描 80 个文件定位某 API 调用。","routing_mode":"adaptive","expected_delegate":true,"preferred_model_family":["gpt-5.6-luna","gpt-5.6-terra"]},
+    {"id":"cheap-lead-no-formal-delegation","prompt":"当前主 Agent 是 Luna，只需改一个明确的配置键。","routing_mode":"adaptive","expected_mode":"lead_only"},
+    {"id":"luna-only-hard","prompt":"Luna Only 下独立复核一个非常困难的跨模块竞态。","routing_mode":"luna_only","allowed_auto_models":["gpt-5.6-luna"],"fallback":"lead_only"},
+    {"id":"adaptive-scan","prompt":"读取大型仓库并归纳入口与依赖，不修改代码。","routing_mode":"adaptive","expected_model":"gpt-5.6-terra","expected_effort":["medium","high"]},
+    {"id":"adaptive-hard-debug","prompt":"根据少量日志和并发代码定位高歧义竞态根因。","routing_mode":"adaptive","expected_model":"gpt-5.6","expected_effort":["high","xhigh"]},
+    {"id":"adaptive-critical-review","prompt":"对关键迁移方案做高失败代价、独立反证审查。","routing_mode":"adaptive","allowed_models":["gpt-5.6","gpt-6-astra"],"minimum_effort":"high"},
+    {"id":"explicit-astra-override","prompt":"本次这个 Worker 明确使用 Astra xhigh。","routing_mode":"luna_only","expected_override_source":"user","expected_model":"gpt-6-astra","expected_effort":"xhigh"},
+    {"id":"stale-thread","prompt":"本轮改为分析支付模块，不要继续上一次 UI 任务。","expected_context":"fresh_new_thread"},
+    {"id":"material-ambiguity","prompt":"处理同步异常，但没有说明只分析还是直接修改，且会改变写入权限。","expected_user_input":"ask_before_dispatch"},
+    {"id":"guided-install","prompt":"请由 Codex 安装并引导配置这个 Skill。","expected_mode":"guided_install","expected_questions":["request_user_input_mode","delegation_scope","routing_mode"],"expected_workers":0},
+    {"id":"v1-migration","prompt":"升级已有 additional_responsibilities routing.json。","expected_default_recommendation":"luna_only","expected_backup":"routing.v1.backup.json"},
+    {"id":"context-budget","prompt":"为 Worker 准备任务包。","expected_context_budget":"minimal_sufficient","expected_result_budget":"concise_sufficient"},
+    {"id":"retry-budget","prompt":"低价模型第一次没有解决任务。","expected_max_attempts":2,"forbid":"mechanical_full_model_ladder"}
   ]
 }

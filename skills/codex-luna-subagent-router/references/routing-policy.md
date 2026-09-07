@@ -1,131 +1,128 @@
-# 路由策略
+# 成本优先路由策略
 
-## 1. 委派判定
+## 1. 优化目标
 
-先估算委派净收益：
+本 Skill 优化的是“成功完成当前任务的预期总成本”，而不是单次调用的每 token 价格。
 
 ```text
-净收益 = 并行节省 + 独立验证收益 + 上下文隔离收益
-       - 创建成本 - 监督成本 - 集成冲突风险
+ExpectedCost =
+  首次调用成本
++ 失败概率 × 重试/升级成本
++ 上下文复制成本
++ Lead 集成与复核成本
 ```
 
-只有净收益明确为正才创建 Worker。
+不要内置长期固定的美元价格；模型价格会变化。路由使用相对成本/能力层级和当前任务特征，用户要求精确费用时再查当前官方定价。
 
-实际创建还必须有授权来源：用户本轮明确要求委派，或适用的全局/项目 `AGENTS.md` 含长期自动委派授权。隐式命中 Skill 只触发评估，不自动授予创建权限。
+## 2. 委派成本门
 
-允许只创建 1 个 Worker：例如大型代码探索、独立复核或高风险验证。需要并行时通常创建 2–3 个；广泛调研或多模块任务可创建 4–6 个。不要把一个强顺序任务切成多个等待链。
+创建 Worker 前必须先判断：
 
-## 2. 固定模型规则
+```text
+ExpectedCost(delegate) < ExpectedCost(lead)
+```
 
-默认且强制的 Worker 模型是：
+或者额外成本能被独立验证、并行、上下文隔离等收益明显覆盖。
+
+典型判断：
+
+- Astra / `gpt-5.6` Lead 亲自扫描大量文件：优先考虑下放 Luna/Terra；
+- Luna Lead 再创建 Luna 处理几分钟的线性任务：通常不值得；
+- 复杂但范围小的问题若 Luna 失败概率很高，直接使用更高能力层级可能比逐级试错便宜；
+- 多 Worker 会重复执行模型和工具工作，因此不因“可并行”就自动并行。
+
+## 3. 两种路由模式
+
+### `luna_only`
+
+自动 Worker 只能使用 `gpt-5.6-luna`。
+
+推荐 effort：
+
+- `low`：直接、窄范围、低风险；
+- `medium`：普通叶子实现、扫描、验证；
+- `high`：边界较多、多步但 Luna 仍足够；
+- `xhigh`：较困难调试/复核；
+- `max`：Luna 能力范围内、错误代价较高的最难任务。
+
+如果 Luna 不足，使用 `lead_only`；不要自动升级模型。
+
+### `adaptive`
+
+自动候选按成本/能力层级：
 
 ```text
 gpt-5.6-luna
+→ gpt-5.6-terra
+→ gpt-5.6        # Sol 层
+→ gpt-6-astra
 ```
 
-只有用户明确为某个 Worker 指定其他模型时才可覆盖。主 Agent 自己认为“Sol 可能更好”不是覆盖依据。
+选择“最低足够层级”，不是“复杂度越高越直接选最强”。
 
-Luna 不可用或精确路由能力无法验证时：
+任务类型提示：
+
+- `leaf`、清晰重复任务：Luna；
+- `scan`、read-heavy、large-file review、资料归纳：Terra；
+- 多步困难实现/调试/复核：`gpt-5.6`；
+- 架构级高歧义、深度反证、高失败代价独立审查：Astra。
+
+## 4. reasoning 选择
+
+合法自动档位：
+
+```text
+low | medium | high | xhigh | max
+```
+
+`none` 不进入自动路由；Astra 本身也不支持 `none`。
+
+复杂度和 effort 默认相关但不绑定。例如大型扫描可能是 `complexity=high`、`Terra medium`；范围很小但错误代价极高的审查可能是 `complexity=high`、`Astra xhigh`。
+
+## 5. 一次升级上限
+
+每个子任务最多 2 个 attempt。
+
+- 深度不足：可同模型提高 effort；
+- 能力层级不足：可升级模型；
+- 环境、权限、歧义、task packet 或上下文污染：先修原因，再 fresh retry；
+- 禁止从 Luna low 开始一路失败到 Astra。
+
+## 6. 精确绑定
+
+优先使用已安装 profile：
+
+| 模型 | 内置 profile |
+| --- | --- |
+| Luna | `luna_low/medium/high/xhigh/max` |
+| Terra | `terra_medium/high` |
+| `gpt-5.6` | `sol_high/xhigh` |
+| Astra | `astra_high/xhigh/max` |
+
+未预装组合只有在 live spawn schema 明确支持并验证 model + effort 时才使用 `route_binding=live_spawn`。
+
+无法证明精确路由时：
 
 ```text
 on_route_rejected = lead_only
 ```
 
-即由主 Agent 接管，不自动回退到 Sol、Terra、Auto、旧模型或继承模型。
+不得静默继承 Lead 模型。
 
-## 3. 四档复杂度与推理
+## 7. 用户覆盖
 
-主 Agent 为每个子任务独立选择：
+用户本轮对某 Worker 的明确模型/effort 要求优先于两种路由模式。必须记录：
 
-| 复杂度 | 默认 reasoning | 判断依据 |
-| --- | --- | --- |
-| `medium` / 中 | `medium` | 目标明确、路径短、低风险、少量边界条件 |
-| `high` / 高 | `high` | 多步、多文件、需要验证假设或处理边界条件 |
-| `xhigh` / 极高 | `xhigh` | 跨模块、高歧义、困难调试、重要架构或复核 |
-| `max` / 最高 | `max` | 关键系统、高错误代价、深度推演、反证或安全关键 |
+- `user_model_override = true`
+- `override_source = "user"`
+- `override_reason`
 
-复杂度和 reasoning 默认同档。允许不同档，但必须在派遣通知的“创建理由”中解释，例如“任务规模为高，但错误代价极高，因此使用 max”。
+长期 `AGENTS.md` 授权不等于允许静默改变路由模式。
 
-只允许 `medium/high/xhigh/max`。禁止 `none/low/ultra`。
+## 8. 并发
 
-## 4. 自定义职责
-
-按 [用户澄清与自定义路由](user-input-and-custom-routing.md) 发现并校验用户表与项目表。自定义条目表示对应档位额外负责的任务类型。
-
-强度选择遵循：
-
-```text
-最终强度 = max(内置最低强度, 所有语义匹配的自定义职责档位)
-```
-
-自定义职责只可提高最低强度，不可降低内置判断，也不可修改模型、合法档位、授权、fresh context、披露或任务包规则。命中自定义条目时，在创建理由中说明与当前任务直接相关的命中依据。
-
-## 5. 精确路由实现顺序
-
-### 首选：固定自定义 Agent
-
-选择与 reasoning 对应的 Agent：
-
-- `luna_medium`
-- `luna_high`
-- `luna_xhigh`
-- `luna_max`
-
-这些配置同时固定 `model` 和 `model_reasoning_effort`，避免继承主 Agent。
-
-### 次选：显式 spawn 参数
-
-如果自定义 Agent 不可用，但当前 live spawn schema 明确接受以下控制项，则逐 Worker 显式传入：
-
-- `model = "gpt-5.6-luna"`
-- reasoning 字段 = `medium | high | xhigh | max`
-
-reasoning 字段名以当前工具 schema 为准，可能表现为 `model_reasoning_effort`、`reasoning_effort` 或等价字段。不得猜测不存在的参数，也不得把“请求值”冒充“实际运行值”。
-
-### 最后：lead_only
-
-如果不能证明模型和强度都被显式固定，不创建 Worker。主 Agent 本地完成并说明精确路由不可用。
-
-## 6. 主 Agent 模型
-
-主 Agent 保持用户当前选择的 Sol 或 Luna，不因本 Skill 改模。主 Agent 是否能够创建 Worker 取决于当前 Surface 暴露的协作工具；若当前 Luna 主会话没有创建能力，本 Skill 不能绕过平台限制，应使用 `lead_only`。
-
-## 7. Surface 选择
-
-- `native_subagent`：默认，适合低协调开销的叶子任务。
-- `app_thread`：仅在需要独立 worktree、侧栏可见、跨任务恢复或耐久监督时使用。
-
-无论哪个 Surface，都必须创建全新线程、显式固定 Luna 与 reasoning，并发送完整任务包。不要为了复用历史而选择 App Thread。
-
-如果 native spawn schema 提供 `fork_turns`，新任务固定为 `none`。没有该字段时不传，但仍必须使用新线程和自包含任务包。
-
-## 8. 数量、尝试和波次
-
-- 同时运行最多 6 个 Worker。
-- 每波最多新建 3 个。
-- 每个子任务最多 2 次 Worker attempt。
-- 同一 Worker 最多做 1 次同任务 follow-up；目标变化必须新建 Worker。
-- 新 attempt 使用新 `task_id`。
-
-## 9. 写入所有权
-
-同波次中禁止重叠写入：
-
-- 同一文件或目录；
-- API/schema/迁移/lockfile/生成物；
-- 数据库、浏览器会话或共享外部状态；
-- 会触发相同构建产物的配置。
-
-需要写同一区域的任务应通过依赖关系分波次执行。主 Agent 保留合并、最终测试与不可逆操作的所有权。
-
-## 10. 用户覆盖
-
-用户可以覆盖：
-
-- 是否允许委派；
-- 某个 Worker 的模型；
-- 某个 Worker 的 reasoning；
-- 是否必须先确认；
-- 最大 Worker 数量。
-
-覆盖必须明确、逐 Worker 记录，并反映在派遣通知和实际参数中。
+- `max_concurrent_workers` 最高为 3；
+- 总 Worker 最高为 6，只用于多波次；
+- 一个 Worker 能带来明确收益时只创建一个；
+- 同波禁止重叠写入；
+- read-heavy 更适合并行，write-heavy 更谨慎。

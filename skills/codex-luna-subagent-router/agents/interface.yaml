@@ -1,7 +1,7 @@
 interface:
-  display_name: "Luna SubAgent 自动路由"
-  short_description: "Codex 引导安装、精确 Luna 路由与 fresh 任务隔离"
-  default_prompt: "使用 $codex-luna-subagent-router 评估净收益、生成路由计划、披露配置并派遣 fresh Luna Worker。"
+  display_name: "成本优先 SubAgent 路由"
+  short_description: "Luna Only / Adaptive 双模式，按最低足够模型和推理强度节约成本"
+  default_prompt: "使用 $codex-luna-subagent-router 先比较委派与 Lead 自行完成的预期总成本，再按当前路由模式选择最低足够的 SubAgent model + reasoning，派遣前披露成本理由，并使用 fresh 最小任务包。"
 compatibility:
   canonical_format: "agent-skills"
   adapter_targets:
@@ -17,4 +17,4 @@ compatibility:
     remote_inline_execution: "forbid"
     remote_metadata_policy: "deny"
   degradation:
-    openai: "When exact Luna model and per-task reasoning cannot be proven, keep the task in the main agent; never silently inherit or change models."
+    openai: "When exact subagent model and per-task reasoning cannot be proven, keep the task in the main agent; never silently inherit or substitute a model."

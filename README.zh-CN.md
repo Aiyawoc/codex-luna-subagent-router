@@ -1,178 +1,132 @@
-# Codex Luna SubAgent Router
+# Codex Cost-Aware SubAgent Router
 
-[English](README.md) · [许可证](LICENSE) · [更新记录](CHANGELOG.md)
+一个面向 Codex / ChatGPT 桌面端 Code 工作流的 Agent Skill。它的目标不是尽量多创建 SubAgent，而是：
 
-这是一个面向 ChatGPT 桌面端 Code 模式与本地 Codex 的 Agent Skill，主要针对 Sol Max 或 Luna Max 主会话，实现可审计的 Luna SubAgent 自动路由与上下文隔离。
+> **让任意主模型把合适的工作交给“最便宜且足够完成任务”的 SubAgent，从而降低整个任务的预期总成本。**
 
-## 核心效果
+当前版本：**2.0.0**
 
-- 主 Agent 保持用户当前选择的 Sol 或 Luna；
-- 仅在独立执行、并行处理或独立复核具有明确净收益，且本轮请求或适用 `AGENTS.md` 已授权时创建 SubAgent；
-- 用户未为某个 Worker 指定模型时，必须显式使用 `gpt-5.6-luna`；
-- 主 Agent 按子任务独立选择中/高/极高/最高，即 `medium/high/xhigh/max`；
-- 创建前向用户展示每个 Worker 的任务简报、复杂度、模型、强度、任务 ID、上下文模式和理由；
-- 每次 attempt 使用新线程、唯一任务 ID 与自包含的本轮任务包；
-- task ID 或任务目标不匹配时，将结果判定为 `STALE_CONTEXT` 并拒绝采纳；
-- Worker 是叶子执行者，不得继续创建 SubAgent、Thread 或后台任务；
-- 关键歧义必须先向用户提问，回答合并进新 RoutePlan 和全部任务包后才能派遣；
-- 支持由 Codex 先选择 Default 模式提问开关，再引导安装长期授权和 Luna 四档自定义职责。
+## 两种路由模式
 
-## 仓库结构
+### `luna_only` — 极致经济
 
-```text
-.
-├── README.md
-├── README.zh-CN.md
-├── LICENSE
-├── CHANGELOG.md
-├── NOTICE.md
-└── skills/
-    └── codex-luna-subagent-router/
-        ├── SKILL.md
-        ├── agents/
-        │   ├── openai.yaml
-        │   └── interface.yaml
-        ├── assets/codex-agents/
-        │   ├── luna-medium.toml
-        │   ├── luna-high.toml
-        │   ├── luna-xhigh.toml
-        │   └── luna-max.toml
-        ├── references/
-        ├── scripts/
-        │   ├── configure_guided_install.py
-        │   └── validate_route_plan.py
-        ├── examples/route-plan.valid.json
-        ├── tests/
-        └── evals/cases.json
-```
+- 自动 Worker 只使用 `gpt-5.6-luna`；
+- 按任务选择 `low / medium / high / xhigh / max`；
+- Luna 不足时由主 Agent 自己完成，不自动升级到更贵模型；
+- 适合希望严格控制 SubAgent 成本的用户。
 
-## 推荐：让 Codex 引导安装
+### `adaptive` — 自动综合
 
-在 Codex 桌面端、CLI 或 IDE 中发送：
+主 Agent 根据目标复杂度、任务类型、失败代价、上下文规模和重试风险，在以下层级中选择最低足够组合：
 
 ```text
-使用 $skill-installer 从以下地址安装 Skill：
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v1.1.1/skills/codex-luna-subagent-router
-
-安装后读取该 Skill 的 references/codex-guided-install.md，继续完成 Codex 引导设置。
+gpt-5.6-luna
+→ gpt-5.6-terra
+→ gpt-5.6        # Sol 层
+→ gpt-6-astra
 ```
 
-Codex 会按以下顺序询问三个选择：
+典型用途：
 
-1. 是否开启 Default 模式结构化提问：`开启（实验性） / 不修改`；
-2. 长期自动委派授权：`全局 / 当前项目 / 不安装`；
-3. 是否把 Luna `medium/high/xhigh/max` 各档额外负责的内容写入自定义路由表。
+- Luna：清晰、窄范围、重复的叶子任务；
+- Terra：read-heavy scan、探索、大文件 review、支持材料归纳；
+- `gpt-5.6`：困难多步实现、调试、复核；
+- Astra：真正需要最高能力的困难架构、深度反证和高失败代价独立审查。
 
-第一个问题不能依赖刚刚要开启的功能本身：引导会先用当前可用的结构化提问，若不可用则使用普通对话。选择开启后，配置器只在用户级 `$CODEX_HOME/config.toml`（默认 `~/.codex/config.toml`）中写入 `[features].default_mode_request_user_input = true`，并要求完全重启 Codex 才能让新设置生效。当前官方配置参考未列出该键，因此它按实验性开关处理；若当前客户端不识别，Skill 会继续回退到普通对话，不影响其余配置。
+Adaptive 不是“优先用强模型”，而是优化 **ExpectedCost(task)**。如果 Luna 大概率会多次失败，直接使用更强模型可能反而更省。
 
-当 `request_user_input` 在当前 Default 或 Plan 模式可用时，后续引导会使用结构化选项；不可用或无法等待时，会改用普通对话询问，不会猜测。
+## 核心成本规则
 
-引导配置使用托管边界，不覆盖既有内容：
+- 主 Agent 保持用户当前选择的模型和推理强度；
+- 派遣前先比较 `ExpectedCost(delegate)` 与 `ExpectedCost(lead)`；
+- 高价 Lead 可更积极把扫描/整理/窄范围执行下放给 Luna/Terra；
+- 低价 Lead 对 Luna→Luna 委派更谨慎；
+- 每个子任务最多 2 个 attempt，只允许一次自动重试/升级；
+- 每波最多 3 个 Worker；
+- task packet 采用 `minimal_sufficient`，不复制无关历史或大段源码；
+- Worker 返回 `concise_sufficient` 结果；
+- model + reasoning 无法精确固定时，由 Lead 接管，禁止静默继承主模型。
 
-| 选择 | 写入位置 |
-| --- | --- |
-| 全局授权 | `$CODEX_HOME/AGENTS.md`，默认 `~/.codex/AGENTS.md` |
-| 项目授权 | `<repo>/AGENTS.md` |
-| 用户路由表 | `$CODEX_HOME/codex-luna-subagent-router/routing.json` |
-| 项目路由表 | `<repo>/.codex/codex-luna-subagent-router/routing.json` |
-| Default 模式提问开关 | `$CODEX_HOME/config.toml` 中的 `[features].default_mode_request_user_input` |
+## Fresh 上下文隔离
 
-自定义职责采用 `raise_only`：只能提高内置最低思考强度，不能降低强度，也不能改变 Luna 默认模型、合法档位、fresh context、披露或任务包硬门。
+v1 的可靠性机制继续保留：
 
-## 手动安装（备选）
+- 新任务 / 新重试 → 新线程 + 新 `task_id`
+- `fork_turns=none`（Surface 支持时）
+- Worker 首行必须 `TASK_ACK <task_id>`
+- task_id / 当前目标不匹配 → `STALE_CONTEXT`
+- Worker 不得继续创建 SubAgent
+- 同波禁止重叠写入
 
-全局安装：
+## 安装
+
+推荐由 Codex 使用 `$skill-installer` 安装：
+
+```text
+Use $skill-installer to install the Skill from:
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.0.0/skills/codex-luna-subagent-router
+
+After installation, read references/codex-guided-install.md and continue the guided setup.
+```
+
+开发/验收 v2 分支时，把 tag 地址替换为当前分支。
+
+手动安装：
 
 ```bash
-git clone https://github.com/Aiyawoc/codex-luna-subagent-router.git
-cd codex-luna-subagent-router
 ./skills/codex-luna-subagent-router/install.sh --global
 ```
 
-项目级安装：
+或项目级：
 
 ```bash
-./skills/codex-luna-subagent-router/install.sh --project /path/to/your/repository
+./skills/codex-luna-subagent-router/install.sh --project /path/to/repository
 ```
 
-安装脚本会复制：
+安装脚本复制 Skill 与常用精确 Agent profiles，不主动修改 `config.toml`、`AGENTS.md` 或 `routing.json`。
 
-- Skill 到 `~/.agents/skills/codex-luna-subagent-router`，或项目的 `.agents/skills/`；
-- 四个 Luna Agent 配置到 `$CODEX_HOME/agents/`（默认 `~/.codex/agents/`），或项目的 `.codex/agents/`。
+## 引导配置
 
-脚本不会自动修改 `config.toml` 或 `AGENTS.md`；只有 Codex 引导流程在用户明确选择后，才会写入提问开关、授权块或自定义路由表。
+向导只询问三个核心选择：
 
-安装后可让 Codex 读取：
+1. 是否开启实验性的 `default_mode_request_user_input`；
+2. 长期自动委派授权：全局 / 当前项目 / 不安装；
+3. 路由模式：`luna_only` / `adaptive`。
 
-```text
-skills/codex-luna-subagent-router/references/codex-guided-install.md
+v1 升级时默认推荐 `luna_only`，原 `additional_responsibilities` 路由表会备份为 `routing.v1.backup.json`。
+
+示例：
+
+```bash
+cd skills/codex-luna-subagent-router
+
+python3 scripts/configure_guided_install.py \
+  --delegation global \
+  --routing-scope user \
+  --routing-mode luna_only
 ```
 
-继续完成授权和自定义路由设置。
+Adaptive：
 
-## 可选配置防护栏
-
-把下面文件中的 `[agents]` 内容合并到适用的 Codex 配置：
-
-```text
-skills/codex-luna-subagent-router/references/config-snippet.toml
+```bash
+python3 scripts/configure_guided_install.py \
+  --delegation global \
+  --routing-scope user \
+  --routing-mode adaptive
 ```
 
-关键配置是：
+## 内置 profiles
 
-```toml
-[agents]
-enabled = true
-default_subagent_model = "gpt-5.6-luna"
-max_concurrent_threads_per_session = 6
-```
+| 模型 | profiles |
+| --- | --- |
+| Luna | `luna_low`, `luna_medium`, `luna_high`, `luna_xhigh`, `luna_max` |
+| Terra | `terra_medium`, `terra_high` |
+| `gpt-5.6` Sol 层 | `sol_high`, `sol_xhigh` |
+| GPT-6 Astra | `astra_high`, `astra_xhigh`, `astra_max` |
 
-不要设置固定的 `default_subagent_reasoning_effort`，否则会削弱主 Agent 按子任务动态选择强度的能力。
+未预装组合只有在当前 live spawn schema 明确支持并验证精确 model + reasoning 后才允许。
 
-提问模式是可选的实验性设置，仅在引导第一问选择开启后写入：
-
-```toml
-[features]
-default_mode_request_user_input = true
-```
-
-写入后需要完全重启 Codex；若客户端版本不支持该键，继续使用普通对话回退。
-
-引导安装会根据用户的全局/项目选择，以托管块方式合并下面的授权内容：
-
-```text
-skills/codex-luna-subagent-router/references/AGENTS-snippet.md
-```
-
-也可以在任务中手动点名：
-
-```text
-使用 $codex-luna-subagent-router 处理这个任务。
-```
-
-没有本轮明确委派请求、也没有适用的长期授权时，Skill 可以评估委派收益，但不会实际创建 Worker。
-
-## 四个固定 Worker
-
-| Agent 名 | 模型 | 思考强度 |
-| --- | --- | --- |
-| `luna_medium` | `gpt-5.6-luna` | `medium` |
-| `luna_high` | `gpt-5.6-luna` | `high` |
-| `luna_xhigh` | `gpt-5.6-luna` | `xhigh` |
-| `luna_max` | `gpt-5.6-luna` | `max` |
-
-主 Agent 优先选择对应固定配置；若当前 Surface 不显示这些配置，仅可在 live spawn schema 明确支持时逐 Worker 显式传入模型和 reasoning 参数。
-
-## 为什么能避免旧任务污染
-
-1. 每次 attempt 使用新 `task_id`；
-2. 每次创建全新 Agent 线程；
-3. live schema 有 `fork_turns` 时固定为 `none`；
-4. 每个 Worker 获得完整的本轮任务包；
-5. Worker 第一行回显 `TASK_ACK <task_id>` 和当前目标；
-6. task ID 或目标不匹配时拒绝结果，并用新任务 ID 重建 fresh Worker。
-
-## 校验
+## 验证
 
 ```bash
 cd skills/codex-luna-subagent-router
@@ -180,26 +134,11 @@ python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
 python3 -m unittest discover -s tests -v
 ```
 
-从仓库根目录校验文件完整性：
-
-```bash
-sha256sum -c MANIFEST.sha256
-```
-
-安装的 GitHub CLI 支持 Agent Skills 命令时，还可以执行：
-
-```bash
-gh skill publish --dry-run
-```
-
-## 运行时边界
-
-Skill 只能使用当前客户端实际暴露的协作能力。若当前主会话没有创建 SubAgent 的工具，或无法证明模型与 reasoning 被精确固定，主 Agent 必须本地完成，而不是静默继承主模型、自动换用其他模型，或伪称已创建 Luna Worker。
+仓库 CI 还会校验 `MANIFEST.sha256`。
 
 ## 设计依据
 
-本项目是受 `zjp1997720/codex-model-routing-team` 启发的原创聚焦适配：保留精确路由、任务包、生命周期、所有权和校验机制，同时固定 Luna 默认策略，并强化 fresh-context 与任务身份校验。
+- GPT-6 Astra model guidance: https://developers.openai.com/api/docs/guides/latest-model
+- Codex Subagents: https://developers.openai.com/codex/agent-configuration/subagents
 
-## 许可证
-
-MIT，详见 [LICENSE](LICENSE) 与 [NOTICE.md](NOTICE.md)。
+官方 Codex 文档指出：每个 SubAgent 都会独立消耗模型与工具 token，所以 SubAgent 工作流通常比可比的单 Agent 运行消耗更多 token；因此本 Skill 把“是否委派”本身也作为成本决策。

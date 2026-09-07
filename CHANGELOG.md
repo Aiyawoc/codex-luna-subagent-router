@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.0 — 2026-09-07
+
+- 将项目核心目标正式调整为“在保证可靠完成的前提下最小化预期总模型成本”，主 Agent 保持用户当前模型。
+- 路由配置收敛为两种唯一模式：`luna_only` 极致经济与 `adaptive` 自动综合。
+- `luna_only` 支持 Luna `low/medium/high/xhigh/max`；Luna 不足时由 Lead 接管，不自动升级昂贵模型。
+- `adaptive` 在 Luna、Terra、`gpt-5.6`（Sol 层）与 GPT-6 Astra 中选择最低足够模型与最低足够 reasoning。
+- RoutePlan 升级至 schema 2.0，新增成本目标、委派成本理由、模型选择理由、精确绑定状态、上下文预算与结果预算。
+- 默认每波最多 3 个 Worker；每个子任务最多 2 个 attempt，禁止机械地从最低价模型一路失败升级。
+- 新增 Luna low、Terra medium/high、Sol high/xhigh、Astra high/xhigh/max 精确 profile。
+- v1 `additional_responsibilities` 路由表升级时自动备份为 `routing.v1.backup.json`；升级默认推荐 `luna_only`，避免意外增费。
+- 删除 v1 自定义四档职责路由逻辑，安装向导收敛为：提问模式、长期委派授权、双模式路由。
+- 强化 minimal-sufficient task packet 与 concise-sufficient Worker result，降低重复上下文和汇总 token。
+- 新增/更新成本路由、迁移、并发、profile/live-spawn、用户覆盖与上下文预算测试。
+
 ## 1.1.1 — 2026-09-02
 
 - 将 `default_mode_request_user_input` 设为 Codex 引导安装的第一个可选问题。

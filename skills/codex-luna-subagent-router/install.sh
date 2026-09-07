@@ -7,11 +7,9 @@ Usage:
   ./install.sh --global
   ./install.sh --project /path/to/repository
 
-The script installs the Skill and four optional Luna custom-agent profiles.
-It does not edit config.toml, AGENTS.md, or custom routing tables.
-The Codex guided flow asks first whether to enable the experimental
-default_mode_request_user_input setting, then asks about authorization and routing.
-For the recommended Codex-guided setup, read references/codex-guided-install.md.
+The script installs the Skill and its cost-aware custom-agent profiles.
+It does not edit config.toml, AGENTS.md, or routing.json.
+Use references/codex-guided-install.md for the recommended guided setup.
 EOF
 }
 
@@ -83,10 +81,14 @@ python3 "$DEST_SKILL/scripts/validate_route_plan.py" \
   "$DEST_SKILL/examples/route-plan.valid.json" >/dev/null
 
 echo "Installed Skill: $DEST_SKILL"
-echo "Installed Luna profiles: $AGENTS_BASE/luna-{medium,high,xhigh,max}.toml"
+echo "Installed cost-aware profiles:"
+echo "  Luna:  luna-{low,medium,high,xhigh,max}.toml"
+echo "  Terra: terra-{medium,high}.toml"
+echo "  Sol:   sol-{high,xhigh}.toml"
+echo "  Astra: astra-{high,xhigh,max}.toml"
 echo
 echo "Next steps:"
-echo "1. Recommended: ask Codex to follow $DEST_SKILL/references/codex-guided-install.md."
-echo "2. The guided flow will first ask whether to enable Default-mode structured questions."
-echo "3. Optional guardrail: merge $DEST_SKILL/references/config-snippet.toml only if you want a global Luna default."
-echo "4. Fully restart Codex after enabling the question-mode setting."
+echo "1. Ask Codex to follow $DEST_SKILL/references/codex-guided-install.md."
+echo "2. Choose standing delegation authorization: global / project / none."
+echo "3. Choose routing mode: luna_only (maximum economy) or adaptive (cheapest sufficient)."
+echo "4. Existing v1 routing tables are backed up during guided migration."
