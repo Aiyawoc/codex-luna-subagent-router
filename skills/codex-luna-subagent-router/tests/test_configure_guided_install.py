@@ -76,19 +76,27 @@ class GuidedInstallTests(unittest.TestCase):
         result = self.run_configure(request_user_input="enable")
         target = self.codex_home / "config.toml"
         self.assertEqual(result["request_user_input"]["action"], "created")
-        self.assertEqual(target.read_text(encoding="utf-8"), f"[features]\n{REQUEST_USER_INPUT_FEATURE} = true\n")
+        self.assertEqual(
+            target.read_text(encoding="utf-8"),
+            f"[features]\n{REQUEST_USER_INPUT_FEATURE} = true\n",
+        )
 
     def test_request_user_input_preserves_existing_content(self) -> None:
         target = self.codex_home / "config.toml"
         target.parent.mkdir(parents=True)
-        target.write_text("[agents]\nenabled = true\n\n[features]\n# keep\ncode_mode = { enabled = true }\n", encoding="utf-8")
+        target.write_text(
+            "[agents]\nenabled = true\n\n[features]\n# keep\ncode_mode = { enabled = true }\n",
+            encoding="utf-8",
+        )
         self.run_configure(request_user_input="enable")
         text = target.read_text(encoding="utf-8")
         self.assertIn("# keep", text)
         self.assertIn(f"{REQUEST_USER_INPUT_FEATURE} = true", text)
 
     def test_request_user_input_promotes_false(self) -> None:
-        merged, action = merge_request_user_input_feature("[features]\ndefault_mode_request_user_input = false # user choice\n")
+        merged, action = merge_request_user_input_feature(
+            "[features]\ndefault_mode_request_user_input = false # user choice\n"
+        )
         self.assertEqual(action, "updated")
         self.assertIn("default_mode_request_user_input = true # user choice", merged)
 
@@ -101,9 +109,16 @@ class GuidedInstallTests(unittest.TestCase):
         self.assertEqual(data["max_concurrent_workers"], 3)
 
     def test_adaptive_project_config(self) -> None:
-        result = self.run_configure(routing_scope="project", routing_mode="adaptive", project_root=str(self.project))
+        result = self.run_configure(
+            routing_scope="project",
+            routing_mode="adaptive",
+            project_root=str(self.project),
+        )
         target = Path(result["routing_config"]["path"])
-        self.assertEqual(target, self.project / ".codex" / "codex-luna-subagent-router" / "routing.json")
+        self.assertEqual(
+            target,
+            self.project / ".codex" / "codex-luna-subagent-router" / "routing.json",
+        )
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["routing_mode"], "adaptive")
 
     def test_scope_and_mode_must_be_selected_together(self) -> None:
@@ -135,13 +150,26 @@ class GuidedInstallTests(unittest.TestCase):
         target.write_text('{"custom": true}\n', encoding="utf-8")
         with self.assertRaisesRegex(ConfigurationError, "--replace-routing"):
             self.run_configure(routing_scope="user", routing_mode="adaptive")
-        preview = self.run_configure(routing_scope="user", routing_mode="adaptive", dry_run=True)
-        self.assertEqual(preview["routing_config"]["action"], "replace_requires_confirmation")
-        self.run_configure(routing_scope="user", routing_mode="adaptive", replace_routing=True)
+        preview = self.run_configure(
+            routing_scope="user", routing_mode="adaptive", dry_run=True
+        )
+        self.assertEqual(
+            preview["routing_config"]["action"], "replace_requires_confirmation"
+        )
+        self.run_configure(
+            routing_scope="user",
+            routing_mode="adaptive",
+            replace_routing=True,
+        )
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["routing_mode"], "adaptive")
 
     def test_dry_run_does_not_write(self) -> None:
-        result = self.run_configure(delegation="global", routing_scope="user", routing_mode="luna_only", dry_run=True)
+        result = self.run_configure(
+            delegation="global",
+            routing_scope="user",
+            routing_mode="luna_only",
+            dry_run=True,
+        )
         self.assertTrue(result["dry_run"])
         self.assertFalse(self.codex_home.exists())
 
