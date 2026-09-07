@@ -4,9 +4,32 @@
 
 ## 推荐安装
 
-在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.1.0 tag。
+在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.1.2 tag。
 
-安装后读取本文件并继续。
+安装或升级完成后读取本文件并继续。
+
+## 旧版本升级：必须全量更新安装内容
+
+如果检测到用户已经安装任意旧版本，**不要只更新 `SKILL.md`、某一个 reference、某个脚本或个别 Agent profile**。先把安装内容整体升级到同一个新版本，再进入下面的配置迁移流程。
+
+升级范围至少包括当前发布包中的：
+
+- 根 `SKILL.md`、`VERSION`、`agents/` 元数据；
+- `references/`、`scripts/`、`examples/`、`evals/`、`assets/` 与 `install.sh`；
+- 当前版本随包提供的全部 Agent profiles（Luna / Terra / Sol / Astra）。
+
+推荐优先重新运行 `$skill-installer`，并确保它执行的是**完整 Skill 包升级**。如果当前 Surface 无法证明会覆盖完整包，则从新版本重新运行 `install.sh`；该脚本会替换已安装的整个 Skill 目录，并覆盖当前版本随包 Agent profiles。
+
+不要混用不同版本的 `SKILL.md`、references、脚本或 profiles。不同版本的路由规则、RoutePlan schema、生命周期约束和 profile 指令可能不兼容。
+
+全量更新安装包时，不要直接删除用户自己的配置：
+
+- `$CODEX_HOME/config.toml` 只由明确选择的配置步骤修改；
+- `AGENTS.md` 中非本 Skill 托管的内容必须保留；
+- `routing.json` 按本流程迁移，已知 v1 格式先备份后升级；
+- 其他用户自定义 Agent/profile 不属于本 Skill 的管理范围，不应被清理。
+
+完成全量安装升级后，再继续下面的问题顺序，以更新托管授权块、迁移旧路由并确认当前模式。
 
 ## 问题顺序
 
@@ -36,7 +59,7 @@ default_mode_request_user_input = true
 - 当前项目：写 `<repo>/AGENTS.md`
 - 不安装长期授权
 
-只有明确选择全局/项目时写入 managed block。
+只有明确选择全局/项目时写入 managed block。旧版本已经安装过授权块时，也应使用当前版本的 managed block 重新合并，不能继续保留旧版托管内容。
 
 ### 3. 路由模式
 
@@ -110,18 +133,24 @@ v1 的 `routing.json` 使用 `additional_responsibilities` + 四档职责。v2 �
 
 ## Agent profiles
 
-`install.sh` 安装常用精确 profile：
+`install.sh` 会覆盖安装当前版本随包提供的全部精确 profile：
 
 - Luna：low / medium / high / xhigh / max
 - Terra：medium / high
 - `gpt-5.6` Sol 层：high / xhigh
 - Astra：high / xhigh / max
 
-没有预装的组合只有在当前 live spawn schema 明确支持并验证精确 model + effort 时才允许。
+升级旧版本时必须一起刷新这些 profiles，不要只升级 Skill 根文件。没有预装的组合只有在当前 live spawn schema 明确支持并验证精确 model + effort 时才允许。
 
 ## 验收
 
-配置后至少检查：
+升级后先确认安装版本：
+
+```bash
+cat VERSION
+```
+
+应与本次目标发布版本一致。然后至少检查：
 
 ```bash
 python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice

@@ -6,7 +6,7 @@ An Agent Skill for Codex / ChatGPT desktop Code workflows. Its goal is not to ma
 
 > **Delegate suitable work to the cheapest subagent configuration that is still likely to complete the task reliably, reducing expected total task cost.**
 
-Current version: **2.1.1**
+Current version: **2.1.2**
 
 ## Two routing modes
 
@@ -67,13 +67,15 @@ The v1 reliability rules remain:
 
 ## Install
 
-Recommended Codex install:
+Recommended Codex install or upgrade:
 
 ```text
-Use $skill-installer to install the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.1/skills/codex-luna-subagent-router
+Use $skill-installer to install or upgrade the Skill from:
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.2/skills/codex-luna-subagent-router
 
-After installation, read references/codex-guided-install.md and continue the guided setup.
+If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
+
+After installation or upgrade, read references/codex-guided-install.md and continue the guided setup/migration.
 ```
 
 Manual global install:
@@ -83,6 +85,14 @@ Manual global install:
 ```
 
 The installer copies the Skill and common exact-routing profiles. It does not edit `config.toml`, `AGENTS.md`, or `routing.json`.
+
+### Upgrading from an older version
+
+**Always refresh the complete installed package when upgrading from any older release. Do not replace only `SKILL.md`.** The root Skill, `agents/`, `references/`, `scripts/`, `examples/`, `evals/`, `assets/`, installer, and every bundled Agent profile should all come from the same release so routing rules and profile behavior cannot become version-mixed.
+
+Preferred path: run `$skill-installer` again and make sure it performs a full package upgrade. If the current surface cannot guarantee a complete replacement, run the new release's `install.sh` again. The installer replaces the installed Skill directory and overwrites every Agent profile bundled by the current release.
+
+User-managed `config.toml`, unrelated `AGENTS.md` content, and the selected routing configuration are not blindly deleted by the package refresh. After refreshing the installed package, run `references/codex-guided-install.md` again so managed authorization is updated, legacy routing is migrated/backed up when necessary, and the current routing mode is confirmed.
 
 ## Guided setup
 
