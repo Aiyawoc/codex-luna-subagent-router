@@ -6,7 +6,7 @@ An Agent Skill for Codex / ChatGPT desktop Code workflows. Its goal is not to ma
 
 > **Delegate suitable work to the cheapest subagent configuration that is still likely to complete the task reliably, reducing expected total task cost.**
 
-Current version: **2.2.0**
+Current version: **2.3.0**
 
 ## Two routing modes
 
@@ -68,6 +68,20 @@ Choose `luna_only` when **cost ceilings and predictability** matter most. Choose
 - Worker results are `concise_sufficient`.
 - If exact model + reasoning routing cannot be proven, the lead handles the task; no silent inheritance or substitution.
 
+## Agent communication and lifecycle
+
+v2.3 further applies OpenAI's current Subagents guidance to both **Worker → Lead** and **Lead → Worker** communication:
+
+- Agent-to-agent messages are written for both model use and human review: normal spacing, readable phrases, and non-minified task packets.
+- Workers always return `TASK_ACK`, `STATUS`, and `RESULT`; `EVIDENCE / VALIDATION / RISK` sections are emitted only when they contain useful information.
+- Worker replies target roughly `<= 200` English words or an equivalent amount of Chinese by default. They omit narration, repeated context, raw logs, and full command output.
+- The Lead treats Worker replies as evidence, not final-user prose: deduplicate findings, keep the strongest evidence, and do not paste Worker replies or logs verbatim.
+- Within one wave, the Lead waits for every **still-needed** Worker before one synthesis. If decisive evidence makes another Worker's expected information value lower than its remaining run cost, stop and close that Worker early.
+- After an accepted result no longer needs steering, close the Worker thread to release `max_concurrent_threads_per_session` capacity.
+- Before retrying, stop/close the old attempt, assign a new `task_id`, and spawn a fresh Worker.
+
+The full P0 design and acceptance criteria live in `docs/v2.3.0-agent-communication-lifecycle-p0.md`.
+
 ## GPT-6 Astra instruction cleanup
 
 v2.1 follows OpenAI's Astra guidance and Eric Provencher's skill/prompt practices with **progressive disclosure**. The root `SKILL.md` is now a small router; model routing, lifecycle, task-packet, install, and Astra-specific guidance are loaded only when relevant. Standing `AGENTS.md` authorization keeps only stable authorization and routing boundaries.
@@ -91,7 +105,7 @@ Recommended Codex install or upgrade:
 
 ```text
 Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.2.0/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.3.0/skills/codex-luna-subagent-router
 
 If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
 
@@ -161,7 +175,7 @@ python3 -m unittest discover -s tests -v
 
 Design references:
 
+- https://learn.chatgpt.com/zh-Hans/docs/agent-configuration/subagents?surface=app
 - https://developers.openai.com/api/docs/guides/latest-model
 - Eric Provencher, “Rethinking skills and prompts for GPT-6 Astra”: https://x.com/pvncher/status/2095991462416490862
-- https://developers.openai.com/codex/agent-configuration/subagents
 - https://developers.openai.com/codex/config-reference
