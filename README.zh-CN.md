@@ -4,7 +4,7 @@
 
 > **让任意主模型把合适的工作交给“最便宜且足够完成任务”的 SubAgent，从而降低整个任务的预期总成本。**
 
-当前版本：**2.0.0**
+当前版本：**2.1.0**
 
 ## 两种路由模式
 
@@ -47,6 +47,12 @@ Adaptive 不是“优先用强模型”，而是优化 **ExpectedCost(task)**。
 - Worker 返回 `concise_sufficient` 结果；
 - model + reasoning 无法精确固定时，由 Lead 接管，禁止静默继承主模型。
 
+## GPT-6 Astra / 指令精简
+
+v2.1 按 Astra 官方 Guidance 与 Eric Provencher 的实践改为 **progressive disclosure**：根 `SKILL.md` 只负责判断是否值得路由，只有确定需要时才读取对应 reference。Astra 专属的持续性、委派和测试校准放在 `references/astra-guidance.md`，其他模型不会加载。长期 `AGENTS.md` 也只保留自动委派授权和稳定边界。
+
+RoutePlan 与 Worker task packet 同样支持 compact 表达：固定默认策略不需要重复写入，澄清只传给真正受影响的 Worker。这样可以减少常驻上下文、任务包和每个 Worker profile 的固定 token。
+
 ## Fresh 上下文隔离
 
 v1 的可靠性机制继续保留：
@@ -64,7 +70,7 @@ v1 的可靠性机制继续保留：
 
 ```text
 Use $skill-installer to install the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.0.0/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.0/skills/codex-luna-subagent-router
 
 After installation, read references/codex-guided-install.md and continue the guided setup.
 ```
@@ -139,6 +145,7 @@ python3 -m unittest discover -s tests -v
 ## 设计依据
 
 - GPT-6 Astra model guidance: https://developers.openai.com/api/docs/guides/latest-model
+- Eric Provencher, “Rethinking skills and prompts for GPT-6 Astra”: https://x.com/pvncher/status/2095991462416490862
 - Codex Subagents: https://developers.openai.com/codex/agent-configuration/subagents
 
 官方 Codex 文档指出：每个 SubAgent 都会独立消耗模型与工具 token，所以 SubAgent 工作流通常比可比的单 Agent 运行消耗更多 token；因此本 Skill 把“是否委派”本身也作为成本决策。

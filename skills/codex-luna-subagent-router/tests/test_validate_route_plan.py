@@ -100,7 +100,7 @@ class RoutePlanValidationTests(unittest.TestCase):
         plan["user_input_state"] = "pending"
         self.assertInvalidContains(plan, "pending user input")
 
-    def test_resolved_clarification_must_reach_every_packet(self) -> None:
+    def test_resolved_clarification_is_forwarded_only_when_relevant(self) -> None:
         plan = self.plan()
         clarification = {
             "question": "本次只分析还是直接修复？",
@@ -108,10 +108,39 @@ class RoutePlanValidationTests(unittest.TestCase):
         }
         plan["user_input_state"] = "resolved"
         plan["clarifications"] = [clarification]
-        for worker in plan["workers"]:
-            worker["task_packet"]["clarifications"] = [copy.deepcopy(clarification)]
+        # Only the affected Worker receives the clarification; unrelated Workers need not pay the token cost.
+        plan["workers"][1]["task_packet"]["clarifications"] = [copy.deepcopy(clarification)]
         self.assertEqual(validate_plan(plan), [])
         self.assertIn("已合并 1 项用户澄清", render_notice(plan))
+
+    def test_packet_clarification_must_exist_at_root(self) -> None:
+        plan = self.plan()
+        plan["workers"][0]["task_packet"]["clarifications"] = [
+            {"question": "额外问题？", "answer": "额外答案"}
+        ]
+        self.assertInvalidContains(plan, "resolved root clarifications")
+
+    def test_compact_packet_does_not_require_repeated_scaffolding(self) -> None:
+        plan = self.plan()
+        packet = plan["workers"][0]["task_packet"]
+        for key in (
+            "normalized_goal",
+            "in_scope",
+            "out_of_scope",
+            "necessary_context",
+            "clarifications",
+            "output_contract",
+            "no_subagents",
+            "sole_source_of_truth",
+            "start_response_with_task_ack",
+        ):
+            self.assertNotIn(key, packet)
+        self.assertEqual(validate_plan(plan), [])
+
+    def test_acceptance_criteria_cannot_be_empty(self) -> None:
+        plan = self.plan()
+        plan["workers"][0]["task_packet"]["acceptance_criteria"] = []
+        self.assertInvalidContains(plan, "completion criterion")
 
     def test_context_budget_is_enforced(self) -> None:
         plan = self.plan()

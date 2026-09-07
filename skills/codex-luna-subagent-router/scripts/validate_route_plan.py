@@ -175,37 +175,37 @@ def validate_plan(data: Any) -> list[str]:
     if routing_mode not in ALLOWED_ROUTING_MODES:
         errors.append(f"root.routing_mode: must be one of {', '.join(ALLOWED_ROUTING_MODES)}")
 
-    if data.get("cost_objective") != "minimize_expected_total_cost":
-        errors.append('root.cost_objective: must equal "minimize_expected_total_cost"')
-    if data.get("context_budget_policy") != "minimal_sufficient":
-        errors.append('root.context_budget_policy: must equal "minimal_sufficient"')
-    if data.get("result_budget_policy") != "concise_sufficient":
-        errors.append('root.result_budget_policy: must equal "concise_sufficient"')
+    if data.get("cost_objective", "minimize_expected_total_cost") != "minimize_expected_total_cost":
+        errors.append('root.cost_objective: when provided, must equal "minimize_expected_total_cost"')
+    if data.get("context_budget_policy", "minimal_sufficient") != "minimal_sufficient":
+        errors.append('root.context_budget_policy: when provided, must equal "minimal_sufficient"')
+    if data.get("result_budget_policy", "concise_sufficient") != "concise_sufficient":
+        errors.append('root.result_budget_policy: when provided, must equal "concise_sufficient"')
 
     if data.get("approval_mode") not in {"notify_and_proceed", "require_user_confirmation"}:
         errors.append("root.approval_mode: must be notify_and_proceed or require_user_confirmation")
-    if data.get("on_route_rejected") != "lead_only":
-        errors.append('root.on_route_rejected: must equal "lead_only"; silent model fallback is forbidden')
-    if data.get("stale_context_policy") != "reject_and_respawn_fresh":
-        errors.append('root.stale_context_policy: must equal "reject_and_respawn_fresh"')
+    if data.get("on_route_rejected", "lead_only") != "lead_only":
+        errors.append('root.on_route_rejected: when provided, must equal "lead_only"; silent model fallback is forbidden')
+    if data.get("stale_context_policy", "reject_and_respawn_fresh") != "reject_and_respawn_fresh":
+        errors.append('root.stale_context_policy: when provided, must equal "reject_and_respawn_fresh"')
 
-    user_input_state = data.get("user_input_state")
+    user_input_state = data.get("user_input_state", "not_needed")
     if user_input_state not in ALLOWED_USER_INPUT_STATES:
         errors.append(
             "root.user_input_state: must be not_needed or resolved; pending user input cannot be dispatched"
         )
-    clarifications = _validate_clarifications(data.get("clarifications"), "root.clarifications", errors)
+    clarifications = _validate_clarifications(data.get("clarifications", []), "root.clarifications", errors)
     if user_input_state == "not_needed" and clarifications:
         errors.append("root.clarifications: must be empty when user_input_state=not_needed")
     if user_input_state == "resolved" and not clarifications:
         errors.append("root.clarifications: must contain at least one answered item when user_input_state=resolved")
 
-    max_attempts = data.get("max_attempts_per_task")
+    max_attempts = data.get("max_attempts_per_task", 2)
     if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or not (1 <= max_attempts <= 2):
         errors.append("root.max_attempts_per_task: must be integer 1 or 2")
         max_attempts = 2
 
-    max_concurrent = data.get("max_concurrent_workers")
+    max_concurrent = data.get("max_concurrent_workers", 3)
     if not isinstance(max_concurrent, int) or isinstance(max_concurrent, bool) or not (1 <= max_concurrent <= 3):
         errors.append("root.max_concurrent_workers: must be an integer between 1 and 3")
         max_concurrent = 3
@@ -236,17 +236,17 @@ def validate_plan(data: Any) -> list[str]:
                 errors.append(f"{path}.task_id: duplicate task_id {task_id}")
             seen_ids.add(task_id)
 
-        attempt = worker.get("attempt")
+        attempt = worker.get("attempt", 1)
         if not isinstance(attempt, int) or isinstance(attempt, bool) or not (1 <= attempt <= max_attempts):
             errors.append(f"{path}.attempt: must be an integer between 1 and {max_attempts}")
 
-        wave = worker.get("wave")
+        wave = worker.get("wave", 1)
         if not isinstance(wave, int) or isinstance(wave, bool) or wave < 1:
             errors.append(f"{path}.wave: must be a positive integer")
             wave = 1
         waves[wave] += 1
 
-        for key in ("brief", "creation_reason", "delegation_cost_reason", "selection_reason"):
+        for key in ("brief", "delegation_cost_reason", "selection_reason"):
             _require_string(worker, key, path, errors)
 
         task_kind = worker.get("task_kind")
@@ -255,7 +255,7 @@ def validate_plan(data: Any) -> list[str]:
 
         complexity = worker.get("complexity")
         effort = worker.get("reasoning_effort")
-        failure_cost = worker.get("failure_cost")
+        failure_cost = worker.get("failure_cost", "medium")
         if complexity not in ALLOWED_LEVELS:
             errors.append(f"{path}.complexity: must be one of {', '.join(ALLOWED_LEVELS)}")
         if effort not in ALLOWED_LEVELS:
@@ -264,7 +264,7 @@ def validate_plan(data: Any) -> list[str]:
             errors.append(f"{path}.failure_cost: must be one of {', '.join(ALLOWED_FAILURE_COSTS)}")
 
         model = worker.get("model")
-        override = worker.get("user_model_override")
+        override = worker.get("user_model_override", False)
         if not isinstance(override, bool):
             errors.append(f"{path}.user_model_override: must be boolean")
             override = False
@@ -306,14 +306,14 @@ def validate_plan(data: Any) -> list[str]:
         surface = worker.get("surface")
         if surface not in ALLOWED_SURFACES:
             errors.append(f"{path}.surface: must be one of {', '.join(ALLOWED_SURFACES)}")
-        if worker.get("context_mode") != "fresh":
-            errors.append(f'{path}.context_mode: must equal "fresh"')
-        if worker.get("new_thread") is not True:
-            errors.append(f"{path}.new_thread: must be true")
-        if worker.get("context_budget") != "minimal_sufficient":
-            errors.append(f'{path}.context_budget: must equal "minimal_sufficient"')
-        if worker.get("result_budget") != "concise_sufficient":
-            errors.append(f'{path}.result_budget: must equal "concise_sufficient"')
+        if worker.get("context_mode", "fresh") != "fresh":
+            errors.append(f'{path}.context_mode: when provided, must equal "fresh"')
+        if worker.get("new_thread", True) is not True:
+            errors.append(f"{path}.new_thread: when provided, must be true")
+        if worker.get("context_budget", "minimal_sufficient") != "minimal_sufficient":
+            errors.append(f'{path}.context_budget: when provided, must equal "minimal_sufficient"')
+        if worker.get("result_budget", "concise_sufficient") != "concise_sufficient":
+            errors.append(f'{path}.result_budget: when provided, must equal "concise_sufficient"')
 
         fork_turns = worker.get("fork_turns")
         if surface == "native_subagent" and fork_turns not in {None, "none"}:
@@ -337,36 +337,43 @@ def validate_plan(data: Any) -> list[str]:
             errors.append(f"{packet_path}: must be an object")
             continue
 
-        packet_root_id = _require_string(packet, "root_request_id", packet_path, errors)
+        packet_root_id = packet.get("root_request_id")
+        if packet_root_id is not None:
+            if not _is_nonempty_string(packet_root_id):
+                errors.append(f"{packet_path}.root_request_id: when provided, must be a non-empty string")
+                packet_root_id = None
+            elif root_request_id and packet_root_id.strip() != root_request_id:
+                errors.append(f"{packet_path}.root_request_id: must match root.root_request_id")
+
         packet_task_id = _require_string(packet, "task_id", packet_path, errors)
-        if root_request_id and packet_root_id and packet_root_id != root_request_id:
-            errors.append(f"{packet_path}.root_request_id: must match root.root_request_id")
         if task_id and packet_task_id and packet_task_id != task_id:
             errors.append(f"{packet_path}.task_id: must match Worker task_id")
 
-        for key in ("current_user_request", "normalized_goal", "subtask_goal", "output_contract"):
+        for key in ("current_user_request", "subtask_goal"):
             _require_string(packet, key, packet_path, errors)
-        packet_clarifications = _validate_clarifications(
-            packet.get("clarifications"), f"{packet_path}.clarifications", errors
-        )
-        if packet_clarifications != clarifications:
-            errors.append(f"{packet_path}.clarifications: must exactly match the resolved root clarifications")
-        for key in (
-            "in_scope",
-            "out_of_scope",
-            "necessary_context",
-            "resources",
-            "constraints",
-            "acceptance_criteria",
-        ):
-            _require_string_list(packet, key, packet_path, errors)
+        for key in ("normalized_goal", "output_contract"):
+            if key in packet:
+                _require_string(packet, key, packet_path, errors)
 
-        if packet.get("no_subagents") is not True:
-            errors.append(f"{packet_path}.no_subagents: must be true")
-        if packet.get("sole_source_of_truth") is not True:
-            errors.append(f"{packet_path}.sole_source_of_truth: must be true")
-        if packet.get("start_response_with_task_ack") is not True:
-            errors.append(f"{packet_path}.start_response_with_task_ack: must be true")
+        packet_clarifications = _validate_clarifications(
+            packet.get("clarifications", []), f"{packet_path}.clarifications", errors
+        )
+        for clarification in packet_clarifications:
+            if clarification not in clarifications:
+                errors.append(
+                    f"{packet_path}.clarifications: may include only resolved root clarifications relevant to this Worker"
+                )
+
+        for key in ("in_scope", "out_of_scope", "necessary_context", "resources", "constraints"):
+            if key in packet:
+                _require_string_list(packet, key, packet_path, errors)
+        acceptance = _require_string_list(packet, "acceptance_criteria", packet_path, errors)
+        if not acceptance:
+            errors.append(f"{packet_path}.acceptance_criteria: must contain at least one completion criterion")
+
+        for flag in ("no_subagents", "sole_source_of_truth", "start_response_with_task_ack"):
+            if flag in packet and packet.get(flag) is not True:
+                errors.append(f"{packet_path}.{flag}: when provided, must be true")
 
     for wave, count in waves.items():
         if count > max_concurrent:
@@ -394,7 +401,7 @@ def render_notice(data: dict[str, Any]) -> str:
     workers = data.get("workers", [])
     approval_mode = data.get("approval_mode")
     suffix = "等待用户确认后执行。" if approval_mode == "require_user_confirmation" else "通知后直接执行。"
-    state = data.get("user_input_state")
+    state = data.get("user_input_state", "not_needed")
     clarification_count = len(data.get("clarifications", []))
     clarification_summary = (
         f"已合并 {clarification_count} 项用户澄清"
