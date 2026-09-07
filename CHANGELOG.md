@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.0 — 2026-09-07
+
+- 安装向导新增第 4 项：询问同一会话最大并发 SubAgent 数量（不含主 Agent）。
+- 按 OpenAI 当前公开配置使用 `[agents].max_concurrent_threads_per_session`；未设置时保持 Codex 默认，官方公开 schema 当前只要求整数 `>= 1`，未公布绝对硬上限。
+- 新增 `scripts/configure_subagent_limit.py`，安全合并用户级 `config.toml`，保留其他配置并把旧别名 `agents.max_threads` 迁移到当前公开键。
+- 推荐并发值为 3；本 Skill 单波仍默认最多 3 个 Worker。若 Codex 配置为 1 或 2，则 Router 同步收紧有效单波上限；设置高于 3 不会自动放宽本 Skill 的成本保护。
+- README、安装脚本、配置示例与路由文档同步补充并发限制说明及官方文档入口。
+- 新增并发配置脚本测试，覆盖创建、更新、旧键迁移、dotted key、dry-run 与异常配置保护。
+
 ## 2.1.3 — 2026-09-07
 
 - README 中英文版新增 `luna_only` 与 `adaptive` 的特点对比、适用场景、成本边界与相对主 Agent 的升降路由说明。
