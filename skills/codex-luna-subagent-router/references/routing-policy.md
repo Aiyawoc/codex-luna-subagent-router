@@ -121,8 +121,26 @@ on_route_rejected = lead_only
 
 ## 8. 并发
 
-- `max_concurrent_workers` 最高为 3；
-- 总 Worker 最高为 6，只用于多波次；
+Codex 公开配置键：
+
+```toml
+[agents]
+max_concurrent_threads_per_session = N
+```
+
+该值限制同一会话中同时打开的 spawned-agent 线程，不包含主线程。未设置时由 Codex 选择默认值；OpenAI 当前公开 schema 没有公布绝对最大值，只要求 `N >= 1`。
+
+本 Skill 仍保留成本保护：
+
+- 默认单波最多 3 个 Worker；
+- 若 `agents.max_concurrent_threads_per_session` 显式配置为 1 或 2，则有效单波上限同步变为 1 或 2；
+- 若该值大于 3，本 Skill 仍默认单波最多 3，不因 Codex 容量更高而自动扩大并行；
 - 一个 Worker 能带来明确收益时只创建一个；
 - 同波禁止重叠写入；
 - read-heavy 更适合并行，write-heavy 更谨慎。
+
+因此运行时使用：
+
+```text
+effective_wave_limit = min(3, configured_subagent_limit_if_known)
+```
