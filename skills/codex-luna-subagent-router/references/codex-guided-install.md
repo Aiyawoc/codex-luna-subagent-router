@@ -4,7 +4,7 @@
 
 ## 推荐安装
 
-在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.1.3 tag。
+在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.2.0 tag。
 
 安装或升级完成后读取本文件并继续。
 
@@ -93,6 +93,41 @@ default_mode_request_user_input = true
 
 项目级存在时覆盖用户级。
 
+### 4. 最大并发 SubAgent 数量
+
+Codex 当前公开配置使用：
+
+```toml
+[agents]
+max_concurrent_threads_per_session = 3
+```
+
+它限制**同一会话中同时保持打开的 spawned-agent 线程数量，不包含主线程**。未设置时由 Codex 自己选择默认值。OpenAI 当前公开 schema 只要求这是 `>= 1` 的整数，没有公布一个绝对硬上限；因此本向导不要虚构 8、16 等固定最大值。
+
+询问用户：**“同一会话最多允许同时开启多少个 SubAgent（不含主 Agent）？”**
+
+提供：
+
+- **保持当前 / Codex 默认**：不修改 `config.toml`；若从未设置过，由 Codex 选择默认值。
+- **3（推荐）**：与本 Skill 默认的单波成本保护一致，兼顾并行收益和 token / 工具开销。
+- **自定义正整数**：允许用户输入任意 `>= 1` 的整数，并提醒数量越高，峰值 token、工具、MCP 与写入竞争开销通常越高。
+
+如果用户选择设置具体值，使用：
+
+```bash
+python3 scripts/configure_subagent_limit.py --max-subagents 3
+```
+
+该脚本只修改用户级 `$CODEX_HOME/config.toml` 的公开 `[agents].max_concurrent_threads_per_session`，会保留其他配置；如果发现旧别名 `agents.max_threads`，会安全迁移到新键。不要写入文档未正式公开的 Multi-Agent V2 私有/实验配置路径。
+
+本 Skill 的单波成本保护仍默认最多 3 个 Worker。因此有效单波上限为：
+
+```text
+min(3, 用户显式配置的 agents.max_concurrent_threads_per_session)
+```
+
+当用户设置 1 或 2 时，Router 必须同步收紧本轮并发；当用户设置大于 3 时，Codex 本身可允许更高的会话并发，但本 Skill 不会因此自动把单波并发提高到 3 以上。
+
 ## 应用配置
 
 示例：全局授权 + 用户级 Luna Only：
@@ -125,7 +160,13 @@ python3 scripts/configure_guided_install.py \
   --project-root /path/to/repo
 ```
 
-正式写入前可先加 `--dry-run --json` 预览。
+如果第 4 项选择自定义并发上限，再执行：
+
+```bash
+python3 scripts/configure_subagent_limit.py --max-subagents 3
+```
+
+两个配置脚本都可先加 `--dry-run --json` 预览。若第 4 项选择“保持当前 / Codex 默认”，不要调用并发配置脚本。
 
 ## v1 路由迁移
 
@@ -166,12 +207,27 @@ python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
 python3 -m unittest discover -s tests -v
 ```
 
+如果第 4 项写入了并发上限，再确认：
+
+```toml
+[agents]
+max_concurrent_threads_per_session = <用户选择值>
+```
+
+随后用新 Codex 会话验证实际并发容量。若桌面端仍沿用旧会话状态，再完整重启 Codex 后复测。
+
 再用真实 Codex 会话验证：
 
 - Luna Only 不会自动创建非 Luna Worker；
 - Adaptive 对 read-heavy scan 优先考虑 Luna/Terra；
 - Adaptive 能相对 Lead 向下路由，也能对必要的困难子任务局部向上升级；
+- Router 单波并发不会超过 `min(3, 用户配置的并发上限)`；
 - 困难任务不会机械从 Luna 逐级失败；
 - 精确 model + effort 无法证明时 Lead 接管；
 - 派遣前能看到模型、effort、委派成本理由；
 - Worker 返回 `TASK_ACK`，且任务包没有无关历史。
+
+## 官方依据
+
+- Codex Subagents: https://developers.openai.com/codex/agent-configuration/subagents
+- Codex Config Reference: https://developers.openai.com/codex/config-reference

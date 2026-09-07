@@ -6,7 +6,7 @@ An Agent Skill for Codex / ChatGPT desktop Code workflows. Its goal is not to ma
 
 > **Delegate suitable work to the cheapest subagent configuration that is still likely to complete the task reliably, reducing expected total task cost.**
 
-Current version: **2.1.3**
+Current version: **2.2.0**
 
 ## Two routing modes
 
@@ -63,7 +63,7 @@ Choose `luna_only` when **cost ceilings and predictability** matter most. Choose
 - Expensive leads can down-route bounded work more aggressively.
 - Cheap leads are more conservative about Luna-to-Luna delegation.
 - At most two attempts per subtask.
-- At most three workers in one wave.
+- The Skill defaults to at most three Workers in one wave; if the user configures the Codex concurrency cap to 1 or 2, the Skill tightens to that lower value.
 - Task packets are `minimal_sufficient`.
 - Worker results are `concise_sufficient`.
 - If exact model + reasoning routing cannot be proven, the lead handles the task; no silent inheritance or substitution.
@@ -91,7 +91,7 @@ Recommended Codex install or upgrade:
 
 ```text
 Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.3/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.2.0/skills/codex-luna-subagent-router
 
 If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
 
@@ -104,7 +104,7 @@ Manual global install:
 ./skills/codex-luna-subagent-router/install.sh --global
 ```
 
-The installer copies the Skill and common exact-routing profiles. It does not edit `config.toml`, `AGENTS.md`, or `routing.json`.
+The installer copies the Skill and common exact-routing profiles. It does not directly edit `config.toml`, `AGENTS.md`, or `routing.json`; the guided setup applies those changes only after the user's choices are known.
 
 ### Upgrading from an older version
 
@@ -116,13 +116,27 @@ User-managed `config.toml`, unrelated `AGENTS.md` content, and the selected rout
 
 ## Guided setup
 
-The guided flow asks only three core questions:
+The guided flow asks four core questions:
 
 1. Whether to enable experimental `default_mode_request_user_input`.
 2. Standing delegation authorization: global / current project / none.
 3. Routing mode:
    - `luna_only`: maximum economy; automatic Workers use Luna only, while hard tasks stay with the main Agent for the most predictable cost boundary.
    - `adaptive`: automatically choose the cheapest sufficient Luna / Terra / Sol / Astra combination; it may down-route cheap work or locally escalate difficult subtasks.
+4. **Maximum concurrent SubAgents, excluding the primary thread**:
+   - keep the current setting / let Codex choose its default when unset;
+   - `3` (recommended), matching this Skill's default per-wave cost guardrail;
+   - any custom integer `>= 1`.
+
+Codex's public setting is `[agents].max_concurrent_threads_per_session`. It caps concurrently open spawned-agent threads and excludes the primary. When unset, Codex chooses the default. OpenAI's current public schema documents a minimum of 1 but no absolute hard maximum. Even if Codex is configured above 3, this Skill still defaults to at most three Workers per wave; if the Codex cap is 1 or 2, the Skill tightens its effective wave limit accordingly.
+
+To set a concrete value, the guided flow uses:
+
+```bash
+python3 scripts/configure_subagent_limit.py --max-subagents 3
+```
+
+The helper safely merges the user-level `$CODEX_HOME/config.toml` and migrates the legacy `agents.max_threads` alias to the current public key.
 
 v1 upgrades recommend `luna_only` by default. Legacy `additional_responsibilities` routing is backed up as `routing.v1.backup.json`.
 
@@ -150,3 +164,4 @@ Design references:
 - https://developers.openai.com/api/docs/guides/latest-model
 - Eric Provencher, “Rethinking skills and prompts for GPT-6 Astra”: https://x.com/pvncher/status/2095991462416490862
 - https://developers.openai.com/codex/agent-configuration/subagents
+- https://developers.openai.com/codex/config-reference

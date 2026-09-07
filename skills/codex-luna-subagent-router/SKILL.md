@@ -39,7 +39,7 @@ description: 成本优先的 Codex SubAgent 路由。仅在委派可能降低预
 
 - `luna_only` 未经用户本轮明确覆盖，不得自动使用非 Luna Worker。
 - 每个子任务最多 2 个 attempt；不要用更贵模型掩盖权限、环境、任务包或上下文问题。
-- 默认每波最多 3 个 Worker；一个 Worker 足够时不要创建更多。
+- 本 Skill 默认单波最多 3 个 Worker；若用户级 `config.toml` 显式设置更低的 `agents.max_concurrent_threads_per_session`，有效单波上限为 `min(3, 该值)`。设置高于 3 不会自动放宽本 Skill 的成本保护。
 - 同波写入不得重叠；Worker 不创建下级 SubAgent，不执行最终不可逆外部动作。
 - fresh Worker 不继承旧目标；任务包与结果都应最短充分，不复制无关历史或整仓内容。
 
@@ -49,4 +49,4 @@ description: 成本优先的 Codex SubAgent 路由。仅在委派可能降低预
 - compact 任务包：`references/task-packet.md`
 - fresh / steering / stale context：`references/lifecycle-and-context.md`
 - GPT-6 Astra 专属校准：`references/astra-guidance.md`
-- 安装与 v1 迁移：`references/codex-guided-install.md`
+- 安装、迁移与并发上限：`references/codex-guided-install.md`

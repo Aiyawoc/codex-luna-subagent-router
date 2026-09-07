@@ -5,6 +5,10 @@
 [agents]
 enabled = true
 default_subagent_model = "gpt-5.6-luna"
+
+# Codex 公开支持的 spawned-agent 并发上限，不包含主线程。
+# 未设置时由 Codex 选择默认值；官方公开 schema 当前只要求 >= 1，未公布绝对硬上限。
+# 本 Skill 推荐 3，并且即使这里设置得更高，本 Skill 默认单波仍最多 3 个 Worker。
 max_concurrent_threads_per_session = 3
 
 # 不设置统一 reasoning；每个子任务单独选择。
