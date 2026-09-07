@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "objective": "minimize_expected_total_cost",
   "cases": [
     {
@@ -113,6 +113,43 @@
       "prompt": "低价模型第一次没有解决任务。",
       "expected_max_attempts": 2,
       "forbid": "mechanical_full_model_ladder"
+    },
+    {
+      "id": "astra-progressive-disclosure",
+      "prompt": "Astra Lead 正在处理一个简单单文件修复。",
+      "expected": "do_not_preload_unrelated_references",
+      "read_only_if_needed": [
+        "routing-policy.md",
+        "task-packet.md",
+        "lifecycle-and-context.md",
+        "astra-guidance.md"
+      ]
+    },
+    {
+      "id": "astra-targeted-testing",
+      "prompt": "Astra 完成一个可逆、低影响的小修改，相关检查已经通过。",
+      "expected": "stop_after_relevant_verification",
+      "forbid": [
+        "broad_test_expansion_without_signal",
+        "mirror_implementation_tests"
+      ]
+    },
+    {
+      "id": "astra-persistence",
+      "prompt": "实现功能、运行它、检查结果并修复由本次改动造成的问题。",
+      "expected": "continue_until_completion_criteria",
+      "forbid": "stop_after_first_implementation_without_requested_checkpoint"
+    },
+    {
+      "id": "compact-worker-packet",
+      "prompt": "为一个边界清晰的 Worker 构造任务包。",
+      "required_fields": [
+        "task_id",
+        "current_user_request",
+        "subtask_goal",
+        "acceptance_criteria"
+      ],
+      "forbid": "repeat_global_worker_scaffolding"
     }
   ]
 }

@@ -1,24 +1,29 @@
-# v2 验收用例
+# v2.1 验收重点
 
-至少覆盖以下行为：
+## 成本路由
 
-1. **简单任务**：Lead 自己完成，不创建 Worker。
-2. **Astra/Sol Lead + 窄范围扫描**：成本门允许时可下放 Luna/Terra。
-3. **Luna Lead + 小任务**：避免为了形式 Luna→Luna。
-4. **Luna Only**：自动非 Luna Worker 必须被拒绝。
-5. **用户覆盖**：用户本轮显式指定 Astra 时，即使 Luna Only 也允许，但必须记录 override。
-6. **Adaptive scan**：read-heavy 默认优先 Terra，而不是直接 Sol/Astra。
-7. **困难多步调试**：可直接从 `gpt-5.6 high` 起步，不强制先试 Luna。
-8. **最高难度/高失败代价**：只有有充分理由时才使用 Astra。
-9. **一次升级上限**：同子任务最多 2 attempt。
-10. **精确路由失败**：`lead_only`，不得静默继承或换模。
-11. **低档 reasoning**：Luna `low` 合法。
-12. **上下文预算**：非 `minimal_sufficient` RoutePlan 拒绝。
-13. **结果预算**：非 `concise_sufficient` RoutePlan 拒绝。
-14. **并发成本门**：单波最多 3 Worker。
-15. **写入隔离**：同波重叠路径拒绝。
-16. **STALE_CONTEXT**：task_id/目标不匹配拒绝采纳。
-17. **v1 路由迁移**：生成 `routing.v1.backup.json` 并默认推荐 Luna Only。
-18. **未知配置**：未经确认不得覆盖。
-19. **安装首问**：`default_mode_request_user_input` 仍为第一个可选问题。
-20. **配置范围**：用户级与项目级双模式文件均可写入，项目级覆盖用户级。
+1. 简单任务由 Lead 完成，不为形式创建 Worker。
+2. 高价 Lead 的窄范围扫描可在成本门为正时下放 Luna/Terra；低价 Lead 的小任务避免 Luna→Luna。
+3. `luna_only` 自动非 Luna 路由被拒绝；用户本轮显式覆盖仍可记录后执行。
+4. Adaptive 选择最低足够层级；困难任务可直接从 Sol/Astra 起步，不机械逐级失败。
+5. 同子任务最多 2 attempt；精确 model + effort 无法验证时 `lead_only`。
+
+## Astra / 指令质量
+
+6. 根 `SKILL.md` 不要求简单任务预读全部 references；Astra 文档只在 Astra Lead/Worker 时加载。
+7. 低影响可逆修改只做针对性验证；没有失败、新改动或未解决风险时不扩大测试。
+8. 用户要求完整实现、运行和修复时，Astra 不在第一版实现后无故停下等待 review。
+9. 用户最新明确指令优先于 Skill 默认偏好；硬安全与平台能力边界仍保留。
+
+## 上下文与生命周期
+
+10. compact packet 只强制 `task_id`、请求摘要、子目标和验收条件；不要求重复全局 Worker 脚手架字段。
+11. 已解决澄清只发送给受影响 Worker；未在根任务解决的澄清不得进入 packet。
+12. `TASK_ACK` / 当前目标不匹配判定为 `STALE_CONTEXT`。
+13. 同波最多 3 Worker 且写入范围不重叠。
+
+## 安装与迁移
+
+14. v1 路由迁移备份 `routing.v1.backup.json` 并默认推荐 Luna Only。
+15. 未知配置未经确认不得覆盖；用户级和项目级双模式配置均可写入。
+16. `default_mode_request_user_input` 仍是引导安装的第一个可选问题。

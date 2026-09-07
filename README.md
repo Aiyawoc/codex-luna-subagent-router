@@ -4,7 +4,7 @@ An Agent Skill for Codex / ChatGPT desktop Code workflows. Its goal is not to ma
 
 > **Delegate suitable work to the cheapest subagent configuration that is still likely to complete the task reliably, reducing expected total task cost.**
 
-Current version: **2.0.0**
+Current version: **2.1.0**
 
 ## Two routing modes
 
@@ -46,6 +46,12 @@ Adaptive optimizes expected completion cost, not raw per-call price. A stronger 
 - Worker results are `concise_sufficient`.
 - If exact model + reasoning routing cannot be proven, the lead handles the task; no silent inheritance or substitution.
 
+## GPT-6 Astra instruction cleanup
+
+v2.1 follows OpenAI's Astra guidance and Eric Provencher's skill/prompt practices with **progressive disclosure**. The root `SKILL.md` is now a small router; model routing, lifecycle, task-packet, install, and Astra-specific guidance are loaded only when relevant. Standing `AGENTS.md` authorization keeps only stable authorization and routing boundaries.
+
+RoutePlan and Worker packets are compact as well: fixed defaults need not be repeated and resolved clarifications are forwarded only to Workers they affect. This reduces persistent context, packet overhead, and per-Worker prompt tokens.
+
 ## Context isolation
 
 The v1 reliability rules remain:
@@ -63,7 +69,7 @@ Recommended Codex install:
 
 ```text
 Use $skill-installer to install the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.0.0/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.0/skills/codex-luna-subagent-router
 
 After installation, read references/codex-guided-install.md and continue the guided setup.
 ```
@@ -108,4 +114,5 @@ python3 -m unittest discover -s tests -v
 Design references:
 
 - https://developers.openai.com/api/docs/guides/latest-model
+- Eric Provencher, “Rethinking skills and prompts for GPT-6 Astra”: https://x.com/pvncher/status/2095991462416490862
 - https://developers.openai.com/codex/agent-configuration/subagents

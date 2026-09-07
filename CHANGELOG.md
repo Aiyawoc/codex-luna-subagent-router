@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.0 — 2026-09-07
+
+- 按 OpenAI GPT-6 Astra Model Guidance 与 Eric Provencher《Rethinking skills and prompts for GPT-6 Astra》完成指令审计。
+- 将根 `SKILL.md` 从详细 SOP 精简为渐进式披露路由入口；只有实际需要时才加载路由、任务包、生命周期、安装或 Astra 专属文档。
+- 将长期 `AGENTS.md` 授权块缩减为稳定授权与路由边界，删除重复的运行时流程。
+- 新增 `references/astra-guidance.md`，仅在 Astra Lead / Worker 场景加载，校准持续性、委派、测试、边界与输出。
+- RoutePlan 2.0 支持省略固定默认字段；compact task packet 只强制 task_id、请求摘要、子目标和验收条件。
+- 澄清只传递给受影响 Worker，不再要求每个 packet 复制全部根澄清。
+- 删除 task packet 中重复的 `no_subagents` / `TASK_ACK` / fresh-context 等脚手架字段要求，由生命周期和 Worker profile 统一约束。
+- 精简全部 Luna/Terra/Sol/Astra Worker profile 指令，保留叶子边界、验收和简洁结果协议。
+- 将小改动验证策略调整为针对性验证，避免 Astra 因重复指令扩大测试范围。
+- 单元测试扩展至 39 项，覆盖 compact packet、按需澄清与默认策略省略。
+
 ## 2.0.0 — 2026-09-07
 
 - 将项目核心目标正式调整为“在保证可靠完成的前提下最小化预期总模型成本”，主 Agent 保持用户当前模型。

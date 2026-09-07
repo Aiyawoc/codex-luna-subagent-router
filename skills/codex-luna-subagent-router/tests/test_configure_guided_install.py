@@ -70,7 +70,7 @@ class GuidedInstallTests(unittest.TestCase):
         result = self.run_configure(delegation="global")
         text = target.read_text(encoding="utf-8")
         self.assertEqual(result["delegation"]["action"], "migrated_v1.0")
-        self.assertIn("预期总成本", text)
+        self.assertIn("总模型成本", text)
 
     def test_request_user_input_creates_user_config(self) -> None:
         result = self.run_configure(request_user_input="enable")
