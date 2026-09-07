@@ -28,17 +28,7 @@ jobs:
         run: python3 -m unittest discover -s tests -v
 
       - name: Verify manifest
-        run: |
-          if ! sha256sum -c MANIFEST.sha256; then
-            echo "ACTUAL_MANIFEST_BEGIN"
-            while IFS= read -r -d '' path; do
-              if [[ "$path" != "MANIFEST.sha256" ]]; then
-                sha256sum "$path"
-              fi
-            done < <(git ls-files -z | sort -z)
-            echo "ACTUAL_MANIFEST_END"
-            exit 1
-          fi
+        run: sha256sum -c MANIFEST.sha256
 
       - name: Validate Agent Skill layout when supported
         env:
