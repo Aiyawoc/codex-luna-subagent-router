@@ -1,155 +1,24 @@
-# 验证案例
-
-## 应触发
-
-### 1. 多模块并行探索
-
-请求：分析认证、缓存和任务队列三个互不依赖模块的故障路径。
-
-期望：创建 3 个只读 Luna Worker；分别披露任务、复杂度和 reasoning；每个新线程收到独立任务包。
-
-### 2. 单个大型独立复核
-
-请求：主 Agent 已实现数据库迁移，请独立验证回滚与数据完整性。
-
-期望：允许创建 1 个 Luna Worker；复杂度至少 `xhigh`，高错误代价可用 `max`。
-
-### 3. 实现与验证分波
-
-请求：修改模块 A，并让另一个 Agent 独立验证。
-
-期望：实现 Worker 完成后再创建 verify Worker；不得同波写同一文件。
-
-### 4. Luna 主 Agent
-
-请求发生在 Luna 主会话。
-
-期望：先检查当前 Surface 是否有创建能力。可用则保持主模型并创建 Luna Worker；不可用则 `lead_only`，不得谎称成功。
-
-## 不应触发
-
-### 5. 简单问答
-
-请求：解释一个函数的返回值。
-
-期望：`lead_only`。
-
-### 6. 小型单文件修改
-
-请求：修正一个明确的拼写错误。
-
-期望：`lead_only`。
-
-### 7. 强顺序流程
-
-请求：先获得运行结果，再根据结果决定下一步，且每步很短。
-
-期望：主 Agent 顺序执行，不拆出多个 Worker。
-
-### 8. 不可逆操作
-
-请求：发布版本并删除旧环境。
-
-期望：Worker 最多准备检查清单；实际发布和删除由主 Agent 在用户授权范围内执行。
-
-## 路由硬门
-
-### 9. 未显式模型
-
-计划中省略模型并依赖父 Agent。
-
-期望：校验失败；不得创建。
-
-### 10. 非 Luna 默认路由
-
-用户未指定，计划使用 Sol 或 Auto。
-
-期望：校验失败；由主 Agent 改回 Luna 或 `lead_only`。
-
-### 11. 非法思考强度
-
-计划使用 `low` 或 `ultra`。
-
-期望：校验失败。
-
-### 12. 自定义 Agent 配置缺失
-
-四个固定 Agent 不存在，live spawn schema 也不支持显式模型和 reasoning。
-
-期望：`ROUTE_UNAVAILABLE`，主 Agent 接管。
-
-## 上下文隔离
-
-### 13. Worker 显示上一次任务
-
-Worker 回显旧 task_id 或继续旧项目。
-
-期望：标记 `STALE_CONTEXT`；拒绝结果；不得向旧线程发送本次新任务；创建新线程和新 task_id。
-
-### 14. task_id 正确但目标错误
-
-Worker 回显当前 task_id，却分析了旧模块。
-
-期望：仍判定 `STALE_CONTEXT`，因为目标和证据不匹配。
-
-### 15. 多 Worker 使用“同上”
-
-第二个任务包只写“同上，检查测试”。
-
-期望：任务包不完整，校验失败。
-
-### 16. 用户修改验收标准
-
-Worker 尚未创建时，用户新增兼容性要求。
-
-期望：重新生成全部受影响任务包和派遣通知；不得沿用旧计划。
-
-### 17. Default 模式存在关键歧义
-
-请求：检查同步问题，但没有说明只分析还是直接修改；两种选择会产生不同写入范围。
-
-期望：当前 Surface 有 `request_user_input` 时直接提问；没有时用普通对话提问。回答前不得派遣，回答后生成 `user_input_state=resolved` 的新计划并把答案写入所有受影响任务包。
-
-### 18. 提问仍在等待
-
-计划使用 `user_input_state=pending` 或澄清项缺少答案。
-
-期望：RoutePlan 校验失败；不得创建 Worker。
-
-## 引导安装
-
-### 19. 安装开始时的提问模式选择
-
-用户选择：开启（实验性）。
-
-期望：这是引导的第一个问题；只在用户级 `$CODEX_HOME/config.toml` 的 `[features]` 中写入 `default_mode_request_user_input = true`，保留既有 TOML 内容，并提示完全重启 Codex。当前会话仍按实际可用能力使用结构化提问或普通对话回退。
-
-### 20. 安装开始时不修改提问模式
-
-用户选择：不修改。
-
-期望：不新增或关闭 `default_mode_request_user_input`；若配置中已有该键，原值保持不变，然后才继续询问授权和路由。
-
-### 21. 全局授权，不建路由表
-
-用户选择：全局 / 不需要自定义职责。
-
-期望：只在 `$CODEX_HOME/AGENTS.md` 添加一组托管授权标记；不创建 `routing.json`；保留所有既有 AGENTS 内容。
-
-### 22. 项目授权与项目路由表
-
-用户选择：当前项目 / 需要，并给出 high 和 max 的额外职责。
-
-期望：授权写入仓库根 `AGENTS.md`，路由写入 `<repo>/.codex/codex-luna-subagent-router/routing.json`；内容与用户回答一致且第二次执行不产生重复授权块。
-
-### 23. 不安装长期授权
-
-用户选择：不安装。
-
-期望：不创建或修改任何 `AGENTS.md`。这不等于删除已存在的授权；运行时只有本轮请求明确要求委派时才允许创建 Worker。
-
-### 24. 自定义职责试图降低强度
-
-用户表把高风险架构变更列为 medium，但内置规则要求 xhigh。
-
-期望：最终至少使用 xhigh；自定义表遵循 `raise_only`，不能降低内置最低值。
+# v2 验收用例
+
+至少覆盖以下行为：
+
+1. **简单任务**：Lead 自己完成，不创建 Worker。
+2. **Astra/Sol Lead + 窄范围扫描**：成本门允许时可下放 Luna/Terra。
+3. **Luna Lead + 小任务**：避免为了形式 Luna→Luna。
+4. **Luna Only**：自动非 Luna Worker 必须被拒绝。
+5. **用户覆盖**：用户本轮显式指定 Astra 时，即使 Luna Only 也允许，但必须记录 override。
+6. **Adaptive scan**：read-heavy 默认优先 Terra，而不是直接 Sol/Astra。
+7. **困难多步调试**：可直接从 `gpt-5.6 high` 起步，不强制先试 Luna。
+8. **最高难度/高失败代价**：只有有充分理由时才使用 Astra。
+9. **一次升级上限**：同子任务最多 2 attempt。
+10. **精确路由失败**：`lead_only`，不得静默继承或换模。
+11. **低档 reasoning**：Luna `low` 合法。
+12. **上下文预算**：非 `minimal_sufficient` RoutePlan 拒绝。
+13. **结果预算**：非 `concise_sufficient` RoutePlan 拒绝。
+14. **并发成本门**：单波最多 3 Worker。
+15. **写入隔离**：同波重叠路径拒绝。
+16. **STALE_CONTEXT**：task_id/目标不匹配拒绝采纳。
+17. **v1 路由迁移**：生成 `routing.v1.backup.json` 并默认推荐 Luna Only。
+18. **未知配置**：未经确认不得覆盖。
+19. **安装首问**：`default_mode_request_user_input` 仍为第一个可选问题。
+20. **配置范围**：用户级与项目级双模式文件均可写入，项目级覆盖用户级。

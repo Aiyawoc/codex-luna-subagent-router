@@ -1,18 +1,15 @@
-# 合并到 ~/.codex/config.toml，或项目级 .codex/config.toml。
-# 作用：即使某次 spawn 遗漏 model，默认仍是 Luna。
-# 本 Skill 仍要求每个 Worker 显式选择固定 profile 或显式传参。
+# 可选合并到 ~/.codex/config.toml 或项目级 .codex/config.toml。
+# 即使某次 spawn 遗漏 model，也把默认 Worker 限制在最低成本的 Luna；
+# 本 Skill 仍要求每个 Worker 显式 profile 或显式 live spawn 参数。
 
 [agents]
 enabled = true
 default_subagent_model = "gpt-5.6-luna"
-max_concurrent_threads_per_session = 6
+max_concurrent_threads_per_session = 3
 
-# Optional experimental Default-mode structured-question support.
-# The guided installer writes this only after the user explicitly chooses
-# “开启（实验性）”; a full Codex restart is required before it can take effect.
+# 不设置统一 reasoning；每个子任务单独选择。
+# default_subagent_reasoning_effort = "..."
+
+# 可选实验性 Default 模式提问开关；只有用户明确选择后由安装器写入。
 # [features]
 # default_mode_request_user_input = true
-
-# 故意不设置：
-# default_subagent_reasoning_effort = "..."
-# 原因：思考强度必须由主 Agent 依据每个子任务分别选择。

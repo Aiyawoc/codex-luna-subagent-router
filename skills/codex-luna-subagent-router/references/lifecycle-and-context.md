@@ -1,96 +1,90 @@
-# 生命周期与上下文隔离
+# 生命周期、上下文隔离与成本预算
 
-## 状态机
+## Fresh Worker
 
-```text
-PLANNED
-  -> USER_INPUT_RESOLVED
-  -> NOTICE_SHOWN
-  -> SPAWN_PENDING
-  -> RUNNING
-  -> RESULT_RECEIVED
-  -> IDENTITY_VERIFIED
-  -> ADOPTED
-  -> RELEASED
-```
+每个新子目标、重试或实质目标变化使用：
 
-异常状态：
+- 新 `task_id`
+- 新 Agent thread
+- `context_mode = fresh`
+- native spawn 若支持 `fork_turns`，使用 `none`
+- 完整但最小充分的 task packet
 
-- `ROUTE_UNAVAILABLE`：无法证明 Luna + 指定 reasoning 的精确路由；由主 Agent 接管。
-- `STALE_CONTEXT`：Worker 执行了旧任务、回显错误 task_id 或引用无关项目。
-- `FAILED`：任务明确失败。
-- `UNKNOWN`：无法确认 Agent 身份或状态；不得采纳、追问或伪装成成功。
+禁止把不同目标通过 follow-up 塞进旧 Worker。
 
-没有关键歧义时，`USER_INPUT_RESOLVED` 由 `user_input_state=not_needed` 满足；发生提问时，只有获得用户答案、合并进新 RoutePlan 和全部受影响任务包后才满足。`pending` 状态不得进入 `NOTICE_SHOWN`。
+## 同目标 steering
 
-## 创建前
+仅当目标没有实质变化时，可以把补充信息 steer 给当前 Worker，例如：
 
-1. 为本轮用户消息创建 `root_request_id`。
-2. 每个 Worker attempt 创建全新 `task_id`。
-3. 生成完整任务包，不依赖 Worker 历史。
-4. 若用户在计划生成后补充或改变答案，作废旧计划并从当前请求重新生成，不能只修改派遣提示中的一处文字。
-5. 选择新线程：
-   - 若 live schema 提供 `fork_turns`，设为 `"none"`；
-   - 若不提供，不传该字段，但仍创建新 Agent；
-   - 永远不要使用完整历史继承来替代任务包。
-6. 校验路由计划并向用户展示通知。
+- 新增一个相关文件位置；
+- 澄清同一验收标准；
+- 修正一个不改变任务边界的事实。
 
-## 禁止复用的情形
+目标、权限、写入范围或验收本质改变时，新建 Worker。
 
-只要发生以下任一情况，就不得继续旧 Worker：
+## Minimal sufficient context
 
-- 用户最新消息改变了目标、项目、范围或验收标准；
-- 从分析切换到实现、从实现切换到验证等职责变化；
-- 需要使用不同模型或 reasoning；
-- Worker 显示上一次对话内容；
-- Worker 的 task_id、项目或子目标不匹配；
-- 前一 attempt 已进入 `STALE_CONTEXT`、`FAILED` 或 `UNKNOWN`。
+Fresh 不等于复制全部历史。任务包只包含执行子任务所需的：
 
-不得用 `send_message` 向旧 Worker 发送一个全新的任务。`send_message` 只允许对同一 task_id 做一次澄清或补充。
+- 当前请求与归一化目标；
+- 子目标；
+- 必要文件、symbol、日志位置；
+- 真正影响判断的上下文；
+- 约束、资源、验收和输出契约。
 
-## 结果身份校验
+默认让 Worker 自己通过工具读取源码与日志。不要把几十/几百 KB 内容重复灌入每个 Worker。
 
-Worker 输出的第一行必须为：
+RoutePlan 必须使用：
 
 ```text
-TASK_ACK <task_id> — <当前子目标>
+context_budget_policy = minimal_sufficient
+worker.context_budget = minimal_sufficient
 ```
 
-主 Agent 必须同时验证：
+## Concise sufficient result
 
-- task_id 完全一致；
-- 子目标语义一致；
-- 引用的项目、文件和约束属于当前任务；
-- 输出满足本次验收标准。
+Worker 不写长报告。默认输出：
 
-仅回显 task_id 不足以证明结果正确；目标和证据也必须匹配。
+1. `TASK_ACK`
+2. `STATUS`
+3. 关键结果
+4. 文件/符号/证据
+5. 验证
+6. 风险/阻塞
 
-## 发现旧上下文时
+RoutePlan 必须使用：
 
-按固定顺序处理：
+```text
+result_budget_policy = concise_sufficient
+worker.result_budget = concise_sufficient
+```
 
-1. 停止采纳当前输出；
-2. 标记 `STALE_CONTEXT`，记录错误 task_id/旧目标证据；
-3. 不向污染线程发送新目标；
-4. 重新读取用户最新消息与当前工作区状态；
-5. 创建新 task_id 和全新线程；
-6. 重新发送完整任务包；
-7. 第二次仍污染时，由主 Agent 接管并向用户说明。
+## STALE_CONTEXT
 
-## 多 Worker 隔离
+以下任一出现即拒绝结果：
 
-- 每个 Worker 获得独立任务包，不允许“同上”。
-- 每个 Worker 只知道完成接口所需的其他 Worker 信息。
-- 同波写入路径互斥；依赖任务分波执行。
-- 主 Agent 是唯一集成者和最终验收者。
+- task_id 不匹配；
+- Worker 复述的目标不是当前子目标；
+- 出现未在 task packet 中声明的旧项目/旧需求；
+- Worker 明显沿用旧线程状态。
 
-## 释放
+处理：
 
-只有完成以下条件才将 Worker 标记为已释放：
+```text
+STALE_CONTEXT
+→ 不采纳
+→ 新 task_id
+→ fresh Worker
+```
 
-- 结果已收到；
-- task_id 和目标已验证；
-- 输出已采纳或明确拒绝；
-- 当前 Surface 确认 Agent 已完成、空闲或已关闭。
+每个子任务最多 2 个 attempt。
 
-状态不明的 Worker 不得伪装为已释放，也不得重复创建同一 attempt。
+## Worker 叶子约束
+
+Worker 禁止：
+
+- 创建 SubAgent；
+- 创建后台任务或新线程；
+- 擅自升级/降级模型；
+- 扩大写入边界；
+- 执行最终不可逆外部动作。

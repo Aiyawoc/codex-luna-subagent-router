@@ -1,144 +1,209 @@
 ---
 name: codex-luna-subagent-router
-description: 在 Codex 或 ChatGPT 桌面端 Code 模式中，仅当独立分工、并行执行或独立复核具有明确净收益且当前请求或适用 AGENTS.md 已授权时，创建精确固定为 Luna 的 SubAgent；逐任务选择 medium/high/xhigh/max，派遣前披露配置，并以 fresh 线程和自包含任务包隔离旧目标。也用于通过 Codex 安装、升级或配置本 Skill：引导用户选择全局/项目/不安装长期自动委派授权，并可把 Luna 四档的额外职责写入自定义路由表。简单问答、短小单文件修改、强顺序任务和不可逆外部操作不触发委派。
+description: 在 Codex 或 ChatGPT 桌面端 Code 模式中，以降低任务预期总成本为首要目标，在获得授权且委派有净收益时创建 SubAgent。支持两种路由：luna_only 只自动使用 gpt-5.6-luna；adaptive 由主 Agent 按目标复杂度、任务类型、失败代价和上下文规模，在 Luna、Terra、gpt-5.6（Sol 层）与 GPT-6 Astra 中选择能够可靠完成子任务的最低成本模型和最低足够推理强度。主 Agent 保持用户当前模型；派遣前披露模型、强度和成本理由；Worker 使用 fresh 新线程、最小充分任务包、TASK_ACK 和简洁结果。也用于 Codex 引导安装、v1 路由迁移和双模式配置。
 ---
 
-# Codex Luna SubAgent Router
+# Codex Cost-Aware SubAgent Router
 
-本 Skill 主要面向主 Agent 运行在 Sol Max 或 Luna Max 的 Code 会话，但不会主动切换主模型或主思考强度。
+本 Skill 的根本目标不是“多用 SubAgent”，而是：
 
-让当前主 Agent 保持用户已经选择的 Sol 或 Luna 及其思考强度，负责理解目标、拆分、路由、监督、验证和最终交付。SubAgent 只执行边界清晰的叶子任务。
+> 在保证任务可靠完成的前提下，尽量降低整个任务的预期总模型成本。
 
-默认 Worker 路由固定为：
+主 Agent 始终保持用户当前选择的模型与推理强度，负责理解目标、判断是否值得委派、选择 Worker、监督、验证、集成和最终交付。本 Skill 不主动切换主模型。
 
-- 模型：`gpt-5.6-luna`
-- 思考强度：由主 Agent 在 `medium | high | xhigh | max` 中逐任务显式选择
-- 上下文：新线程、自包含任务包、不得继续历史任务
-- 下级派遣：禁止
+## 两种唯一内置路由模式
 
-除非用户明确为某个 SubAgent 指定其他模型，否则不得自动改用 Sol、Terra、Auto 或继承主 Agent 模型。Luna 路由不可用时，由主 Agent 接管该子任务并如实说明，禁止静默换模。
+运行时先读取有效的路由配置：
 
-## 模式选择
+- 用户级：`$CODEX_HOME/codex-luna-subagent-router/routing.json`，未设置 `CODEX_HOME` 时使用 `~/.codex`；
+- 项目级：`<repo>/.codex/codex-luna-subagent-router/routing.json`；
+- 项目级配置存在时覆盖用户级配置；
+- 没有配置时，为兼容 v1 和避免意外增费，按 `luna_only` 处理。
 
-- 用户要求安装、升级、初始化或配置本 Skill 时，进入 **Codex 引导安装模式**，读取 [Codex 引导安装](references/codex-guided-install.md)。安装是主 Agent 的线性配置任务，不创建 SubAgent；安装向导的第一个问题必须询问是否启用实验性的 `default_mode_request_user_input`，只有用户选择开启时才写入用户级 `config.toml`。
-- 其他匹配请求进入 **运行时路由模式**，遵循本文其余规则。
+### `luna_only`：极致经济
 
-## 何时使用
+- 未被用户本轮明确覆盖的 Worker 必须显式使用 `gpt-5.6-luna`；
+- 主 Agent 按任务选择 `low | medium | high | xhigh | max`；
+- 如果主 Agent 判断 Luna 不足以可靠完成该子任务，不自动升级模型，改为 `lead_only`；
+- 不得静默换成 Terra、`gpt-5.6`、Astra、Auto 或继承主模型。
 
-只有同时满足以下两项才可实际创建 Worker：
+### `adaptive`：自动综合判定
 
-1. 委派的预期收益明显高于创建、监督和集成成本；
-2. 用户本轮明确要求委派，或适用的全局/项目 `AGENTS.md` 含本 Skill 的长期自动委派授权。
+目标是选择“能够可靠完成当前子任务的最低成本组合”，而不是选择最强模型。
 
-Skill 被隐式匹配不等于用户已经授予长期自动委派权限。没有上述授权时可以评估并说明适合的分工，但保持 `lead_only`。
+允许的内置自动模型：
 
-已获授权后，以下情况通常适合：
+1. `gpt-5.6-luna`：清晰、窄范围、重复、高吞吐叶子任务；
+2. `gpt-5.6-terra`：探索、read-heavy scan、大文件 review、支持材料归纳；
+3. `gpt-5.6`：Sol 层；困难的多步实现、调试、审查和高歧义工作；
+4. `gpt-6-astra`：只用于确实需要最高能力层级的困难架构、深度反证、关键独立复核或高失败代价任务。
 
-- 存在一个边界清晰、可独立验收的大型探索、实现或验证子任务；
-- 存在两个以上互不依赖、可并行的交付单元；
-- 需要独立审查、反证、测试或第二视角；
-- 跨多个模块、文件或知识领域，拆分能减少主上下文污染；
-- 某个高风险结论需要独立复核。
+Astra 不是默认升级目标。单价高不代表每个任务总成本一定高，因此判断依据是“预期完成一次任务的总成本”，但不要把所有任务从 Luna 开始机械失败后逐级升级。
 
-一个 SubAgent 足以带来明显收益时只创建一个；不要为了展示多 Agent 能力强行凑数。
+## 成本门：先决定是否委派
 
-## 不使用
-
-以下任务留在主 Agent：
-
-- 简单问答、状态查询或几分钟内可完成的线性任务；
-- 短小、局部、低风险的单文件修改；
-- 子步骤强依赖、并行没有收益的流程；
-- 无法隔离写入所有权的并行修改；
-- 发布、发送、付款、删除、账户、生产环境变更等不可逆外部操作。
-
-Worker 可以准备不可逆操作所需材料，但不得执行最终外部动作。
-
-## 强制执行流程
-
-1. **锚定当前请求。** 以用户最新消息为最高优先级，提取本轮目标、仍有效约束、资源、当前工作区状态和验收标准。不要把旧 SubAgent 对话当作任务来源。
-2. **解决关键歧义。** 缺失信息会显著影响范围、方案、权限、风险或验收时，读取 [用户澄清与自定义路由](references/user-input-and-custom-routing.md)。优先使用当前 Surface 的 `request_user_input`；不可用时在普通对话中提问并等待。收到回答后作废旧计划，把回答合并进新计划和全部任务包，禁止先创建 Worker 再补上下文。
-3. **核对委派授权。** 确认当前请求明确要求委派，或适用 `AGENTS.md` 已提供长期授权。仅隐式命中 Skill 时不得视为授权。
-4. **判断是否委派。** 选择 `lead_only` 或一个及以上独立 Worker。只有授权有效且净收益为正才委派。
-5. **预检实际能力。** 检查当前 Surface 是否能创建新 SubAgent，并能通过自定义 Agent 配置或当前 live spawn schema 显式固定模型和思考强度。主 Agent 若没有协作工具，直接 `lead_only`。
-6. **选择复杂度和思考强度。** 对每个子任务分别确定复杂度与 `medium/high/xhigh/max`，读取 [路由策略](references/routing-policy.md)。加载有效的用户/项目自定义路由表；自定义职责只能提高内置最低强度，不能降低或绕过硬门。
-7. **生成路由计划。** 每个 Worker 分配唯一 `task_id`、新线程、明确所有权、任务包和验收标准。记录 `user_input_state` 和本轮澄清。Shell 可用时，用 `scripts/validate_route_plan.py` 校验；禁止在校验失败后派遣。
-8. **先通知用户。** 实际创建前展示每个 Worker 的任务简报、复杂度、模型、思考强度、上下文模式、任务 ID 和创建理由。默认通知后继续，无需等待确认；用户明确要求审批时必须等待。
-9. **创建全新 Worker。** 优先选择已安装的 `luna_medium`、`luna_high`、`luna_xhigh` 或 `luna_max` 自定义 Agent。若这些配置不可用，仅在 live schema 明确支持时，逐个显式传入 `model=gpt-5.6-luna` 与对应 reasoning 参数。
-10. **发送完整任务包。** 按 [任务包协议](references/task-packet.md) 构造独立可执行的当前任务。若 live schema 提供 `fork_turns`，新任务固定使用 `fork_turns="none"`；若未提供该字段，不得臆造参数，仍必须使用新线程和自包含任务包。
-11. **核对身份与目标。** Worker 结果必须以 `TASK_ACK <task_id>` 开头并复述当前子目标。主 Agent 先核对 `task_id` 和目标，再检查结论、变更和验证结果。
-12. **处理上下文污染。** 发现旧目标、错误任务 ID、无关项目或过期约束时，将结果标记为 `STALE_CONTEXT`，拒绝采纳；不得把新任务继续发送到污染线程。使用新 `task_id` 创建全新 Worker，每个子任务最多两次尝试。
-13. **集成与收口。** 主 Agent 亲自解决冲突、运行必要验证并形成最终答案。最终给出简洁、可审计的路由摘要。
-
-## 复杂度与思考强度
-
-| 用户可见等级 | Runtime 值 | 典型任务 |
-| --- | --- | --- |
-| 中 | `medium` | 边界明确、低风险、路径清晰的实现、扫描或验证 |
-| 高 | `high` | 多步推理、多个文件、边界条件、一般调试或审查 |
-| 极高 | `xhigh` | 跨模块、高歧义、困难调试、架构分析或高风险复核 |
-| 最高 | `max` | 最关键、最易出错、代价极高、需要深度推演与反证的任务 |
-
-复杂度描述任务本身，思考强度描述分配的推理资源。默认同档；若不同档，派遣通知中必须给出一句理由。禁止使用 `low`、`none` 或 `ultra`。
-
-## 路由优先级
-
-按以下顺序选择，禁止跳步：
-
-1. 用户对某个 Worker 的显式模型或强度要求；
-2. 四个固定 Luna 自定义 Agent 配置；
-3. live spawn schema 中显式的 `model` 与 reasoning 参数；
-4. 无法证明精确路由时，主 Agent 本地完成。
-
-全局 `[agents].default_subagent_model = "gpt-5.6-luna"` 只是遗漏参数时的防护栏，不替代逐 Worker 显式配置。不要设置固定的全局默认思考强度，因为每个子任务必须由主 Agent 单独判断。
-
-## 派遣通知格式
-
-实际创建前使用紧凑格式：
+每次创建 Worker 前都必须比较：
 
 ```text
-准备创建 2 个 SubAgent；通知后直接执行。
-
-1. <任务简报>
-   - task_id：<唯一 ID>
-   - 复杂度：高
-   - 模型：gpt-5.6-luna
-   - 思考强度：high
-   - 上下文：fresh / 新线程
-   - 创建理由：<为什么独立委派有净收益>
-
-2. ...
+ExpectedCost(delegate)
+vs
+ExpectedCost(lead)
 ```
 
-显示给用户的配置和实际创建参数必须完全一致。不得先创建后补报，也不得披露私有思维链。
+估算至少考虑：
 
-## 上下文隔离硬门
+- 主 Agent 当前模型的相对成本；
+- Worker 模型与 reasoning；
+- Worker 是否会重复读取主 Agent 已经处理的上下文；
+- task packet 与结果汇总开销；
+- 并行能否减少昂贵 Lead 的工作；
+- 低价模型失败/重试概率；
+- 独立验证是否显著降低错误代价；
+- 上下文隔离是否能减少主线程污染。
 
-详细规则见 [生命周期与上下文隔离](references/lifecycle-and-context.md)。最低要求：
+只有以下任一条件成立才委派：
 
-- 新任务、新尝试、新 `task_id`、新 Agent 线程；
-- 不用 `send_message` 把不同任务塞进旧 Worker；
-- 任务包必须包含本轮用户请求、总目标、子目标、范围、必要上下文、资源、约束、验收和输出契约；
-- 任务包开头声明其为本次调用唯一有效任务；
-- Worker 必须回显任务 ID 和当前目标；
-- 主 Agent 不采纳任何身份或目标不匹配的结果。
+1. 预计委派总成本更低；
+2. 成本略高，但并行、独立验证或上下文隔离带来的质量/风险收益明显超过额外成本。
 
-## 并发与写入边界
+因此：
 
-- 默认同时运行最多 6 个 Worker，每波最多新建 3 个；没有明确收益时使用更少数量。
-- 同一波次中，一个文件、目录、schema、迁移、lockfile、数据库或共享状态只能有一个写入者。
-- 只读探索和验证可并行；有依赖关系的实现与验证必须分波次执行。
-- Worker 不得创建任何 SubAgent、后台任务或新线程。
+- 高价 Lead 可更积极把明确工作下放给 Luna/Terra；
+- Luna Lead 对 Luna→Luna 委派更谨慎；
+- 简单、强顺序、短小单文件任务通常 `lead_only`；
+- 不为了展示多 Agent 能力而创建 Worker。
 
-## 结果协议
+## 模型与推理强度选择
 
-Worker 的最终输出必须按以下顺序：
+先预测“最低足够能力”，直接从该层开始；不要固定从 Luna low 逐级失败。
 
-1. `TASK_ACK <task_id> — <当前子目标的一句话复述>`
+| 情况 | 默认起点 |
+| --- | --- |
+| 机械、窄范围、低风险 | Luna `low` |
+| 一般明确叶子任务 | Luna `medium` |
+| 边界较多但仍适合 Luna | Luna `high` |
+| 大范围只读扫描/探索 | Terra `medium` |
+| 困难扫描、review、证据归纳 | Terra `high` |
+| 多步困难实现/调试/复核 | `gpt-5.6` `high` |
+| 极难多步推理 | `gpt-5.6` `xhigh` |
+| 真正需要最高能力的困难子问题 | Astra `high/xhigh` |
+| 极高失败代价且范围明确 | Astra `max` |
+
+`complexity` 描述任务；`reasoning_effort` 描述分配的推理资源，两者可以不同。
+
+自动路由只使用 `low/medium/high/xhigh/max`。GPT-6 Astra 不支持 `none`；本 Skill 也不把 `none` 作为正常自动档位。
+
+## 一次升级上限
+
+默认每个子任务最多两次 Worker attempt，即最多一次自动重试或升级。
+
+- 如果首次结果基本正确但推理深度不足，可保持模型提高 effort；
+- 如果证明是模型能力层级不足，可升级模型；
+- 如果失败原因是任务包、权限、环境、歧义或上下文污染，修正原因后新建 fresh Worker，不要靠更贵模型掩盖；
+- 不允许 Luna → Luna → Terra → Sol → Astra 的机械阶梯试错。
+
+## 强制运行流程
+
+1. **锚定当前请求。** 读取用户最新目标、有效约束、资源、仓库状态和验收标准。
+2. **解决关键歧义。** 只有缺失信息会实质改变范围、方案、权限、风险或验收时才提问；普通可推断细节直接处理。
+3. **读取路由模式。** 项目级覆盖用户级；缺失配置按 `luna_only`。
+4. **核对委派授权。** 用户本轮明确要求委派，或适用 `AGENTS.md` 有长期授权。
+5. **通过成本门。** 明确说明为什么委派比 Lead 自己完成更省，或为什么额外成本值得。
+6. **选择最低足够模型和 effort。** 读取 `references/routing-policy.md`。
+7. **预检实际能力。** 当前 Surface 必须能通过已安装 profile 或 live spawn 精确固定 model + reasoning；否则 `lead_only`。
+8. **生成 RoutePlan 2.0。** 包含 `routing_mode`、模型、effort、成本理由、最小上下文预算和写入所有权。
+9. **校验 RoutePlan。** Shell 可用时运行 `scripts/validate_route_plan.py`。校验失败不得派遣。
+10. **先通知用户。** 展示 task_id、任务简报、复杂度、模型、effort、fresh 上下文、委派成本理由和选择理由。默认通知后继续；用户要求审批时等待。
+11. **创建 fresh Worker。** 优先使用对应已安装 profile；否则仅在 live schema 明确支持且已验证时显式传 model + reasoning。
+12. **发送最小充分任务包。** 不复制无关历史、整个仓库、大段日志或源码。给目标、约束、定位信息、必要上下文和验收标准，让 Worker 自己读取需要的资源。
+13. **核对 `TASK_ACK`。** task_id 或目标不匹配即 `STALE_CONTEXT`，拒绝采纳并新建 task_id。
+14. **收口。** Lead 亲自验证、集成并给出简洁路由摘要。
+
+## 精确路由顺序
+
+### 1. 已安装 profile
+
+内置 profile：
+
+- Luna：`luna_low`、`luna_medium`、`luna_high`、`luna_xhigh`、`luna_max`
+- Terra：`terra_medium`、`terra_high`
+- Sol 层：`sol_high`、`sol_xhigh`
+- Astra：`astra_high`、`astra_xhigh`、`astra_max`
+
+这些 profile 只覆盖最常用的成本有效组合，避免安装所有“模型 × effort”的笛卡尔积。
+
+### 2. live spawn
+
+如果当前 live schema 明确支持精确 model + reasoning，可使用未预装组合，例如 Terra xhigh。必须把 `route_binding` 记为 `live_spawn` 并确认 `capability_verified=true`。
+
+### 3. `lead_only`
+
+不能证明实际 model + reasoning 与派遣前披露一致时，不创建 Worker。禁止静默继承主 Agent 模型。
+
+## 用户显式覆盖
+
+用户本轮可以明确指定：
+
+- 是否允许委派；
+- 某个 Worker 的模型；
+- 某个 Worker 的 reasoning；
+- 是否先确认；
+- 最大 Worker 数。
+
+本轮显式指定优先于 `luna_only` / `adaptive`。覆盖必须在 RoutePlan 中记录 `user_model_override=true`、`override_source=user` 和理由。
+
+## 上下文预算
+
+`fresh` 不等于“复制全部上下文”。
+
+任务包必须是 **minimal sufficient**：
+
+- 当前用户请求；
+- 当前总目标与子目标；
+- 必要文件/符号/日志位置；
+- 真正影响决策的上下文；
+- 约束、写入边界、验收标准；
+- 输出契约。
+
+默认不要粘贴大段源码或历史讨论；让 Worker 用工具读取。
+
+结果必须是 **concise sufficient**：
+
+1. `TASK_ACK <task_id> — <当前子目标>`
 2. `STATUS: completed | blocked | failed`
-3. 结论或完成结果
-4. 证据、修改内容或文件引用
-5. 已运行的验证及结果
-6. 风险、缺口和需要主 Agent 判断的事项
+3. 关键结论
+4. 文件/符号/证据
+5. 已执行验证
+6. 风险或阻塞
 
-主 Agent 的最终交付必须完整、自洽，并包含：实际创建数量、每个任务的模型与强度、是否通过任务 ID 校验、采纳结果、重试或 `STALE_CONTEXT` 情况，以及仍未解决的风险。
+## 并发与写入
+
+- RoutePlan 每波默认最多 3 个 Worker；
+- 总 Worker 数最多 6，仅用于多波次任务；
+- 1 个 Worker 应该是最常见的委派形态；
+- 同一波同一文件、目录、schema、迁移、lockfile 或共享状态只能有一个写入者；
+- read-heavy scan 更适合并行；write-heavy 流程更谨慎；
+- Worker 禁止再创建 SubAgent。
+
+## 安装、升级与迁移
+
+用户要求安装、升级、初始化或配置本 Skill 时进入 **Codex 引导安装模式**，读取 `references/codex-guided-install.md`。安装本身不创建 SubAgent。
+
+向导依次询问：
+
+1. 是否开启实验性的 `default_mode_request_user_input`；
+2. 长期自动委派授权：全局 / 当前项目 / 不安装；
+3. 路由模式：`luna_only`（极致经济）/ `adaptive`（自动综合）。
+
+v1 的 `additional_responsibilities` 路由表升级时默认推荐 `luna_only`，并保存 `routing.v1.backup.json`。只有用户主动选择 Adaptive 才启用多模型自动路由。
+
+## GPT-6 Astra 校准
+
+GPT-6 Astra 对 Skill/`AGENTS.md` 指令更敏感，并可能比工作流期望更少主动委派。主 Agent 是 Astra 时，仍必须执行本 Skill 的成本门：当独立下放能显著减少高价 Lead 的扫描、整理或窄范围执行工作时，显式评估 SubAgent，而不是默认全部自己完成。
+
+Astra 也倾向于更充分测试。小型、低风险、可逆修改只运行针对性验证；只有失败、新改动或未解决风险才扩大测试。
+
+## 参考
+
+- OpenAI GPT-6 Astra model guidance: `https://developers.openai.com/api/docs/guides/latest-model`
+- Codex Subagents: `https://developers.openai.com/codex/agent-configuration/subagents`

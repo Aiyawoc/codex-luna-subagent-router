@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a codex-luna-subagent-router RoutePlan and optionally render its user notice."""
+"""Validate a cost-aware codex-luna-subagent-router RoutePlan and optionally render its user notice."""
 
 from __future__ import annotations
 
@@ -7,23 +7,59 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-ALLOWED_LEVELS = ("medium", "high", "xhigh", "max")
+ALLOWED_ROUTING_MODES = ("luna_only", "adaptive")
+ALLOWED_LEVELS = ("low", "medium", "high", "xhigh", "max")
 ALLOWED_SURFACES = ("native_subagent", "app_thread")
 ALLOWED_USER_INPUT_STATES = ("not_needed", "resolved")
-PROFILE_BY_LEVEL = {
-    "medium": "luna_medium",
-    "high": "luna_high",
-    "xhigh": "luna_xhigh",
-    "max": "luna_max",
+ALLOWED_ROUTE_BINDINGS = ("installed_profile", "live_spawn")
+ALLOWED_TASK_KINDS = (
+    "leaf",
+    "scan",
+    "implementation",
+    "debug",
+    "review",
+    "architecture",
+    "verification",
+    "research",
+    "other",
+)
+ALLOWED_FAILURE_COSTS = ("low", "medium", "high")
+ADAPTIVE_MODELS = (
+    "gpt-5.6-luna",
+    "gpt-5.6-terra",
+    "gpt-5.6",
+    "gpt-6-astra",
+)
+PROFILE_BY_ROUTE = {
+    ("gpt-5.6-luna", "low"): "luna_low",
+    ("gpt-5.6-luna", "medium"): "luna_medium",
+    ("gpt-5.6-luna", "high"): "luna_high",
+    ("gpt-5.6-luna", "xhigh"): "luna_xhigh",
+    ("gpt-5.6-luna", "max"): "luna_max",
+    ("gpt-5.6-terra", "medium"): "terra_medium",
+    ("gpt-5.6-terra", "high"): "terra_high",
+    ("gpt-5.6", "high"): "sol_high",
+    ("gpt-5.6", "xhigh"): "sol_xhigh",
+    ("gpt-6-astra", "high"): "astra_high",
+    ("gpt-6-astra", "xhigh"): "astra_xhigh",
+    ("gpt-6-astra", "max"): "astra_max",
 }
 CN_LEVEL = {
+    "low": "低",
     "medium": "中",
     "high": "高",
     "xhigh": "极高",
     "max": "最高",
+}
+MODEL_LABEL = {
+    "gpt-5.6-luna": "gpt-5.6-luna",
+    "gpt-5.6-terra": "gpt-5.6-terra",
+    "gpt-5.6": "gpt-5.6 (Sol 层)",
+    "gpt-6-astra": "gpt-6-astra",
 }
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{5,127}$")
 
@@ -110,8 +146,7 @@ def _validate_dependencies(workers: list[dict[str, Any]], errors: list[str]) -> 
     def visit(node: str, stack: list[str]) -> None:
         marker = state.get(node, 0)
         if marker == 1:
-            cycle = " -> ".join(stack + [node])
-            errors.append(f"workers.depends_on: dependency cycle detected: {cycle}")
+            errors.append(f"workers.depends_on: dependency cycle detected: {' -> '.join(stack + [node])}")
             return
         if marker == 2:
             return
@@ -129,12 +164,23 @@ def validate_plan(data: Any) -> list[str]:
     if not isinstance(data, dict):
         return ["root: plan must be a JSON object"]
 
-    if data.get("schema_version") != "1.1":
-        errors.append('schema_version: must equal "1.1"')
+    if data.get("schema_version") != "2.0":
+        errors.append('schema_version: must equal "2.0"')
 
     root_request_id = _require_string(data, "root_request_id", "root", errors)
     if root_request_id and not ID_RE.fullmatch(root_request_id):
         errors.append("root.root_request_id: invalid identifier format")
+
+    routing_mode = data.get("routing_mode")
+    if routing_mode not in ALLOWED_ROUTING_MODES:
+        errors.append(f"root.routing_mode: must be one of {', '.join(ALLOWED_ROUTING_MODES)}")
+
+    if data.get("cost_objective") != "minimize_expected_total_cost":
+        errors.append('root.cost_objective: must equal "minimize_expected_total_cost"')
+    if data.get("context_budget_policy") != "minimal_sufficient":
+        errors.append('root.context_budget_policy: must equal "minimal_sufficient"')
+    if data.get("result_budget_policy") != "concise_sufficient":
+        errors.append('root.result_budget_policy: must equal "concise_sufficient"')
 
     if data.get("approval_mode") not in {"notify_and_proceed", "require_user_confirmation"}:
         errors.append("root.approval_mode: must be notify_and_proceed or require_user_confirmation")
@@ -159,15 +205,21 @@ def validate_plan(data: Any) -> list[str]:
         errors.append("root.max_attempts_per_task: must be integer 1 or 2")
         max_attempts = 2
 
+    max_concurrent = data.get("max_concurrent_workers")
+    if not isinstance(max_concurrent, int) or isinstance(max_concurrent, bool) or not (1 <= max_concurrent <= 3):
+        errors.append("root.max_concurrent_workers: must be an integer between 1 and 3")
+        max_concurrent = 3
+
     workers = data.get("workers")
     if not isinstance(workers, list) or not workers:
         errors.append("root.workers: must contain at least one Worker")
         return errors
     if len(workers) > 6:
-        errors.append("root.workers: may contain at most 6 Workers")
+        errors.append("root.workers: may contain at most 6 Workers across all waves")
 
     seen_ids: set[str] = set()
     normalized_write_paths: list[tuple[int, int, str, str]] = []
+    waves: Counter[int] = Counter()
 
     for index, raw_worker in enumerate(workers):
         path = f"workers[{index}]"
@@ -192,39 +244,64 @@ def validate_plan(data: Any) -> list[str]:
         if not isinstance(wave, int) or isinstance(wave, bool) or wave < 1:
             errors.append(f"{path}.wave: must be a positive integer")
             wave = 1
+        waves[wave] += 1
 
-        _require_string(worker, "brief", path, errors)
-        _require_string(worker, "creation_reason", path, errors)
+        for key in ("brief", "creation_reason", "delegation_cost_reason", "selection_reason"):
+            _require_string(worker, key, path, errors)
+
+        task_kind = worker.get("task_kind")
+        if task_kind not in ALLOWED_TASK_KINDS:
+            errors.append(f"{path}.task_kind: must be one of {', '.join(ALLOWED_TASK_KINDS)}")
 
         complexity = worker.get("complexity")
         effort = worker.get("reasoning_effort")
+        failure_cost = worker.get("failure_cost")
         if complexity not in ALLOWED_LEVELS:
             errors.append(f"{path}.complexity: must be one of {', '.join(ALLOWED_LEVELS)}")
         if effort not in ALLOWED_LEVELS:
             errors.append(f"{path}.reasoning_effort: must be one of {', '.join(ALLOWED_LEVELS)}")
+        if failure_cost not in ALLOWED_FAILURE_COSTS:
+            errors.append(f"{path}.failure_cost: must be one of {', '.join(ALLOWED_FAILURE_COSTS)}")
 
         model = worker.get("model")
         override = worker.get("user_model_override")
         if not isinstance(override, bool):
             errors.append(f"{path}.user_model_override: must be boolean")
             override = False
+
         if override:
             if worker.get("override_source") != "user":
                 errors.append(f'{path}.override_source: must equal "user" when model override is enabled')
             _require_string(worker, "override_reason", path, errors)
         else:
-            if model != "gpt-5.6-luna":
-                errors.append(f'{path}.model: must equal "gpt-5.6-luna" unless the user explicitly overrides it')
             if worker.get("override_source") not in {None, ""}:
                 errors.append(f"{path}.override_source: must be null without an override")
+            if routing_mode == "luna_only" and model != "gpt-5.6-luna":
+                errors.append(f'{path}.model: luna_only mode requires "gpt-5.6-luna" unless user explicitly overrides')
+            if routing_mode == "adaptive" and model not in ADAPTIVE_MODELS:
+                errors.append(f"{path}.model: adaptive mode must use an approved built-in model")
+
+        if not _is_nonempty_string(model):
+            errors.append(f"{path}.model: must be a non-empty string")
+
+        binding = worker.get("route_binding")
+        if binding not in ALLOWED_ROUTE_BINDINGS:
+            errors.append(f"{path}.route_binding: must be one of {', '.join(ALLOWED_ROUTE_BINDINGS)}")
+        if worker.get("capability_verified") is not True:
+            errors.append(f"{path}.capability_verified: must be true before dispatch")
 
         profile = worker.get("agent_profile")
-        if model == "gpt-5.6-luna" and effort in PROFILE_BY_LEVEL:
-            expected_profile = PROFILE_BY_LEVEL[effort]
-            if profile != expected_profile:
-                errors.append(f'{path}.agent_profile: expected "{expected_profile}" for reasoning_effort={effort}')
-        elif not _is_nonempty_string(profile):
-            errors.append(f"{path}.agent_profile: must be a non-empty string")
+        if binding == "installed_profile":
+            expected = PROFILE_BY_ROUTE.get((model, effort))
+            if expected is None:
+                errors.append(
+                    f"{path}.agent_profile: no installed cost-aware profile exists for model={model} effort={effort}; "
+                    "use live_spawn only after capability verification"
+                )
+            elif profile != expected:
+                errors.append(f'{path}.agent_profile: expected "{expected}" for model={model} effort={effort}')
+        elif binding == "live_spawn" and profile not in {None, ""}:
+            errors.append(f"{path}.agent_profile: live_spawn must use null/omitted profile")
 
         surface = worker.get("surface")
         if surface not in ALLOWED_SURFACES:
@@ -233,6 +310,10 @@ def validate_plan(data: Any) -> list[str]:
             errors.append(f'{path}.context_mode: must equal "fresh"')
         if worker.get("new_thread") is not True:
             errors.append(f"{path}.new_thread: must be true")
+        if worker.get("context_budget") != "minimal_sufficient":
+            errors.append(f'{path}.context_budget: must equal "minimal_sufficient"')
+        if worker.get("result_budget") != "concise_sufficient":
+            errors.append(f'{path}.result_budget: must equal "concise_sufficient"')
 
         fork_turns = worker.get("fork_turns")
         if surface == "native_subagent" and fork_turns not in {None, "none"}:
@@ -248,8 +329,7 @@ def validate_plan(data: Any) -> list[str]:
                 if not _is_nonempty_string(write_path):
                     errors.append(f"{path}.write_paths[{path_index}]: must be a non-empty string")
                     continue
-                normalized = _normalize_write_path(write_path)
-                normalized_write_paths.append((index, wave, task_id or path, normalized))
+                normalized_write_paths.append((index, wave, task_id or path, _normalize_write_path(write_path)))
 
         packet = worker.get("task_packet")
         packet_path = f"{path}.task_packet"
@@ -270,9 +350,7 @@ def validate_plan(data: Any) -> list[str]:
             packet.get("clarifications"), f"{packet_path}.clarifications", errors
         )
         if packet_clarifications != clarifications:
-            errors.append(
-                f"{packet_path}.clarifications: must exactly match the resolved root clarifications"
-            )
+            errors.append(f"{packet_path}.clarifications: must exactly match the resolved root clarifications")
         for key in (
             "in_scope",
             "out_of_scope",
@@ -289,6 +367,12 @@ def validate_plan(data: Any) -> list[str]:
             errors.append(f"{packet_path}.sole_source_of_truth: must be true")
         if packet.get("start_response_with_task_ack") is not True:
             errors.append(f"{packet_path}.start_response_with_task_ack: must be true")
+
+    for wave, count in waves.items():
+        if count > max_concurrent:
+            errors.append(
+                f"workers.wave: wave {wave} has {count} workers, above max_concurrent_workers={max_concurrent}"
+            )
 
     _validate_dependencies([w for w in workers if isinstance(w, dict)], errors)
 
@@ -317,20 +401,29 @@ def render_notice(data: dict[str, Any]) -> str:
         if state == "resolved"
         else "无需额外用户澄清"
     )
-    lines = [f"准备创建 {len(workers)} 个 SubAgent；{suffix}", f"用户输入：{clarification_summary}", ""]
+    lines = [
+        f"准备创建 {len(workers)} 个 SubAgent；{suffix}",
+        f"路由模式：{data.get('routing_mode', '<missing>')}",
+        "成本目标：最小化预期总成本",
+        f"用户输入：{clarification_summary}",
+        "",
+    ]
     for index, worker in enumerate(workers, start=1):
         effort = worker.get("reasoning_effort", "unknown")
         complexity = worker.get("complexity", "unknown")
+        model = worker.get("model", "<missing>")
         lines.extend(
             [
                 f"{index}. {worker.get('brief', '<missing brief>')}",
                 f"   - task_id：{worker.get('task_id', '<missing>')}",
+                f"   - 类型：{worker.get('task_kind', '<missing>')}",
                 f"   - 复杂度：{CN_LEVEL.get(complexity, complexity)} ({complexity})",
-                f"   - 模型：{worker.get('model', '<missing>')}",
+                f"   - 模型：{MODEL_LABEL.get(model, model)}",
                 f"   - 思考强度：{CN_LEVEL.get(effort, effort)} ({effort})",
-                f"   - Agent：{worker.get('agent_profile', '<missing>')}",
-                f"   - 上下文：fresh / 新线程",
-                f"   - 创建理由：{worker.get('creation_reason', '<missing>')}",
+                f"   - Agent：{worker.get('agent_profile') or worker.get('route_binding', '<missing>')}",
+                "   - 上下文：fresh / minimal_sufficient",
+                f"   - 委派成本理由：{worker.get('delegation_cost_reason', '<missing>')}",
+                f"   - 选择理由：{worker.get('selection_reason', '<missing>')}",
                 "",
             ]
         )

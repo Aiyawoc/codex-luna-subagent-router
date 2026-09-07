@@ -1,6 +1,6 @@
 interface:
-  display_name: "Luna SubAgent 自动路由"
-  short_description: "引导安装，并按难度调度 fresh Luna Worker"
-  default_prompt: "使用 $codex-luna-subagent-router 判断是否值得委派；派遣前披露计划，随后用新线程和本轮任务包创建 Luna Worker。"
+  display_name: "成本优先 SubAgent 路由"
+  short_description: "Luna Only / Adaptive 双模式，选择最低足够 Worker"
+  default_prompt: "使用 $codex-luna-subagent-router 判断是否值得委派；若值得，按路由模式选择最低足够模型和思考强度，披露成本理由后创建 fresh Worker。"
 policy:
   allow_implicit_invocation: true

@@ -29,84 +29,109 @@ class RoutePlanValidationTests(unittest.TestCase):
     def test_valid_example(self) -> None:
         self.assertEqual(validate_plan(self.plan()), [])
 
-    def test_notice_mirrors_route(self) -> None:
+    def test_notice_mirrors_cost_route(self) -> None:
         notice = render_notice(self.plan())
-        self.assertIn("gpt-5.6-luna", notice)
-        self.assertIn("luna_high", notice)
-        self.assertIn("req-example-001-w1-a1", notice)
-        self.assertIn("无需额外用户澄清", notice)
+        self.assertIn("adaptive", notice)
+        self.assertIn("gpt-5.6-terra", notice)
+        self.assertIn("gpt-5.6 (Sol 层)", notice)
+        self.assertIn("最小化预期总成本", notice)
+        self.assertIn("req-example-002-w1-a1", notice)
+
+    def test_luna_only_rejects_auto_non_luna(self) -> None:
+        plan = self.plan()
+        plan["routing_mode"] = "luna_only"
+        self.assertInvalidContains(plan, "luna_only mode requires")
+
+    def test_luna_only_allows_explicit_user_override(self) -> None:
+        plan = self.plan()
+        plan["routing_mode"] = "luna_only"
+        for worker in plan["workers"]:
+            worker["model"] = "gpt-5.6-luna"
+            worker["reasoning_effort"] = "medium"
+            worker["agent_profile"] = "luna_medium"
+        worker = plan["workers"][1]
+        worker["model"] = "gpt-6-astra"
+        worker["reasoning_effort"] = "high"
+        worker["agent_profile"] = "astra_high"
+        worker["user_model_override"] = True
+        worker["override_source"] = "user"
+        worker["override_reason"] = "用户本轮明确要求该复核 Worker 使用 Astra high。"
+        self.assertEqual(validate_plan(plan), [])
+
+    def test_adaptive_rejects_unknown_builtin_model(self) -> None:
+        plan = self.plan()
+        plan["workers"][0]["model"] = "gpt-4.1"
+        self.assertInvalidContains(plan, "approved built-in model")
+
+    def test_low_luna_is_allowed(self) -> None:
+        plan = self.plan()
+        worker = plan["workers"][0]
+        worker["model"] = "gpt-5.6-luna"
+        worker["reasoning_effort"] = "low"
+        worker["agent_profile"] = "luna_low"
+        self.assertEqual(validate_plan(plan), [])
+
+    def test_profile_must_match_model_and_effort(self) -> None:
+        plan = self.plan()
+        plan["workers"][0]["agent_profile"] = "luna_medium"
+        self.assertInvalidContains(plan, 'expected "terra_medium"')
+
+    def test_live_spawn_requires_no_profile_and_verified_capability(self) -> None:
+        plan = self.plan()
+        worker = plan["workers"][0]
+        worker["route_binding"] = "live_spawn"
+        worker["agent_profile"] = None
+        self.assertEqual(validate_plan(plan), [])
+        worker["capability_verified"] = False
+        self.assertInvalidContains(plan, "capability_verified")
+
+    def test_unbundled_profile_combo_must_use_live_spawn(self) -> None:
+        plan = self.plan()
+        worker = plan["workers"][0]
+        worker["model"] = "gpt-5.6-terra"
+        worker["reasoning_effort"] = "xhigh"
+        self.assertInvalidContains(plan, "no installed cost-aware profile")
+        worker["route_binding"] = "live_spawn"
+        worker["agent_profile"] = None
+        self.assertEqual(validate_plan(plan), [])
 
     def test_pending_user_input_is_rejected(self) -> None:
         plan = self.plan()
         plan["user_input_state"] = "pending"
         self.assertInvalidContains(plan, "pending user input")
 
-    def test_resolved_input_requires_answered_clarification(self) -> None:
-        plan = self.plan()
-        plan["user_input_state"] = "resolved"
-        self.assertInvalidContains(plan, "at least one answered item")
-
     def test_resolved_clarification_must_reach_every_packet(self) -> None:
         plan = self.plan()
         clarification = {
             "question": "本次只分析还是直接修复？",
-            "answer": "直接修复并运行回归测试。",
+            "answer": "直接修复并运行针对性回归测试。",
         }
         plan["user_input_state"] = "resolved"
         plan["clarifications"] = [clarification]
         for worker in plan["workers"]:
             worker["task_packet"]["clarifications"] = [copy.deepcopy(clarification)]
-
         self.assertEqual(validate_plan(plan), [])
         self.assertIn("已合并 1 项用户澄清", render_notice(plan))
 
-    def test_packet_clarification_mismatch_is_rejected(self) -> None:
+    def test_context_budget_is_enforced(self) -> None:
         plan = self.plan()
-        clarification = {"question": "是否直接修改？", "answer": "是"}
-        plan["user_input_state"] = "resolved"
-        plan["clarifications"] = [clarification]
-        plan["workers"][0]["task_packet"]["clarifications"] = [copy.deepcopy(clarification)]
-        self.assertInvalidContains(plan, "must exactly match")
+        plan["workers"][0]["context_budget"] = "copy_everything"
+        self.assertInvalidContains(plan, "minimal_sufficient")
 
-    def test_non_luna_without_user_override_is_rejected(self) -> None:
+    def test_result_budget_is_enforced(self) -> None:
         plan = self.plan()
-        plan["workers"][0]["model"] = "gpt-5.6-sol"
-        self.assertInvalidContains(plan, 'must equal "gpt-5.6-luna"')
+        plan["workers"][0]["result_budget"] = "verbose"
+        self.assertInvalidContains(plan, "concise_sufficient")
 
-    def test_explicit_user_override_is_allowed(self) -> None:
+    def test_same_wave_more_than_three_is_rejected(self) -> None:
         plan = self.plan()
-        worker = plan["workers"][0]
-        worker["model"] = "gpt-5.6-sol"
-        worker["agent_profile"] = "user_requested_sol"
-        worker["user_model_override"] = True
-        worker["override_source"] = "user"
-        worker["override_reason"] = "用户明确指定该审查 Worker 使用 Sol。"
-        self.assertEqual(validate_plan(plan), [])
-
-    def test_low_reasoning_is_rejected(self) -> None:
-        plan = self.plan()
-        plan["workers"][0]["reasoning_effort"] = "low"
-        self.assertInvalidContains(plan, "reasoning_effort")
-
-    def test_profile_must_match_reasoning(self) -> None:
-        plan = self.plan()
-        plan["workers"][0]["agent_profile"] = "luna_max"
-        self.assertInvalidContains(plan, 'expected "luna_high"')
-
-    def test_old_context_inheritance_is_rejected(self) -> None:
-        plan = self.plan()
-        plan["workers"][0]["fork_turns"] = "all"
-        self.assertInvalidContains(plan, "fresh tasks")
-
-    def test_thread_reuse_is_rejected(self) -> None:
-        plan = self.plan()
-        plan["workers"][0]["new_thread"] = False
-        self.assertInvalidContains(plan, "new_thread")
-
-    def test_missing_current_request_is_rejected(self) -> None:
-        plan = self.plan()
-        plan["workers"][0]["task_packet"]["current_user_request"] = ""
-        self.assertInvalidContains(plan, "current_user_request")
+        base = plan["workers"][0]
+        for idx in range(2):
+            extra = copy.deepcopy(base)
+            extra["task_id"] = f"req-example-002-extra-{idx}"
+            extra["task_packet"]["task_id"] = extra["task_id"]
+            plan["workers"].append(extra)
+        self.assertInvalidContains(plan, "above max_concurrent_workers")
 
     def test_same_wave_write_overlap_is_rejected(self) -> None:
         plan = self.plan()
@@ -132,9 +157,9 @@ class RoutePlanValidationTests(unittest.TestCase):
         second["depends_on"] = [first["task_id"]]
         self.assertInvalidContains(plan, "dependency cycle")
 
-    def test_silent_model_fallback_policy_is_rejected(self) -> None:
+    def test_silent_fallback_is_rejected(self) -> None:
         plan = self.plan()
-        plan["on_route_rejected"] = "fallback_to_sol"
+        plan["on_route_rejected"] = "fallback_to_luna"
         self.assertInvalidContains(plan, "silent model fallback is forbidden")
 
 

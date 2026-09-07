@@ -1,122 +1,132 @@
 {
-  "schema_version": "1.1",
-  "root_request_id": "req-example-001",
-  "user_input_state": "not_needed",
-  "clarifications": [],
+  "schema_version": "2.0",
+  "root_request_id": "req-example-002",
+  "routing_mode": "adaptive",
+  "cost_objective": "minimize_expected_total_cost",
+  "context_budget_policy": "minimal_sufficient",
+  "result_budget_policy": "concise_sufficient",
   "approval_mode": "notify_and_proceed",
   "on_route_rejected": "lead_only",
   "stale_context_policy": "reject_and_respawn_fresh",
+  "user_input_state": "not_needed",
+  "clarifications": [],
   "max_attempts_per_task": 2,
+  "max_concurrent_workers": 3,
   "workers": [
     {
-      "task_id": "req-example-001-w1-a1",
+      "task_id": "req-example-002-w1-a1",
       "attempt": 1,
       "wave": 1,
-      "brief": "独立分析认证模块的状态同步路径并给出证据",
-      "creation_reason": "该分析边界清晰且独立执行可减少主上下文噪声",
-      "complexity": "high",
-      "model": "gpt-5.6-luna",
-      "reasoning_effort": "high",
-      "agent_profile": "luna_high",
+      "depends_on": [],
+      "brief": "扫描认证模块并定位所有 token 刷新入口。",
+      "creation_reason": "只读扫描边界清晰，独立执行可避免主上下文被搜索日志污染。",
+      "delegation_cost_reason": "主 Agent 无需亲自遍历大量文件；Terra medium 预期以更低成本完成 read-heavy 扫描。",
+      "selection_reason": "该任务以大范围读取和归纳为主，Terra medium 比更强模型更符合最低足够能力原则。",
+      "task_kind": "scan",
+      "complexity": "medium",
+      "failure_cost": "low",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "medium",
+      "route_binding": "installed_profile",
+      "capability_verified": true,
+      "agent_profile": "terra_medium",
+      "user_model_override": false,
+      "override_source": null,
       "surface": "native_subagent",
       "context_mode": "fresh",
       "new_thread": true,
       "fork_turns": "none",
-      "user_model_override": false,
-      "override_source": null,
-      "override_reason": null,
-      "depends_on": [],
+      "context_budget": "minimal_sufficient",
+      "result_budget": "concise_sufficient",
       "write_paths": [],
       "task_packet": {
-        "root_request_id": "req-example-001",
-        "task_id": "req-example-001-w1-a1",
-        "current_user_request": "分析当前项目的认证、缓存和队列模块，定位状态不同步的原因。",
+        "root_request_id": "req-example-002",
+        "task_id": "req-example-002-w1-a1",
+        "current_user_request": "分析认证和缓存模块的异常路径，并给出最小修复建议。",
+        "normalized_goal": "定位认证与缓存异常路径并提供可验证的修复输入。",
+        "subtask_goal": "只读扫描认证模块的 token 刷新路径。",
         "clarifications": [],
-        "normalized_goal": "定位状态不同步的根因并给出可验证证据。",
-        "subtask_goal": "仅分析认证模块的状态同步路径。",
         "in_scope": [
-          "读取认证模块代码",
-          "追踪状态更新路径",
-          "给出文件和符号证据"
+          "认证模块源码",
+          "token 刷新入口和调用链"
         ],
         "out_of_scope": [
-          "修改缓存模块",
-          "直接提交代码",
-          "创建其他 Agent"
+          "修改代码",
+          "缓存模块"
         ],
         "necessary_context": [
-          "认证模块是本 Worker 的唯一分析范围"
+          "当前目标是认证路径扫描；不要继承旧任务。"
         ],
         "resources": [
-          "当前仓库工作区",
-          "相关测试与日志"
+          "当前仓库及其只读工具"
         ],
         "constraints": [
-          "只读",
-          "不依赖旧 Worker 历史"
+          "只返回关键文件、符号和异常路径。"
         ],
         "acceptance_criteria": [
-          "给出至少一条可复核的执行路径",
-          "明确是否发现根因"
+          "列出所有刷新入口",
+          "给出文件和符号级证据"
         ],
-        "output_contract": "以 TASK_ACK 开头，随后给出 STATUS、结论、证据、验证和风险。",
+        "output_contract": "简洁返回入口列表、异常路径和证据，不复制大段源码。",
         "no_subagents": true,
         "sole_source_of_truth": true,
         "start_response_with_task_ack": true
       }
     },
     {
-      "task_id": "req-example-001-w2-a1",
+      "task_id": "req-example-002-w2-a1",
       "attempt": 1,
       "wave": 1,
-      "brief": "独立分析缓存模块的状态失效与更新路径",
-      "creation_reason": "与认证模块无写入冲突，可并行获得独立证据",
-      "complexity": "xhigh",
-      "model": "gpt-5.6-luna",
-      "reasoning_effort": "xhigh",
-      "agent_profile": "luna_xhigh",
+      "depends_on": [],
+      "brief": "复核缓存失效逻辑中的竞态与边界条件。",
+      "creation_reason": "该子任务与认证扫描独立，适合并行且需要更强逻辑检查。",
+      "delegation_cost_reason": "把限定范围的复杂复核交给 gpt-5.6 high，可避免昂贵主 Agent 承担完整调试上下文，同时减少低价模型反复失败的概率。",
+      "selection_reason": "任务涉及并发边界和多步推理，直接使用 Sol 层 high 比先用 Luna 多次试错更符合预期总成本最小化。",
+      "task_kind": "review",
+      "complexity": "high",
+      "failure_cost": "medium",
+      "model": "gpt-5.6",
+      "reasoning_effort": "high",
+      "route_binding": "installed_profile",
+      "capability_verified": true,
+      "agent_profile": "sol_high",
+      "user_model_override": false,
+      "override_source": null,
       "surface": "native_subagent",
       "context_mode": "fresh",
       "new_thread": true,
       "fork_turns": "none",
-      "user_model_override": false,
-      "override_source": null,
-      "override_reason": null,
-      "depends_on": [],
+      "context_budget": "minimal_sufficient",
+      "result_budget": "concise_sufficient",
       "write_paths": [],
       "task_packet": {
-        "root_request_id": "req-example-001",
-        "task_id": "req-example-001-w2-a1",
-        "current_user_request": "分析当前项目的认证、缓存和队列模块，定位状态不同步的原因。",
+        "root_request_id": "req-example-002",
+        "task_id": "req-example-002-w2-a1",
+        "current_user_request": "分析认证和缓存模块的异常路径，并给出最小修复建议。",
+        "normalized_goal": "定位认证与缓存异常路径并提供可验证的修复输入。",
+        "subtask_goal": "只读复核缓存失效逻辑的竞态和边界条件。",
         "clarifications": [],
-        "normalized_goal": "定位状态不同步的根因并给出可验证证据。",
-        "subtask_goal": "仅分析缓存模块的失效、刷新和并发更新路径。",
         "in_scope": [
-          "读取缓存模块代码",
-          "检查失效和刷新逻辑",
-          "分析竞态与边界条件"
+          "缓存失效、重建和并发控制代码"
         ],
         "out_of_scope": [
-          "修改认证模块",
-          "直接提交代码",
-          "创建其他 Agent"
+          "修改代码",
+          "认证模块"
         ],
         "necessary_context": [
-          "缓存模块是本 Worker 的唯一分析范围"
+          "重点检查竞态、失效窗口和错误恢复。"
         ],
         "resources": [
-          "当前仓库工作区",
-          "缓存相关测试与日志"
+          "当前仓库及其只读工具"
         ],
         "constraints": [
-          "只读",
-          "不依赖旧 Worker 历史"
+          "不扩展到无关缓存实现。"
         ],
         "acceptance_criteria": [
-          "列出关键状态转换",
-          "给出竞态或失效风险的证据"
+          "给出可复现或可证伪的风险点",
+          "提供文件和符号级证据"
         ],
-        "output_contract": "以 TASK_ACK 开头，随后给出 STATUS、结论、证据、验证和风险。",
+        "output_contract": "简洁返回风险、证据、验证建议和最小修复方向。",
         "no_subagents": true,
         "sole_source_of_truth": true,
         "start_response_with_task_ack": true
