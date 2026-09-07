@@ -108,5 +108,7 @@ echo
 echo "Next steps:"
 echo "1. Ask Codex to follow $DEST_SKILL/references/codex-guided-install.md."
 echo "2. Choose standing delegation authorization: global / project / none."
-echo "3. Choose routing mode: luna_only (maximum economy) or adaptive (cheapest sufficient)."
+echo "3. Choose routing mode:"
+echo "   - luna_only: maximum economy and cost predictability; automatic Workers use Luna only, hard tasks stay with the Lead."
+echo "   - adaptive: choose the cheapest sufficient Luna/Terra/Sol/Astra combination; can down-route or locally escalate."
 echo "4. Existing v1 routing tables are backed up during guided migration."
