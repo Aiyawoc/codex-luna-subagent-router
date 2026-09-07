@@ -7,9 +7,17 @@ Usage:
   ./install.sh --global
   ./install.sh --project /path/to/repository
 
-The script installs the Skill and its cost-aware custom-agent profiles.
-It does not edit config.toml, AGENTS.md, or routing.json.
-Use references/codex-guided-install.md for the recommended guided setup.
+The script installs or upgrades the complete Skill package and overwrites every
+cost-aware custom-agent profile bundled by this release.
+
+When upgrading from any older version, rerun this installer from the new
+release. Do not copy only SKILL.md, selected references/scripts, or individual
+profiles; the whole installed Skill package and all bundled profiles must stay
+on the same release.
+
+The script does not edit user-managed config.toml, AGENTS.md, or routing.json.
+Use references/codex-guided-install.md after installation/upgrade for managed
+configuration and migration.
 EOF
 }
 
@@ -71,6 +79,8 @@ if dst.exists():
 shutil.copytree(src, dst, ignore=ignore)
 PY
 
+# Refresh every profile bundled by this release. User-created profiles with
+# other names are outside this installer's management scope.
 cp "$SOURCE_DIR"/assets/codex-agents/*.toml "$AGENTS_BASE"/
 chmod +x \
   "$DEST_SKILL/install.sh" \
@@ -80,12 +90,20 @@ chmod +x \
 python3 "$DEST_SKILL/scripts/validate_route_plan.py" \
   "$DEST_SKILL/examples/route-plan.valid.json" >/dev/null
 
-echo "Installed Skill: $DEST_SKILL"
-echo "Installed cost-aware profiles:"
+INSTALLED_VERSION="$(tr -d '[:space:]' < "$DEST_SKILL/VERSION")"
+
+echo "Installed/updated Skill: $DEST_SKILL"
+echo "Installed version: $INSTALLED_VERSION"
+echo "Refreshed cost-aware profiles:"
 echo "  Luna:  luna-{low,medium,high,xhigh,max}.toml"
 echo "  Terra: terra-{medium,high}.toml"
 echo "  Sol:   sol-{high,xhigh}.toml"
 echo "  Astra: astra-{high,xhigh,max}.toml"
+echo
+echo "Upgrade rule:"
+echo "  Keep the entire Skill directory and every bundled profile on this same release."
+echo "  Do not retain an older SKILL.md/reference/script/profile beside newer package files."
+echo "  User-managed config.toml, unrelated AGENTS.md content, and routing choices are migrated separately."
 echo
 echo "Next steps:"
 echo "1. Ask Codex to follow $DEST_SKILL/references/codex-guided-install.md."
