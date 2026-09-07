@@ -6,18 +6,35 @@
 
 > **让任意主模型把合适的工作交给“最便宜且足够完成任务”的 SubAgent，从而降低整个任务的预期总成本。**
 
-当前版本：**2.1.2**
+当前版本：**2.1.3**
 
 ## 两种路由模式
 
+两种模式都不会切换主 Agent 的模型或推理强度；区别在于**自动创建的 SubAgent 可以使用哪些模型，以及成本边界如何控制**。
+
+| 特点 | `luna_only` | `adaptive` |
+| --- | --- | --- |
+| 核心定位 | 极致经济，SubAgent 成本边界最可预测 | 自动平衡成本与能力，寻找最低足够组合 |
+| 自动 Worker 模型 | 仅 `gpt-5.6-luna` | Luna / Terra / `gpt-5.6`（Sol 层）/ Astra |
+| reasoning | 主 Agent 在 Luna 的 `low/medium/high/xhigh/max` 中选择 | 主 Agent同时选择模型与最低足够 reasoning |
+| 相对主 Agent 的路由 | 只向 Luna 下放；Luna 不足时由 Lead 接管 | 可向下路由节省成本，也可对少数困难子任务局部向上升级 |
+| 成本可预测性 | 最高，不会自动创建比 Luna 更贵的 Worker | 较灵活；只有预期总成本/收益值得时才使用更贵 Worker |
+| 更适合 | 严格控制预算、已有强力主 Agent、希望大量廉价下放 | 希望任意主模型自动选择最合适的 SubAgent 能力层级 |
+
 ### `luna_only` — 极致经济
+
+特点：**自动 SubAgent 永远不越过 Luna 的成本边界。**
 
 - 自动 Worker 只使用 `gpt-5.6-luna`；
 - 按任务选择 `low / medium / high / xhigh / max`；
-- Luna 不足时由主 Agent 自己完成，不自动升级到更贵模型；
-- 适合希望严格控制 SubAgent 成本的用户。
+- Luna 能力足够时，可让昂贵主 Agent 把明确、重复、扫描类工作低成本下放；
+- Luna 不足时由主 Agent 自己完成，不自动升级到 Terra / Sol / Astra；
+- 因此成本最容易预测，但不会自动用更强 SubAgent 解困难子问题；
+- 适合希望严格控制 SubAgent 成本，或者本身已经使用较强主 Agent 的用户。
 
 ### `adaptive` — 自动综合
+
+特点：**根据每个子目标重新判断所需能力，并允许相对主 Agent 双向路由。**
 
 主 Agent 根据目标复杂度、任务类型、失败代价、上下文规模和重试风险，在以下层级中选择最低足够组合：
 
@@ -35,7 +52,9 @@ gpt-5.6-luna
 - `gpt-5.6`：困难多步实现、调试、复核；
 - Astra：真正需要最高能力的困难架构、深度反证和高失败代价独立审查。
 
-Adaptive 不是“优先用强模型”，而是优化 **ExpectedCost(task)**。如果 Luna 大概率会多次失败，直接使用更强模型可能反而更省。
+Adaptive 可以让 Astra/Sol Lead 把简单工作下放给 Luna/Terra，也可以让 Luna/Terra Lead 只把少数困难且范围明确的子问题升级给 Sol/Astra。它不是“优先用强模型”，而是优化 **ExpectedCost(task)**：如果便宜模型大概率会失败并重试，直接使用更强模型可能反而降低总成本。
+
+如果你最在意**成本上限和可预测性**，优先选择 `luna_only`；如果你希望主 Agent **自动综合判断成本、能力和失败风险**，选择 `adaptive`。
 
 ## 核心成本规则
 
@@ -72,7 +91,7 @@ v1 的可靠性机制继续保留：
 
 ```text
 Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.2/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.3/skills/codex-luna-subagent-router
 
 If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
 
@@ -107,7 +126,9 @@ After installation or upgrade, read references/codex-guided-install.md and conti
 
 1. 是否开启实验性的 `default_mode_request_user_input`；
 2. 长期自动委派授权：全局 / 当前项目 / 不安装；
-3. 路由模式：`luna_only` / `adaptive`。
+3. 路由模式：
+   - `luna_only`：极致经济，自动 Worker 只用 Luna；难题留给主 Agent，成本最可预测。
+   - `adaptive`：自动综合，从 Luna / Terra / Sol / Astra 中选择最低足够组合；可向下节省成本，也可局部向上升级。
 
 v1 升级时默认推荐 `luna_only`，原 `additional_responsibilities` 路由表会备份为 `routing.v1.backup.json`。
 
