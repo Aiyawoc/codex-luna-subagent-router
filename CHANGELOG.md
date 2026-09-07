@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.2 — 2026-09-07
+
+- 安装/升级指引明确要求：从任意旧版本升级时必须刷新整个 Skill 包，而不是只替换 `SKILL.md` 或个别文件。
+- 要求根 Skill、references、scripts、examples、evals、assets、安装脚本与全部随包 Agent profiles 保持同一版本，避免版本混用。
+- 明确全量包升级与用户配置迁移的边界：用户 `config.toml`、非托管 `AGENTS.md` 内容和路由配置由引导流程保留/迁移，不随安装包直接删除。
+- `install.sh` 增加全量升级提示、已安装版本输出，并明确覆盖刷新当前版本随包 profiles。
+
 ## 2.1.1 — 2026-09-07
 
 - 将仓库默认 `README.md` 调整为中文，并在顶部提供英文跳转入口。
