@@ -191,7 +191,9 @@ def validate_plan(data: Any) -> list[str]:
 
     user_input_state = data.get("user_input_state")
     if user_input_state not in ALLOWED_USER_INPUT_STATES:
-        errors.append("root.user_input_state: must be not_needed or resolved; pending user input cannot be dispatched")
+        errors.append(
+            "root.user_input_state: must be not_needed or resolved; pending user input cannot be dispatched"
+        )
     clarifications = _validate_clarifications(data.get("clarifications"), "root.clarifications", errors)
     if user_input_state == "not_needed" and clarifications:
         errors.append("root.clarifications: must be empty when user_input_state=not_needed")
@@ -292,7 +294,10 @@ def validate_plan(data: Any) -> list[str]:
         if binding == "installed_profile":
             expected = PROFILE_BY_ROUTE.get((model, effort))
             if expected is None:
-                errors.append(f"{path}.agent_profile: no installed cost-aware profile exists for model={model} effort={effort}; use live_spawn only after capability verification")
+                errors.append(
+                    f"{path}.agent_profile: no installed cost-aware profile exists for model={model} effort={effort}; "
+                    "use live_spawn only after capability verification"
+                )
             elif profile != expected:
                 errors.append(f'{path}.agent_profile: expected "{expected}" for model={model} effort={effort}')
         elif binding == "live_spawn" and profile not in {None, ""}:
@@ -341,10 +346,19 @@ def validate_plan(data: Any) -> list[str]:
 
         for key in ("current_user_request", "normalized_goal", "subtask_goal", "output_contract"):
             _require_string(packet, key, packet_path, errors)
-        packet_clarifications = _validate_clarifications(packet.get("clarifications"), f"{packet_path}.clarifications", errors)
+        packet_clarifications = _validate_clarifications(
+            packet.get("clarifications"), f"{packet_path}.clarifications", errors
+        )
         if packet_clarifications != clarifications:
             errors.append(f"{packet_path}.clarifications: must exactly match the resolved root clarifications")
-        for key in ("in_scope", "out_of_scope", "necessary_context", "resources", "constraints", "acceptance_criteria"):
+        for key in (
+            "in_scope",
+            "out_of_scope",
+            "necessary_context",
+            "resources",
+            "constraints",
+            "acceptance_criteria",
+        ):
             _require_string_list(packet, key, packet_path, errors)
 
         if packet.get("no_subagents") is not True:
@@ -356,7 +370,9 @@ def validate_plan(data: Any) -> list[str]:
 
     for wave, count in waves.items():
         if count > max_concurrent:
-            errors.append(f"workers.wave: wave {wave} has {count} workers, above max_concurrent_workers={max_concurrent}")
+            errors.append(
+                f"workers.wave: wave {wave} has {count} workers, above max_concurrent_workers={max_concurrent}"
+            )
 
     _validate_dependencies([w for w in workers if isinstance(w, dict)], errors)
 
@@ -367,7 +383,9 @@ def validate_plan(data: Any) -> list[str]:
             if wi == wj or wave_i != wave_j:
                 continue
             if _paths_overlap(path_i, path_j):
-                errors.append(f"workers.write_paths: same-wave overlap between {id_i} ({path_i}) and {id_j} ({path_j})")
+                errors.append(
+                    f"workers.write_paths: same-wave overlap between {id_i} ({path_i}) and {id_j} ({path_j})"
+                )
 
     return errors
 
@@ -378,7 +396,11 @@ def render_notice(data: dict[str, Any]) -> str:
     suffix = "等待用户确认后执行。" if approval_mode == "require_user_confirmation" else "通知后直接执行。"
     state = data.get("user_input_state")
     clarification_count = len(data.get("clarifications", []))
-    clarification_summary = f"已合并 {clarification_count} 项用户澄清" if state == "resolved" else "无需额外用户澄清"
+    clarification_summary = (
+        f"已合并 {clarification_count} 项用户澄清"
+        if state == "resolved"
+        else "无需额外用户澄清"
+    )
     lines = [
         f"准备创建 {len(workers)} 个 SubAgent；{suffix}",
         f"路由模式：{data.get('routing_mode', '<missing>')}",
@@ -390,19 +412,21 @@ def render_notice(data: dict[str, Any]) -> str:
         effort = worker.get("reasoning_effort", "unknown")
         complexity = worker.get("complexity", "unknown")
         model = worker.get("model", "<missing>")
-        lines.extend([
-            f"{index}. {worker.get('brief', '<missing brief>')}",
-            f"   - task_id：{worker.get('task_id', '<missing>')}",
-            f"   - 类型：{worker.get('task_kind', '<missing>')}",
-            f"   - 复杂度：{CN_LEVEL.get(complexity, complexity)} ({complexity})",
-            f"   - 模型：{MODEL_LABEL.get(model, model)}",
-            f"   - 思考强度：{CN_LEVEL.get(effort, effort)} ({effort})",
-            f"   - Agent：{worker.get('agent_profile') or worker.get('route_binding', '<missing>')}",
-            "   - 上下文：fresh / minimal_sufficient",
-            f"   - 委派成本理由：{worker.get('delegation_cost_reason', '<missing>')}",
-            f"   - 选择理由：{worker.get('selection_reason', '<missing>')}",
-            "",
-        ])
+        lines.extend(
+            [
+                f"{index}. {worker.get('brief', '<missing brief>')}",
+                f"   - task_id：{worker.get('task_id', '<missing>')}",
+                f"   - 类型：{worker.get('task_kind', '<missing>')}",
+                f"   - 复杂度：{CN_LEVEL.get(complexity, complexity)} ({complexity})",
+                f"   - 模型：{MODEL_LABEL.get(model, model)}",
+                f"   - 思考强度：{CN_LEVEL.get(effort, effort)} ({effort})",
+                f"   - Agent：{worker.get('agent_profile') or worker.get('route_binding', '<missing>')}",
+                "   - 上下文：fresh / minimal_sufficient",
+                f"   - 委派成本理由：{worker.get('delegation_cost_reason', '<missing>')}",
+                f"   - 选择理由：{worker.get('selection_reason', '<missing>')}",
+                "",
+            ]
+        )
     return "\n".join(lines).rstrip()
 
 
