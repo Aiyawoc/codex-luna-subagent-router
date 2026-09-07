@@ -46,12 +46,27 @@
         "normalized_goal": "定位认证与缓存异常路径并提供可验证的修复输入。",
         "subtask_goal": "只读扫描认证模块的 token 刷新路径。",
         "clarifications": [],
-        "in_scope": ["认证模块源码", "token 刷新入口和调用链"],
-        "out_of_scope": ["修改代码", "缓存模块"],
-        "necessary_context": ["当前目标是认证路径扫描；不要继承旧任务。"],
-        "resources": ["当前仓库及其只读工具"],
-        "constraints": ["只返回关键文件、符号和异常路径。"],
-        "acceptance_criteria": ["列出所有刷新入口", "给出文件和符号级证据"],
+        "in_scope": [
+          "认证模块源码",
+          "token 刷新入口和调用链"
+        ],
+        "out_of_scope": [
+          "修改代码",
+          "缓存模块"
+        ],
+        "necessary_context": [
+          "当前目标是认证路径扫描；不要继承旧任务。"
+        ],
+        "resources": [
+          "当前仓库及其只读工具"
+        ],
+        "constraints": [
+          "只返回关键文件、符号和异常路径。"
+        ],
+        "acceptance_criteria": [
+          "列出所有刷新入口",
+          "给出文件和符号级证据"
+        ],
         "output_contract": "简洁返回入口列表、异常路径和证据，不复制大段源码。",
         "no_subagents": true,
         "sole_source_of_truth": true,
@@ -91,12 +106,26 @@
         "normalized_goal": "定位认证与缓存异常路径并提供可验证的修复输入。",
         "subtask_goal": "只读复核缓存失效逻辑的竞态和边界条件。",
         "clarifications": [],
-        "in_scope": ["缓存失效、重建和并发控制代码"],
-        "out_of_scope": ["修改代码", "认证模块"],
-        "necessary_context": ["重点检查竞态、失效窗口和错误恢复。"],
-        "resources": ["当前仓库及其只读工具"],
-        "constraints": ["不扩展到无关缓存实现。"],
-        "acceptance_criteria": ["给出可复现或可证伪的风险点", "提供文件和符号级证据"],
+        "in_scope": [
+          "缓存失效、重建和并发控制代码"
+        ],
+        "out_of_scope": [
+          "修改代码",
+          "认证模块"
+        ],
+        "necessary_context": [
+          "重点检查竞态、失效窗口和错误恢复。"
+        ],
+        "resources": [
+          "当前仓库及其只读工具"
+        ],
+        "constraints": [
+          "不扩展到无关缓存实现。"
+        ],
+        "acceptance_criteria": [
+          "给出可复现或可证伪的风险点",
+          "提供文件和符号级证据"
+        ],
         "output_contract": "简洁返回风险、证据、验证建议和最小修复方向。",
         "no_subagents": true,
         "sole_source_of_truth": true,
