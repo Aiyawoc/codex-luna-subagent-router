@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.3.0 — 2026-09-07
+
+- 基于 OpenAI 当前 Subagents 官方实践，新增 `docs/v2.3.0-agent-communication-lifecycle-p0.md`，落地 Agent 通信与生命周期 P0 设计、范围和验收标准。
+- 全部 Luna / Terra / Sol / Astra bundled Worker profile 统一使用 human-readable、proper-spacing、decision-useful-only 的精简回传协议，并继续保持 `< 950 bytes` instruction budget。
+- 默认 Worker 结果只强制 `TASK_ACK / STATUS / RESULT`；`EVIDENCE / VALIDATION / RISK` 仅在有有效内容时输出，默认软预算约 200 个英文单词或等量中文。
+- Task packet 明确作为人类可读 Agent 间消息：禁止 minified JSON、去空格或难读拼接，继续坚持 minimal-sufficient 上下文。
+- Lead synthesis 改为去重整合 Worker 证据，不原样转贴 Worker 回复、日志、命令输出或内部过程。
+- 同一 wave 等待所有仍必要 Worker 后统一 synthesis；决定性证据出现且某 Worker 新增信息价值低于继续运行成本时，可 early stop 并 close。
+- Worker 结果采纳且无需 steering 后关闭 thread；retry 前先 stop/close 旧 attempt，再使用新 `task_id` 与 fresh Worker。
+- Astra 专属 guidance 改为复用公共 Worker 通信契约，避免维护重复结果模板。
+
 ## 2.2.0 — 2026-09-07
 
 - 安装向导新增第 4 项：询问同一会话最大并发 SubAgent 数量（不含主 Agent）。

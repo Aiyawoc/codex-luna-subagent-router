@@ -6,7 +6,7 @@
 
 > **让任意主模型把合适的工作交给“最便宜且足够完成任务”的 SubAgent，从而降低整个任务的预期总成本。**
 
-当前版本：**2.2.0**
+当前版本：**2.3.0**
 
 ## 两种路由模式
 
@@ -68,6 +68,20 @@ Adaptive 可以让 Astra/Sol Lead 把简单工作下放给 Luna/Terra，也可�
 - Worker 返回 `concise_sufficient` 结果；
 - model + reasoning 无法精确固定时，由 Lead 接管，禁止静默继承主模型。
 
+## Agent 通信与生命周期
+
+v2.3 进一步按 OpenAI Subagents 官方实践收紧 **Worker → Lead** 和 **Lead → Worker** 的通信成本：
+
+- Agent 间消息同时面向模型与人类审阅，保持正常空格、完整短语和可读格式；task packet 不 minify。
+- Worker 默认只返回 `TASK_ACK`、`STATUS`、`RESULT`，`EVIDENCE / VALIDATION / RISK` 仅在有有效内容时输出。
+- Worker 默认目标约 `<= 200` 个英文单词或等量中文；不写过程叙述，不重复上下文，不倾倒原始日志或完整命令输出。
+- Lead 把 Worker reply 当作证据而不是最终文案：合并重复发现、保留最强证据，不原样转贴 Worker 回复和日志。
+- 同一 wave 默认等待所有**仍必要**的 Worker 后统一 synthesis；如果决定性证据已出现、某个 Worker 的新增信息价值已低于继续运行成本，则 early stop 并 close。
+- Worker 结果采纳且无需 steering 后立即 close thread，释放 `max_concurrent_threads_per_session` 容量。
+- retry 前先 stop/close 旧 attempt，再使用新 `task_id` 和 fresh Worker。
+
+完整 P0 设计与验收标准见 `docs/v2.3.0-agent-communication-lifecycle-p0.md`。
+
 ## GPT-6 Astra / 指令精简
 
 v2.1 按 Astra 官方 Guidance 与 Eric Provencher 的实践改为 **progressive disclosure**：根 `SKILL.md` 只负责判断是否值得路由，只有确定需要时才读取对应 reference。Astra 专属的持续性、委派和测试校准放在 `references/astra-guidance.md`，其他模型不会加载。长期 `AGENTS.md` 也只保留自动委派授权和稳定边界。
@@ -91,7 +105,7 @@ v1 的可靠性机制继续保留：
 
 ```text
 Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.2.0/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.3.0/skills/codex-luna-subagent-router
 
 If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
 
@@ -189,9 +203,9 @@ python3 -m unittest discover -s tests -v
 
 ## 设计依据
 
+- ChatGPT Learn — Subagents: https://learn.chatgpt.com/zh-Hans/docs/agent-configuration/subagents?surface=app
 - GPT-6 Astra model guidance: https://developers.openai.com/api/docs/guides/latest-model
 - Eric Provencher, “Rethinking skills and prompts for GPT-6 Astra”: https://x.com/pvncher/status/2095991462416490862
-- Codex Subagents: https://developers.openai.com/codex/agent-configuration/subagents
 - Codex Config Reference: https://developers.openai.com/codex/config-reference
 
-官方 Codex 文档指出：每个 SubAgent 都会独立消耗模型与工具 token，所以 SubAgent 工作流通常比可比的单 Agent 运行消耗更多 token；因此本 Skill 把“是否委派”本身也作为成本决策。
+官方 Codex 文档指出：每个 SubAgent 都会独立消耗模型与工具 token，所以 SubAgent 工作流通常比可比的单 Agent 运行消耗更多 token；因此本 Skill 把“是否委派”“是否继续运行”和“结果应返回多少”都作为成本决策。

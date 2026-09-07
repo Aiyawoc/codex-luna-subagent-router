@@ -31,6 +31,8 @@ ExpectedCost(delegate) < ExpectedCost(lead)
 - 复杂但范围小的问题若 Luna 失败概率很高，直接使用更高能力层级可能比逐级试错便宜；
 - 多 Worker 会重复执行模型和工具工作，因此不因“可并行”就自动并行。
 
+成本门在 Worker 启动后仍持续生效。若已经获得决定性证据，某个运行中 Worker 的**预期新增信息价值**已低于继续运行成本，且它不承担仍必要的独立验收职责，则 stop 并 close；不要因为已经启动就机械跑完。
+
 ## 3. 两种路由模式
 
 ### `luna_only`
@@ -86,6 +88,7 @@ low | medium | high | xhigh | max
 - 深度不足：可同模型提高 effort；
 - 能力层级不足：可升级模型；
 - 环境、权限、歧义、task packet 或上下文污染：先修原因，再 fresh retry；
+- retry 前先 stop/close 旧 attempt，再使用新 `task_id` 和 fresh Worker；
 - 禁止从 Luna low 开始一路失败到 Astra。
 
 ## 6. 精确绑定
@@ -137,7 +140,8 @@ max_concurrent_threads_per_session = N
 - 若该值大于 3，本 Skill 仍默认单波最多 3，不因 Codex 容量更高而自动扩大并行；
 - 一个 Worker 能带来明确收益时只创建一个；
 - 同波禁止重叠写入；
-- read-heavy 更适合并行，write-heavy 更谨慎。
+- read-heavy 更适合并行，write-heavy 更谨慎；
+- 同波等待所有仍必要 Worker 后统一 synthesis；结果采纳且无需 steering 时 close completed thread，及时释放打开线程容量。
 
 因此运行时使用：
 

@@ -4,7 +4,7 @@
 
 ## 推荐安装
 
-在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.2.0 tag。
+在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.3.0 tag。
 
 安装或升级完成后读取本文件并继续。
 
