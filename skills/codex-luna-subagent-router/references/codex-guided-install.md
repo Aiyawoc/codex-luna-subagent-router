@@ -4,7 +4,7 @@
 
 ## 推荐安装
 
-在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.1.2 tag。
+在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.1.3 tag。
 
 安装或升级完成后读取本文件并继续。
 
@@ -63,19 +63,28 @@ default_mode_request_user_input = true
 
 ### 3. 路由模式
 
-只提供两种：
+只提供两种。在询问用户前，先用下面的简短说明帮助选择：
+
+- **`luna_only` — 极致经济 / 成本最可预测**：自动 Worker 只使用 Luna，并由 Lead 选择 Luna reasoning；如果 Luna 不足，困难部分留给当前主 Agent，不会自动创建更贵的 SubAgent。
+- **`adaptive` — 自动综合 / 成本与能力自动平衡**：Lead 会为每个子目标从 Luna → Terra → `gpt-5.6`（Sol 层）→ Astra 中选择最低足够模型与 effort；既可把高价 Lead 的简单工作向下路由，也可把便宜 Lead 的少数困难子问题局部升级。
+
+选择建议：如果用户最在意**SubAgent 成本上限与可预测性**，推荐 `luna_only`；如果用户希望**任意主模型自动综合判断成本、能力和失败风险**，推荐 `adaptive`。
 
 #### `luna_only` — 极致经济
 
 - 默认推荐给 v1 升级用户；
 - 自动 Worker 只用 Luna；
-- Luna 不足时由 Lead 自己完成，不自动升到更贵模型。
+- 可根据任务在 Luna `low/medium/high/xhigh/max` 中选择 reasoning；
+- Luna 不足时由 Lead 自己完成，不自动升到更贵模型；
+- 特点是成本边界最清晰，但不会自动调用更强 SubAgent 解困难子问题。
 
 #### `adaptive` — 自动综合
 
-- 仍以成本为第一目标；
+- 仍以成本为第一目标，而不是优先使用强模型；
 - 由 Lead 从 Luna → Terra → `gpt-5.6`（Sol 层）→ Astra 选择最低足够模型和 effort；
-- 适合希望昂贵主模型积极向下委派、或便宜主模型只在少数困难子问题局部升级的用户。
+- 可相对当前主 Agent 双向路由：昂贵 Lead 向 Luna/Terra 下放，便宜 Lead 对少数困难子任务升级到 Sol/Astra；
+- 只有在预期总成本或独立验证收益值得时才使用更贵 Worker；
+- 适合希望自动平衡成本与成功率的用户。
 
 询问路由配置范围：
 
@@ -161,6 +170,7 @@ python3 -m unittest discover -s tests -v
 
 - Luna Only 不会自动创建非 Luna Worker；
 - Adaptive 对 read-heavy scan 优先考虑 Luna/Terra；
+- Adaptive 能相对 Lead 向下路由，也能对必要的困难子任务局部向上升级；
 - 困难任务不会机械从 Luna 逐级失败；
 - 精确 model + effort 无法证明时 Lead 接管；
 - 派遣前能看到模型、effort、委派成本理由；
