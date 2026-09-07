@@ -6,7 +6,7 @@
 
 > **让任意主模型把合适的工作交给“最便宜且足够完成任务”的 SubAgent，从而降低整个任务的预期总成本。**
 
-当前版本：**2.1.3**
+当前版本：**2.2.0**
 
 ## 两种路由模式
 
@@ -63,7 +63,7 @@ Adaptive 可以让 Astra/Sol Lead 把简单工作下放给 Luna/Terra，也可�
 - 高价 Lead 可更积极把扫描/整理/窄范围执行下放给 Luna/Terra；
 - 低价 Lead 对 Luna→Luna 委派更谨慎；
 - 每个子任务最多 2 个 attempt，只允许一次自动重试/升级；
-- 每波最多 3 个 Worker；
+- 本 Skill 默认每波最多 3 个 Worker；若用户把 Codex 并发上限配置为 1 或 2，则同步收紧；
 - task packet 采用 `minimal_sufficient`，不复制无关历史或大段源码；
 - Worker 返回 `concise_sufficient` 结果；
 - model + reasoning 无法精确固定时，由 Lead 接管，禁止静默继承主模型。
@@ -91,7 +91,7 @@ v1 的可靠性机制继续保留：
 
 ```text
 Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.1.3/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.2.0/skills/codex-luna-subagent-router
 
 If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
 
@@ -110,7 +110,7 @@ After installation or upgrade, read references/codex-guided-install.md and conti
 ./skills/codex-luna-subagent-router/install.sh --project /path/to/repository
 ```
 
-安装脚本复制 Skill 与常用精确 Agent profiles，不主动修改 `config.toml`、`AGENTS.md` 或 `routing.json`。
+安装脚本复制 Skill 与常用精确 Agent profiles，不主动修改 `config.toml`、`AGENTS.md` 或 `routing.json`；这些配置由后续引导流程按用户选择修改。
 
 ### 从旧版本升级
 
@@ -122,13 +122,27 @@ After installation or upgrade, read references/codex-guided-install.md and conti
 
 ## 引导配置
 
-向导只询问三个核心选择：
+向导询问四个核心选择：
 
 1. 是否开启实验性的 `default_mode_request_user_input`；
 2. 长期自动委派授权：全局 / 当前项目 / 不安装；
 3. 路由模式：
    - `luna_only`：极致经济，自动 Worker 只用 Luna；难题留给主 Agent，成本最可预测。
    - `adaptive`：自动综合，从 Luna / Terra / Sol / Astra 中选择最低足够组合；可向下节省成本，也可局部向上升级。
+4. **最大并发 SubAgent 数量（不含主 Agent）**：
+   - 保持当前 / Codex 默认：不修改该设置；
+   - `3`（推荐）：与本 Skill 默认单波成本保护一致；
+   - 自定义任意 `>= 1` 的整数。
+
+Codex 公开配置键为 `[agents].max_concurrent_threads_per_session`。它限制同时保持打开的 spawned-agent 线程数量，不包含主线程；未设置时由 Codex 选择默认值。OpenAI 当前公开 schema 没有公布绝对硬上限，只要求该值 `>= 1`。本 Skill 即使把 Codex 上限设置得高于 3，也仍默认单波最多 3 个 Worker；若设置为 1 或 2，则有效单波并发同步收紧。
+
+设置具体值时，引导流程使用：
+
+```bash
+python3 scripts/configure_subagent_limit.py --max-subagents 3
+```
+
+该脚本会安全合并用户级 `$CODEX_HOME/config.toml`，并把旧的 `agents.max_threads` 别名迁移到当前公开键。
 
 v1 升级时默认推荐 `luna_only`，原 `additional_responsibilities` 路由表会备份为 `routing.v1.backup.json`。
 
@@ -178,5 +192,6 @@ python3 -m unittest discover -s tests -v
 - GPT-6 Astra model guidance: https://developers.openai.com/api/docs/guides/latest-model
 - Eric Provencher, “Rethinking skills and prompts for GPT-6 Astra”: https://x.com/pvncher/status/2095991462416490862
 - Codex Subagents: https://developers.openai.com/codex/agent-configuration/subagents
+- Codex Config Reference: https://developers.openai.com/codex/config-reference
 
 官方 Codex 文档指出：每个 SubAgent 都会独立消耗模型与工具 token，所以 SubAgent 工作流通常比可比的单 Agent 运行消耗更多 token；因此本 Skill 把“是否委派”本身也作为成本决策。
