@@ -230,7 +230,9 @@ def merge_authorization(existing: str, managed_block: str) -> tuple[str, str]:
     starts = existing.count(START_MARKER)
     ends = existing.count(END_MARKER)
     if starts != ends or starts > 1:
-        raise ConfigurationError("AGENTS.md contains malformed or duplicate codex-luna-subagent-router markers")
+        raise ConfigurationError(
+            "AGENTS.md contains malformed or duplicate codex-luna-subagent-router markers"
+        )
     if starts == 1 and existing.index(END_MARKER) < existing.index(START_MARKER):
         raise ConfigurationError("AGENTS.md contains managed markers in the wrong order")
 
@@ -388,7 +390,9 @@ def configure(
                 backup_path = routing_path.with_name("routing.v1.backup.json")
                 backup_existing = _read_optional_regular_file(backup_path)
                 if backup_existing is not None and backup_existing != existing:
-                    raise ConfigurationError(f"legacy routing backup already exists with different content: {backup_path}")
+                    raise ConfigurationError(
+                        f"legacy routing backup already exists with different content: {backup_path}"
+                    )
                 result["routing_config"]["legacy_backup_path"] = str(backup_path)
                 if backup_existing is None:
                     pending_writes.append((backup_path, existing))
