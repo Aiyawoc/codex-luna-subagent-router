@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1 — 2026-09-07
+
+- 将仓库默认 `README.md` 调整为中文，并在顶部提供英文跳转入口。
+- 新增 `README.en.md` 作为完整英文版，并提供返回中文 README 的链接。
+- 保留 `README.zh-CN.md` 作为旧链接兼容入口，统一跳转到新的默认中文 README。
+
 ## 2.1.0 — 2026-09-07
 
 - 按 OpenAI GPT-6 Astra Model Guidance 与 Eric Provencher《Rethinking skills and prompts for GPT-6 Astra》完成指令审计。
