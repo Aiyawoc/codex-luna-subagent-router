@@ -33,9 +33,21 @@ class RoutePlanValidationTests(unittest.TestCase):
         notice = render_notice(self.plan())
         self.assertIn("adaptive", notice)
         self.assertIn("gpt-5.6-terra", notice)
-        self.assertIn("gpt-5.6 (Sol 层)", notice)
+        self.assertIn("gpt-5.6-sol (Sol)", notice)
         self.assertIn("最小化预期总成本", notice)
         self.assertIn("req-example-002-w1-a1", notice)
+
+    def test_sol_route_uses_explicit_runtime_id(self) -> None:
+        plan = self.plan()
+        worker = plan["workers"][1]
+        self.assertEqual(worker["model"], "gpt-5.6-sol")
+        self.assertEqual(worker["agent_profile"], "sol_high")
+        self.assertEqual(validate_plan(plan), [])
+
+    def test_adaptive_rejects_unsuffixed_sol_alias(self) -> None:
+        plan = self.plan()
+        plan["workers"][1]["model"] = "gpt-5.6"
+        self.assertInvalidContains(plan, "approved built-in model")
 
     def test_luna_only_rejects_auto_non_luna(self) -> None:
         plan = self.plan()
@@ -108,7 +120,6 @@ class RoutePlanValidationTests(unittest.TestCase):
         }
         plan["user_input_state"] = "resolved"
         plan["clarifications"] = [clarification]
-        # Only the affected Worker receives the clarification; unrelated Workers need not pay the token cost.
         plan["workers"][1]["task_packet"]["clarifications"] = [copy.deepcopy(clarification)]
         self.assertEqual(validate_plan(plan), [])
         self.assertIn("已合并 1 项用户澄清", render_notice(plan))

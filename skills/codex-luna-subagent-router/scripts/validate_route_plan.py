@@ -31,7 +31,7 @@ ALLOWED_FAILURE_COSTS = ("low", "medium", "high")
 ADAPTIVE_MODELS = (
     "gpt-5.6-luna",
     "gpt-5.6-terra",
-    "gpt-5.6",
+    "gpt-5.6-sol",
     "gpt-6-astra",
 )
 PROFILE_BY_ROUTE = {
@@ -42,8 +42,8 @@ PROFILE_BY_ROUTE = {
     ("gpt-5.6-luna", "max"): "luna_max",
     ("gpt-5.6-terra", "medium"): "terra_medium",
     ("gpt-5.6-terra", "high"): "terra_high",
-    ("gpt-5.6", "high"): "sol_high",
-    ("gpt-5.6", "xhigh"): "sol_xhigh",
+    ("gpt-5.6-sol", "high"): "sol_high",
+    ("gpt-5.6-sol", "xhigh"): "sol_xhigh",
     ("gpt-6-astra", "high"): "astra_high",
     ("gpt-6-astra", "xhigh"): "astra_xhigh",
     ("gpt-6-astra", "max"): "astra_max",
@@ -58,7 +58,7 @@ CN_LEVEL = {
 MODEL_LABEL = {
     "gpt-5.6-luna": "gpt-5.6-luna",
     "gpt-5.6-terra": "gpt-5.6-terra",
-    "gpt-5.6": "gpt-5.6 (Sol 层)",
+    "gpt-5.6-sol": "gpt-5.6-sol (Sol)",
     "gpt-6-astra": "gpt-6-astra",
 }
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{5,127}$")

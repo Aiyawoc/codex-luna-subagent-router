@@ -51,7 +51,7 @@
       "id": "adaptive-hard-debug",
       "prompt": "根据少量日志和并发代码定位高歧义竞态根因。",
       "routing_mode": "adaptive",
-      "expected_model": "gpt-5.6",
+      "expected_model": "gpt-5.6-sol",
       "expected_effort": [
         "high",
         "xhigh"
@@ -62,10 +62,18 @@
       "prompt": "对关键迁移方案做高失败代价、独立反证审查。",
       "routing_mode": "adaptive",
       "allowed_models": [
-        "gpt-5.6",
+        "gpt-5.6-sol",
         "gpt-6-astra"
       ],
       "minimum_effort": "high"
+    },
+    {
+      "id": "sol-runtime-id",
+      "prompt": "为一个困难调试 Worker 选择 Sol high。",
+      "routing_mode": "adaptive",
+      "expected_model": "gpt-5.6-sol",
+      "forbid_model": "gpt-5.6",
+      "expected_profile": "sol_high"
     },
     {
       "id": "explicit-astra-override",
