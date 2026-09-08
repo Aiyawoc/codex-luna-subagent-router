@@ -33,7 +33,7 @@
       "selection_reason": "并发边界需要多步推理，Sol high 是最低可靠层级。",
       "task_kind": "review",
       "complexity": "high",
-      "model": "gpt-5.6",
+      "model": "gpt-5.6-sol",
       "reasoning_effort": "high",
       "route_binding": "installed_profile",
       "capability_verified": true,
