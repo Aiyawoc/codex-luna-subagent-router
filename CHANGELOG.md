@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.1 — 2026-09-08
+
+- 修复 Codex SubAgent runtime 对 Sol 模型 ID 的兼容问题：bundled `sol_high` / `sol_xhigh` profile 从 `gpt-5.6` alias 改为显式 `gpt-5.6-sol`。
+- Adaptive RoutePlan、validator、示例和 eval 统一把 `gpt-5.6-sol` 作为 Sol 的 canonical automatic route；无后缀 `gpt-5.6` 不再作为自动 built-in Worker 模型。
+- 根 `SKILL.md`、routing policy、安装指引和中英文 README 同步说明：`gpt-5.6` 是公开 API alias，但部分 Codex SubAgent Surface 会按账号可用模型列表拒绝 alias，因此自动 spawn 必须使用显式 runtime ID。
+- 新增 Sol runtime ID 回归测试，锁定 profile、RoutePlan 与 validator 的一致性，避免未来重新引入 alias。
+
 ## 2.3.0 — 2026-09-07
 
 - 基于 OpenAI 当前 Subagents 官方实践，新增 `docs/v2.3.0-agent-communication-lifecycle-p0.md`，落地 Agent 通信与生命周期 P0 设计、范围和验收标准。
