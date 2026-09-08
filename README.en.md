@@ -6,7 +6,7 @@ An Agent Skill for Codex / ChatGPT desktop Code workflows. Its goal is not to ma
 
 > **Delegate suitable work to the cheapest subagent configuration that is still likely to complete the task reliably, reducing expected total task cost.**
 
-Current version: **2.3.0**
+Current version: **2.3.1**
 
 ## Two routing modes
 
@@ -15,7 +15,7 @@ Neither mode changes the main Agent's model or reasoning level. The difference i
 | Characteristic | `luna_only` | `adaptive` |
 | --- | --- | --- |
 | Core position | Maximum economy and the most predictable SubAgent cost boundary | Automatically balance cost and capability using the cheapest sufficient combination |
-| Automatic Worker models | `gpt-5.6-luna` only | Luna / Terra / `gpt-5.6` Sol tier / Astra |
+| Automatic Worker models | `gpt-5.6-luna` only | Luna / Terra / `gpt-5.6-sol` / Astra |
 | Reasoning selection | The Lead selects Luna `low/medium/high/xhigh/max` | The Lead selects both model and lowest sufficient reasoning |
 | Routing relative to the Lead | Delegates only to Luna; insufficient tasks stay with the Lead | Can down-route to cheaper models or locally escalate difficult subtasks |
 | Cost predictability | Highest; automatic Workers never exceed Luna pricing | More flexible; expensive Workers are used only when expected total cost/benefit justifies them |
@@ -41,7 +41,7 @@ The Lead chooses the cheapest sufficient model + reasoning combination across:
 ```text
 gpt-5.6-luna
 → gpt-5.6-terra
-→ gpt-5.6        # Sol tier
+→ gpt-5.6-sol
 → gpt-6-astra
 ```
 
@@ -49,8 +49,10 @@ Typical roles:
 
 - Luna: clear, narrow, repeatable leaf work.
 - Terra: read-heavy exploration, scans, large-file review, supporting-document processing.
-- `gpt-5.6`: demanding multi-step implementation, debugging, or review.
+- `gpt-5.6-sol`: demanding multi-step implementation, debugging, or review.
 - Astra: bounded tasks that genuinely require the highest capability tier.
+
+**Sol routing uses the explicit runtime ID `gpt-5.6-sol`.** The OpenAI API exposes `gpt-5.6` as a Sol alias, but some Codex SubAgent surfaces validate against the account's explicit available-model list and reject the alias. This Skill therefore no longer uses `gpt-5.6` as an automatic Worker model ID.
 
 Adaptive can let an Astra/Sol Lead down-route simple work to Luna/Terra, while a Luna/Terra Lead can escalate only a small number of difficult, well-bounded subtasks to Sol/Astra. It does not prefer stronger models; it optimizes **ExpectedCost(task)**. If a cheap model is likely to fail and retry, starting with a stronger model can cost less overall.
 
@@ -105,7 +107,7 @@ Recommended Codex install or upgrade:
 
 ```text
 Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.3.0/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.3.1/skills/codex-luna-subagent-router
 
 If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
 
@@ -160,7 +162,7 @@ v1 upgrades recommend `luna_only` by default. Legacy `additional_responsibilitie
 | --- | --- |
 | Luna | `luna_low`, `luna_medium`, `luna_high`, `luna_xhigh`, `luna_max` |
 | Terra | `terra_medium`, `terra_high` |
-| `gpt-5.6` Sol tier | `sol_high`, `sol_xhigh` |
+| `gpt-5.6-sol` | `sol_high`, `sol_xhigh` |
 | GPT-6 Astra | `astra_high`, `astra_xhigh`, `astra_max` |
 
 Unbundled combinations require a live spawn schema that explicitly supports and verifies the requested model + reasoning.
@@ -177,5 +179,6 @@ Design references:
 
 - https://learn.chatgpt.com/zh-Hans/docs/agent-configuration/subagents?surface=app
 - https://developers.openai.com/api/docs/guides/latest-model
+- https://developers.openai.com/api/docs/models/gpt-5.6-sol
 - Eric Provencher, “Rethinking skills and prompts for GPT-6 Astra”: https://x.com/pvncher/status/2095991462416490862
 - https://developers.openai.com/codex/config-reference
