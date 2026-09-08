@@ -22,7 +22,9 @@ description: 成本优先的 Codex SubAgent 路由。仅在委派可能降低预
 从用户级或项目级 `routing.json` 读取模式；项目级覆盖用户级。缺失配置按 `luna_only`，避免升级后意外增费。
 
 - `luna_only`：自动 Worker 只用 `gpt-5.6-luna`。Luna 不足时由 Lead 接管，不自动升到更贵模型。
-- `adaptive`：在 Luna → Terra → `gpt-5.6`（Sol 层）→ GPT-6 Astra 中选择**能够可靠完成子任务的最低成本组合**；不要从最便宜模型开始机械失败后逐级升级。
+- `adaptive`：在 Luna → Terra → `gpt-5.6-sol`（Sol）→ GPT-6 Astra 中选择**能够可靠完成子任务的最低成本组合**；不要从最便宜模型开始机械失败后逐级升级。
+
+Sol 自动 Worker 必须使用显式 runtime ID `gpt-5.6-sol`。`gpt-5.6` 虽是公开 API alias，但部分 Codex SubAgent Surface 会按账号可用模型列表拒绝 alias，因此不得用于自动 spawn 或 installed profile。
 
 用户本轮可显式覆盖某个 Worker 的模型、reasoning、是否委派、是否先确认和 Worker 数量。
 
