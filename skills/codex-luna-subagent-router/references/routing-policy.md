@@ -26,7 +26,7 @@ ExpectedCost(delegate) < ExpectedCost(lead)
 
 典型判断：
 
-- Astra / `gpt-5.6` Lead 亲自扫描大量文件：优先考虑下放 Luna/Terra；
+- Astra / Sol Lead 亲自扫描大量文件：优先考虑下放 Luna/Terra；
 - Luna Lead 再创建 Luna 处理几分钟的线性任务：通常不值得；
 - 复杂但范围小的问题若 Luna 失败概率很高，直接使用更高能力层级可能比逐级试错便宜；
 - 多 Worker 会重复执行模型和工具工作，因此不因“可并行”就自动并行。
@@ -56,7 +56,7 @@ ExpectedCost(delegate) < ExpectedCost(lead)
 ```text
 gpt-5.6-luna
 → gpt-5.6-terra
-→ gpt-5.6        # Sol 层
+→ gpt-5.6-sol   # Sol
 → gpt-6-astra
 ```
 
@@ -66,8 +66,17 @@ gpt-5.6-luna
 
 - `leaf`、清晰重复任务：Luna；
 - `scan`、read-heavy、large-file review、资料归纳：Terra；
-- 多步困难实现/调试/复核：`gpt-5.6`；
+- 多步困难实现/调试/复核：`gpt-5.6-sol`；
 - 架构级高歧义、深度反证、高失败代价独立审查：Astra。
+
+### Sol runtime ID
+
+Sol 自动 Worker 的 canonical runtime ID 是 `gpt-5.6-sol`。OpenAI API 将 `gpt-5.6` 作为 Sol alias，但 Codex SubAgent 的账号/Surface 可用模型校验可能只接受显式 ID。因此：
+
+- installed profile 必须写 `model = "gpt-5.6-sol"`；
+- RoutePlan 自动路由必须写 `model = "gpt-5.6-sol"`；
+- live spawn 也优先使用 `gpt-5.6-sol`；
+- 不把 `gpt-5.6` alias 作为自动 built-in route；若用户明确要求 alias，也必须先通过当前 Surface capability verification，否则 `lead_only`。
 
 ## 4. reasoning 选择
 
@@ -99,7 +108,7 @@ low | medium | high | xhigh | max
 | --- | --- |
 | Luna | `luna_low/medium/high/xhigh/max` |
 | Terra | `terra_medium/high` |
-| `gpt-5.6` | `sol_high/xhigh` |
+| `gpt-5.6-sol` | `sol_high/xhigh` |
 | Astra | `astra_high/xhigh/max` |
 
 未预装组合只有在 live spawn schema 明确支持并验证 model + effort 时才使用 `route_binding=live_spawn`。
