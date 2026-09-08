@@ -4,7 +4,7 @@
 
 ## 推荐安装
 
-在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.3.0 tag。
+在 Codex 中使用 `$skill-installer` 安装本仓库 Skill；开发分支验收期间使用当前 checkout，正式发布后使用 v2.3.1 tag。
 
 安装或升级完成后读取本文件并继续。
 
@@ -66,7 +66,9 @@ default_mode_request_user_input = true
 只提供两种。在询问用户前，先用下面的简短说明帮助选择：
 
 - **`luna_only` — 极致经济 / 成本最可预测**：自动 Worker 只使用 Luna，并由 Lead 选择 Luna reasoning；如果 Luna 不足，困难部分留给当前主 Agent，不会自动创建更贵的 SubAgent。
-- **`adaptive` — 自动综合 / 成本与能力自动平衡**：Lead 会为每个子目标从 Luna → Terra → `gpt-5.6`（Sol 层）→ Astra 中选择最低足够模型与 effort；既可把高价 Lead 的简单工作向下路由，也可把便宜 Lead 的少数困难子问题局部升级。
+- **`adaptive` — 自动综合 / 成本与能力自动平衡**：Lead 会为每个子目标从 Luna → Terra → `gpt-5.6-sol`（Sol）→ Astra 中选择最低足够模型与 effort；既可把高价 Lead 的简单工作向下路由，也可把便宜 Lead 的少数困难子问题局部升级。
+
+Sol 自动 Worker 必须使用显式 runtime ID `gpt-5.6-sol`。OpenAI API 中 `gpt-5.6` 是 Sol alias，但部分 Codex SubAgent Surface 会按账号可用模型列表拒绝 alias，因此本 Skill 的 installed profile、RoutePlan 和自动 live spawn 都不要使用无后缀 `gpt-5.6`。
 
 选择建议：如果用户最在意**SubAgent 成本上限与可预测性**，推荐 `luna_only`；如果用户希望**任意主模型自动综合判断成本、能力和失败风险**，推荐 `adaptive`。
 
@@ -81,7 +83,7 @@ default_mode_request_user_input = true
 #### `adaptive` — 自动综合
 
 - 仍以成本为第一目标，而不是优先使用强模型；
-- 由 Lead 从 Luna → Terra → `gpt-5.6`（Sol 层）→ Astra 选择最低足够模型和 effort；
+- 由 Lead 从 Luna → Terra → `gpt-5.6-sol`（Sol）→ Astra 选择最低足够模型和 effort；
 - 可相对当前主 Agent 双向路由：昂贵 Lead 向 Luna/Terra 下放，便宜 Lead 对少数困难子任务升级到 Sol/Astra；
 - 只有在预期总成本或独立验证收益值得时才使用更贵 Worker；
 - 适合希望自动平衡成本与成功率的用户。
@@ -187,7 +189,7 @@ v1 的 `routing.json` 使用 `additional_responsibilities` + 四档职责。v2 �
 
 - Luna：low / medium / high / xhigh / max
 - Terra：medium / high
-- `gpt-5.6` Sol 层：high / xhigh
+- `gpt-5.6-sol`：high / xhigh
 - Astra：high / xhigh / max
 
 升级旧版本时必须一起刷新这些 profiles，不要只升级 Skill 根文件。没有预装的组合只有在当前 live spawn schema 明确支持并验证精确 model + effort 时才允许。
@@ -207,6 +209,15 @@ python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
 python3 -m unittest discover -s tests -v
 ```
 
+Sol 路由还要确认：
+
+```toml
+# sol-high.toml / sol-xhigh.toml
+model = "gpt-5.6-sol"
+```
+
+并确认 RoutePlan 中 Sol Worker 的 `model` 也是 `gpt-5.6-sol`；自动路由不得输出无后缀 `gpt-5.6`。
+
 如果第 4 项写入了并发上限，再确认：
 
 ```toml
@@ -220,6 +231,7 @@ max_concurrent_threads_per_session = <用户选择值>
 
 - Luna Only 不会自动创建非 Luna Worker；
 - Adaptive 对 read-heavy scan 优先考虑 Luna/Terra；
+- Adaptive 的 Sol Worker 显式使用 `gpt-5.6-sol`，不会因 `gpt-5.6` alias 被运行时拒绝；
 - Adaptive 能相对 Lead 向下路由，也能对必要的困难子任务局部向上升级；
 - Router 单波并发不会超过 `min(3, 用户配置的并发上限)`；
 - 困难任务不会机械从 Luna 逐级失败；
@@ -230,4 +242,5 @@ max_concurrent_threads_per_session = <用户选择值>
 ## 官方依据
 
 - Codex Subagents: https://developers.openai.com/codex/agent-configuration/subagents
+- GPT-5.6 Sol: https://developers.openai.com/api/docs/models/gpt-5.6-sol
 - Codex Config Reference: https://developers.openai.com/codex/config-reference
