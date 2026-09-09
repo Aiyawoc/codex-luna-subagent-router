@@ -6,37 +6,33 @@ An Agent Skill for Codex / ChatGPT desktop Code workflows. Its goal is not to ma
 
 > **Delegate suitable work to the cheapest subagent configuration that is still likely to complete the task reliably, reducing expected total task cost.**
 
-Current version: **2.3.1**
+Current version: **2.4.0**
 
 ## Two routing modes
 
-Neither mode changes the main Agent's model or reasoning level. The difference is **which models automatic SubAgents may use and how tightly the SubAgent cost boundary is constrained**.
+Neither mode changes the main Agent's model or reasoning level. They differ in which models automatic SubAgents may use and how the cost/capability boundary is controlled.
 
 | Characteristic | `luna_only` | `adaptive` |
 | --- | --- | --- |
 | Core position | Maximum economy and the most predictable SubAgent cost boundary | Automatically balance cost and capability using the cheapest sufficient combination |
 | Automatic Worker models | `gpt-5.6-luna` only | Luna / Terra / `gpt-5.6-sol` / Astra |
 | Reasoning selection | The Lead selects Luna `low/medium/high/xhigh/max` | The Lead selects both model and lowest sufficient reasoning |
-| Routing relative to the Lead | Delegates only to Luna; insufficient tasks stay with the Lead | Can down-route to cheaper models or locally escalate difficult subtasks |
-| Cost predictability | Highest; automatic Workers never exceed Luna pricing | More flexible; expensive Workers are used only when expected total cost/benefit justifies them |
-| Best fit | Strict budget control, strong main Agent, lots of cheap delegation | Users who want any main model to automatically choose the right SubAgent capability tier |
+| Routing relative to Lead | Delegates only to Luna; insufficient tasks stay with Lead | Can route downward for savings or upward when there is a clear capability gap |
+| Cost predictability | Highest | More flexible; a cheap Lead cannot suppress a necessary higher-tier Worker merely because it is cheaper |
+| Best fit | Strict budget control, strong main Agent, lots of cheap delegation | Users who want any main model to choose the right SubAgent capability tier automatically |
 
 ### `luna_only` — maximum economy
 
-Characteristic: **automatic SubAgents never cross the Luna cost boundary.**
+Automatic SubAgents never cross the Luna cost boundary.
 
-- Automatic Workers are restricted to `gpt-5.6-luna`.
-- The Lead selects `low / medium / high / xhigh / max` per task.
-- When Luna is sufficient, an expensive Lead can still offload clear, repetitive, or scan-heavy work cheaply.
-- If Luna is not sufficient, the Lead keeps the task instead of automatically upgrading to Terra / Sol / Astra.
-- This gives the most predictable SubAgent spending, but it will not automatically bring in a stronger Worker for a hard subproblem.
-- Best for users who want strict SubAgent budget control or already run a strong main Agent.
+- Automatic Workers use `gpt-5.6-luna` only.
+- The Lead selects `low / medium / high / xhigh / max`.
+- Expensive Leads can still offload clear, repetitive, or scan-heavy work to Luna.
+- If Luna is insufficient, the Lead keeps the hard part instead of automatically escalating to Terra / Sol / Astra.
 
 ### `adaptive` — cost-aware automatic routing
 
-Characteristic: **the Lead re-evaluates the capability needed for each subtask and may route both downward and upward relative to the main Agent.**
-
-The Lead chooses the cheapest sufficient model + reasoning combination across:
+Adaptive re-evaluates the capability needed for every subtask and may route both downward and upward relative to the Lead.
 
 ```text
 gpt-5.6-luna
@@ -48,54 +44,84 @@ gpt-5.6-luna
 Typical roles:
 
 - Luna: clear, narrow, repeatable leaf work.
-- Terra: read-heavy exploration, scans, large-file review, supporting-document processing.
-- `gpt-5.6-sol`: demanding multi-step implementation, debugging, or review.
-- Astra: bounded tasks that genuinely require the highest capability tier.
+- Terra: read-heavy exploration, large scans, large-file review, supporting-document synthesis.
+- `gpt-5.6-sol`: high-ambiguity multi-step implementation/debugging, cross-module causality, race / concurrency / lifecycle / ordering, difficult review.
+- Astra: architecture-level ambiguity, high failure cost, independent adversarial review.
 
-**Sol routing uses the explicit runtime ID `gpt-5.6-sol`.** The OpenAI API exposes `gpt-5.6` as a Sol alias, but some Codex SubAgent surfaces validate against the account's explicit available-model list and reject the alias. This Skill therefore no longer uses `gpt-5.6` as an automatic Worker model ID.
-
-Adaptive can let an Astra/Sol Lead down-route simple work to Luna/Terra, while a Luna/Terra Lead can escalate only a small number of difficult, well-bounded subtasks to Sol/Astra. It does not prefer stronger models; it optimizes **ExpectedCost(task)**. If a cheap model is likely to fail and retry, starting with a stronger model can cost less overall.
+**Sol routing uses the explicit runtime ID `gpt-5.6-sol`.** `gpt-5.6` is a public API alias, but some Codex SubAgent surfaces reject the alias, so this Skill does not use it for automatic Workers.
 
 Choose `luna_only` when **cost ceilings and predictability** matter most. Choose `adaptive` when you want the Lead to **automatically balance cost, capability, and failure risk**.
 
+## Adaptive upward routing / Capability Gap
+
+v2.4.0 adds a **Capability Gap Gate** after real-world use showed that low-tier Leads rarely escalated naturally. In `adaptive`, the Router estimates the subtask's minimum capability **before** deciding `lead_only`:
+
+```text
+luna < terra < sol < astra
+```
+
+Default signals:
+
+- clear, local, mechanical work → Luna;
+- large read-heavy scans, exploration, synthesis → Terra;
+- high-ambiguity multi-step debugging, cross-module causality, race / concurrency / lifecycle / ordering, competing hypotheses, difficult invariant review → Sol;
+- architecture-level ambiguity + high failure cost or independent adversarial review → Astra candidate, still choosing the cheapest sufficient tier.
+
+When the minimum capability is above the current Lead, the Router **must not skip the higher-tier Worker just because the Lead is cheaper**. Examples:
+
+```text
+Luna Max Lead + large read-heavy scan → Terra
+Luna Max Lead + high-ambiguity cross-module race → Sol high / xhigh
+Terra Lead + difficult non-local causal debugging → Sol
+Luna/Terra/Sol + architecture-level high-consequence adversarial review → Sol / Astra
+```
+
+`Luna max` is still Luna tier. Raising reasoning effort does not substitute for model capability. When the capability gap is already obvious, the Router must not burn a sacrificial Luna attempt just to prove Luna is insufficient.
+
+To avoid over-escalation, higher-tier Workers should stay **narrow and expensive**: send only the subproblem that truly requires the higher capability tier. One higher-tier Worker is the default unless independent verification clearly justifies more.
+
+New RoutePlans use schema **2.1** and record:
+
+- `lead_model` / `lead_reasoning_effort`;
+- Worker `minimum_capability`;
+- `capability_gap_reason` when an upward capability gap exists;
+- `up / down / same` route direction derived in the validator/notice.
+
+The validator remains backward-compatible with RoutePlan 2.0. Full design: `docs/v2.4.0-upward-routing-capability-gap.md`.
+
 ## Cost guardrails
 
-- The main agent keeps the user's selected model and reasoning level.
-- Delegation must pass an expected-cost/benefit gate.
-- Expensive leads can down-route bounded work more aggressively.
-- Cheap leads are more conservative about Luna-to-Luna delegation.
+- The main Agent keeps the user's selected model and reasoning level.
+- Adaptive checks capability gap first; tasks without an upward gap then use the ordinary ExpectedCost gate.
+- Expensive Leads may down-route scanning/organizing/bounded execution to Luna/Terra.
+- Cheap Leads do not create same-tier Workers for trivial work merely for formality.
+- Clear capability gaps do not use sacrificial cheap attempts.
 - At most two attempts per subtask.
-- The Skill defaults to at most three Workers in one wave; if the user configures the Codex concurrency cap to 1 or 2, the Skill tightens to that lower value.
-- Task packets are `minimal_sufficient`.
-- Worker results are `concise_sufficient`.
-- If exact model + reasoning routing cannot be proven, the lead handles the task; no silent inheritance or substitution.
+- The Skill defaults to at most three Workers per wave; a Codex cap of 1 or 2 tightens that limit.
+- Task packets are `minimal_sufficient`; Worker results are `concise_sufficient`.
+- If exact model + reasoning routing cannot be proven, the Lead handles the task; no silent inheritance or substitution.
 
 ## Agent communication and lifecycle
 
-v2.3 further applies OpenAI's current Subagents guidance to both **Worker → Lead** and **Lead → Worker** communication:
+v2.3 applies OpenAI's Subagents guidance to both Worker → Lead and Lead → Worker communication:
 
-- Agent-to-agent messages are written for both model use and human review: normal spacing, readable phrases, and non-minified task packets.
-- Workers always return `TASK_ACK`, `STATUS`, and `RESULT`; `EVIDENCE / VALIDATION / RISK` sections are emitted only when they contain useful information.
-- Worker replies target roughly `<= 200` English words or an equivalent amount of Chinese by default. They omit narration, repeated context, raw logs, and full command output.
-- The Lead treats Worker replies as evidence, not final-user prose: deduplicate findings, keep the strongest evidence, and do not paste Worker replies or logs verbatim.
-- Within one wave, the Lead waits for every **still-needed** Worker before one synthesis. If decisive evidence makes another Worker's expected information value lower than its remaining run cost, stop and close that Worker early.
-- After an accepted result no longer needs steering, close the Worker thread to release `max_concurrent_threads_per_session` capacity.
-- Before retrying, stop/close the old attempt, assign a new `task_id`, and spawn a fresh Worker.
+- readable, normally spaced Agent messages; no minified task packets;
+- Workers always return `TASK_ACK`, `STATUS`, and `RESULT`; optional sections appear only when useful;
+- roughly `<= 200` English words by default; no narration or raw-log dumping;
+- Lead deduplicates findings and does not paste Worker replies/logs verbatim;
+- wait for every still-needed Worker in a wave, early-stop Workers whose information value has collapsed;
+- close accepted Workers when steering is no longer needed; retry with a fresh task/thread.
 
-The full P0 design and acceptance criteria live in `docs/v2.3.0-agent-communication-lifecycle-p0.md`.
+Full P0 design: `docs/v2.3.0-agent-communication-lifecycle-p0.md`.
 
 ## GPT-6 Astra instruction cleanup
 
-v2.1 follows OpenAI's Astra guidance and Eric Provencher's skill/prompt practices with **progressive disclosure**. The root `SKILL.md` is now a small router; model routing, lifecycle, task-packet, install, and Astra-specific guidance are loaded only when relevant. Standing `AGENTS.md` authorization keeps only stable authorization and routing boundaries.
-
-RoutePlan and Worker packets are compact as well: fixed defaults need not be repeated and resolved clarifications are forwarded only to Workers they affect. This reduces persistent context, packet overhead, and per-Worker prompt tokens.
+v2.1 uses **progressive disclosure**: the root `SKILL.md` stays small, and routing, lifecycle, task-packet, install, and Astra-specific references are loaded only when relevant. Astra-specific persistence/delegation/testing guidance lives in `references/astra-guidance.md`.
 
 ## Context isolation
 
-The v1 reliability rules remain:
-
 - Fresh thread and fresh `task_id` for new objectives or retries.
-- `fork_turns=none` when the surface supports it.
+- `fork_turns=none` when supported.
 - Worker results begin with `TASK_ACK <task_id>`.
 - Stale task ID/objective results are rejected as `STALE_CONTEXT`.
 - Workers cannot create more subagents.
@@ -107,7 +133,7 @@ Recommended Codex install or upgrade:
 
 ```text
 Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.3.1/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.4.0/skills/codex-luna-subagent-router
 
 If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
 
@@ -120,39 +146,32 @@ Manual global install:
 ./skills/codex-luna-subagent-router/install.sh --global
 ```
 
-The installer copies the Skill and common exact-routing profiles. It does not directly edit `config.toml`, `AGENTS.md`, or `routing.json`; the guided setup applies those changes only after the user's choices are known.
+The installer copies the Skill and exact-routing profiles. It does not directly edit `config.toml`, `AGENTS.md`, or `routing.json`; guided setup applies those changes after user choices are known.
 
 ### Upgrading from an older version
 
-**Always refresh the complete installed package when upgrading from any older release. Do not replace only `SKILL.md`.** The root Skill, `agents/`, `references/`, `scripts/`, `examples/`, `evals/`, `assets/`, installer, and every bundled Agent profile should all come from the same release so routing rules and profile behavior cannot become version-mixed.
+Always refresh the complete installed package when upgrading. The root Skill, `agents/`, `references/`, `scripts/`, `examples/`, `evals/`, `assets/`, installer, and every bundled Agent profile should come from the same release.
 
-Preferred path: run `$skill-installer` again and make sure it performs a full package upgrade. If the current surface cannot guarantee a complete replacement, run the new release's `install.sh` again. The installer replaces the installed Skill directory and overwrites every Agent profile bundled by the current release.
-
-User-managed `config.toml`, unrelated `AGENTS.md` content, and the selected routing configuration are not blindly deleted by the package refresh. After refreshing the installed package, run `references/codex-guided-install.md` again so managed authorization is updated, legacy routing is migrated/backed up when necessary, and the current routing mode is confirmed.
+Prefer `$skill-installer`; if the current surface cannot guarantee complete replacement, run the new release's `install.sh`. User-managed `config.toml`, unrelated `AGENTS.md` content, and routing choice are preserved/migrated separately by the guided flow.
 
 ## Guided setup
 
 The guided flow asks four core questions:
 
-1. Whether to enable experimental `default_mode_request_user_input`.
-2. Standing delegation authorization: global / current project / none.
-3. Routing mode:
-   - `luna_only`: maximum economy; automatic Workers use Luna only, while hard tasks stay with the main Agent for the most predictable cost boundary.
-   - `adaptive`: automatically choose the cheapest sufficient Luna / Terra / Sol / Astra combination; it may down-route cheap work or locally escalate difficult subtasks.
-4. **Maximum concurrent SubAgents, excluding the primary thread**:
-   - keep the current setting / let Codex choose its default when unset;
-   - `3` (recommended), matching this Skill's default per-wave cost guardrail;
-   - any custom integer `>= 1`.
+1. whether to enable experimental `default_mode_request_user_input`;
+2. standing delegation authorization: global / current project / none;
+3. routing mode:
+   - `luna_only`: automatic Workers use Luna only; hard tasks stay with the main Agent;
+   - `adaptive`: choose the cheapest sufficient Luna / Terra / Sol / Astra combination; capability gap is checked first, so the Router may down-route or up-route as needed;
+4. maximum concurrent SubAgents, excluding the primary thread: keep current/default, `3` recommended, or any custom integer `>= 1`.
 
-Codex's public setting is `[agents].max_concurrent_threads_per_session`. It caps concurrently open spawned-agent threads and excludes the primary. When unset, Codex chooses the default. OpenAI's current public schema documents a minimum of 1 but no absolute hard maximum. Even if Codex is configured above 3, this Skill still defaults to at most three Workers per wave; if the Codex cap is 1 or 2, the Skill tightens its effective wave limit accordingly.
+Codex's public setting is `[agents].max_concurrent_threads_per_session`. Even if Codex is configured above 3, this Skill still defaults to at most three Workers per wave; a cap of 1 or 2 tightens the effective limit.
 
-To set a concrete value, the guided flow uses:
+To set a concrete value:
 
 ```bash
 python3 scripts/configure_subagent_limit.py --max-subagents 3
 ```
-
-The helper safely merges the user-level `$CODEX_HOME/config.toml` and migrates the legacy `agents.max_threads` alias to the current public key.
 
 v1 upgrades recommend `luna_only` by default. Legacy `additional_responsibilities` routing is backed up as `routing.v1.backup.json`.
 
@@ -165,7 +184,7 @@ v1 upgrades recommend `luna_only` by default. Legacy `additional_responsibilitie
 | `gpt-5.6-sol` | `sol_high`, `sol_xhigh` |
 | GPT-6 Astra | `astra_high`, `astra_xhigh`, `astra_max` |
 
-Unbundled combinations require a live spawn schema that explicitly supports and verifies the requested model + reasoning.
+Unbundled combinations require a live spawn schema that explicitly supports and verifies requested model + reasoning.
 
 ## Validate
 
