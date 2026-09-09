@@ -11,8 +11,10 @@ from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+SUPPORTED_SCHEMA_VERSIONS = ("2.0", "2.1")
 ALLOWED_ROUTING_MODES = ("luna_only", "adaptive")
 ALLOWED_LEVELS = ("low", "medium", "high", "xhigh", "max")
+ALLOWED_LEAD_LEVELS = ("none",) + ALLOWED_LEVELS
 ALLOWED_SURFACES = ("native_subagent", "app_thread")
 ALLOWED_USER_INPUT_STATES = ("not_needed", "resolved")
 ALLOWED_ROUTE_BINDINGS = ("installed_profile", "live_spawn")
@@ -28,12 +30,21 @@ ALLOWED_TASK_KINDS = (
     "other",
 )
 ALLOWED_FAILURE_COSTS = ("low", "medium", "high")
+CAPABILITY_LEVELS = ("luna", "terra", "sol", "astra")
+CAPABILITY_RANK = {name: index for index, name in enumerate(CAPABILITY_LEVELS)}
 ADAPTIVE_MODELS = (
     "gpt-5.6-luna",
     "gpt-5.6-terra",
     "gpt-5.6-sol",
     "gpt-6-astra",
 )
+MODEL_CAPABILITY = {
+    "gpt-5.6-luna": "luna",
+    "gpt-5.6-terra": "terra",
+    "gpt-5.6-sol": "sol",
+    "gpt-5.6": "sol",  # Lead/API alias only; not an automatic Worker route.
+    "gpt-6-astra": "astra",
+}
 PROFILE_BY_ROUTE = {
     ("gpt-5.6-luna", "low"): "luna_low",
     ("gpt-5.6-luna", "medium"): "luna_medium",
@@ -49,16 +60,29 @@ PROFILE_BY_ROUTE = {
     ("gpt-6-astra", "max"): "astra_max",
 }
 CN_LEVEL = {
+    "none": "无",
     "low": "低",
     "medium": "中",
     "high": "高",
     "xhigh": "极高",
     "max": "最高",
 }
+CN_CAPABILITY = {
+    "luna": "Luna",
+    "terra": "Terra",
+    "sol": "Sol",
+    "astra": "Astra",
+}
+DIRECTION_LABEL = {
+    "up": "向上",
+    "down": "向下",
+    "same": "同层",
+}
 MODEL_LABEL = {
     "gpt-5.6-luna": "gpt-5.6-luna",
     "gpt-5.6-terra": "gpt-5.6-terra",
     "gpt-5.6-sol": "gpt-5.6-sol (Sol)",
+    "gpt-5.6": "gpt-5.6 (Sol alias)",
     "gpt-6-astra": "gpt-6-astra",
 }
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{5,127}$")
@@ -101,6 +125,22 @@ def _paths_overlap(left: str, right: str) -> bool:
     if left == "/" or right == "/":
         return True
     return left.startswith(right + "/") or right.startswith(left + "/")
+
+
+def _capability_for_model(model: Any) -> str | None:
+    return MODEL_CAPABILITY.get(model) if isinstance(model, str) else None
+
+
+def _route_direction(lead_model: Any, worker_model: Any) -> str | None:
+    lead = _capability_for_model(lead_model)
+    worker = _capability_for_model(worker_model)
+    if lead is None or worker is None:
+        return None
+    if CAPABILITY_RANK[worker] > CAPABILITY_RANK[lead]:
+        return "up"
+    if CAPABILITY_RANK[worker] < CAPABILITY_RANK[lead]:
+        return "down"
+    return "same"
 
 
 def _validate_clarifications(value: Any, path: str, errors: list[str]) -> list[dict[str, str]]:
@@ -164,8 +204,10 @@ def validate_plan(data: Any) -> list[str]:
     if not isinstance(data, dict):
         return ["root: plan must be a JSON object"]
 
-    if data.get("schema_version") != "2.0":
-        errors.append('schema_version: must equal "2.0"')
+    schema_version = data.get("schema_version")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        errors.append(f"schema_version: must be one of {', '.join(SUPPORTED_SCHEMA_VERSIONS)}")
+    is_v21 = schema_version == "2.1"
 
     root_request_id = _require_string(data, "root_request_id", "root", errors)
     if root_request_id and not ID_RE.fullmatch(root_request_id):
@@ -174,6 +216,17 @@ def validate_plan(data: Any) -> list[str]:
     routing_mode = data.get("routing_mode")
     if routing_mode not in ALLOWED_ROUTING_MODES:
         errors.append(f"root.routing_mode: must be one of {', '.join(ALLOWED_ROUTING_MODES)}")
+
+    lead_model: str | None = None
+    if is_v21:
+        lead_model = _require_string(data, "lead_model", "root", errors)
+        lead_effort = data.get("lead_reasoning_effort")
+        if lead_effort not in ALLOWED_LEAD_LEVELS:
+            errors.append(f"root.lead_reasoning_effort: must be one of {', '.join(ALLOWED_LEAD_LEVELS)}")
+    elif _is_nonempty_string(data.get("lead_model")):
+        lead_model = str(data.get("lead_model")).strip()
+
+    lead_capability = _capability_for_model(lead_model)
 
     if data.get("cost_objective", "minimize_expected_total_cost") != "minimize_expected_total_cost":
         errors.append('root.cost_objective: when provided, must equal "minimize_expected_total_cost"')
@@ -191,9 +244,7 @@ def validate_plan(data: Any) -> list[str]:
 
     user_input_state = data.get("user_input_state", "not_needed")
     if user_input_state not in ALLOWED_USER_INPUT_STATES:
-        errors.append(
-            "root.user_input_state: must be not_needed or resolved; pending user input cannot be dispatched"
-        )
+        errors.append("root.user_input_state: must be not_needed or resolved; pending user input cannot be dispatched")
     clarifications = _validate_clarifications(data.get("clarifications", []), "root.clarifications", errors)
     if user_input_state == "not_needed" and clarifications:
         errors.append("root.clarifications: must be empty when user_input_state=not_needed")
@@ -283,6 +334,32 @@ def validate_plan(data: Any) -> list[str]:
 
         if not _is_nonempty_string(model):
             errors.append(f"{path}.model: must be a non-empty string")
+
+        minimum_capability: str | None = None
+        if is_v21:
+            raw_minimum = worker.get("minimum_capability")
+            if raw_minimum not in CAPABILITY_LEVELS:
+                errors.append(f"{path}.minimum_capability: must be one of {', '.join(CAPABILITY_LEVELS)}")
+            else:
+                minimum_capability = raw_minimum
+
+            gap_reason = worker.get("capability_gap_reason")
+            if gap_reason is not None and not _is_nonempty_string(gap_reason):
+                errors.append(f"{path}.capability_gap_reason: when provided, must be a non-empty string")
+
+            worker_capability = _capability_for_model(model)
+            if minimum_capability and worker_capability and not override:
+                if CAPABILITY_RANK[worker_capability] < CAPABILITY_RANK[minimum_capability]:
+                    errors.append(
+                        f"{path}.model: capability {worker_capability} is below minimum_capability={minimum_capability}"
+                    )
+
+            if minimum_capability and lead_capability:
+                if CAPABILITY_RANK[minimum_capability] > CAPABILITY_RANK[lead_capability]:
+                    if not _is_nonempty_string(gap_reason):
+                        errors.append(
+                            f"{path}.capability_gap_reason: required when minimum_capability exceeds Lead capability"
+                        )
 
         binding = worker.get("route_binding")
         if binding not in ALLOWED_ROUTE_BINDINGS:
@@ -377,9 +454,7 @@ def validate_plan(data: Any) -> list[str]:
 
     for wave, count in waves.items():
         if count > max_concurrent:
-            errors.append(
-                f"workers.wave: wave {wave} has {count} workers, above max_concurrent_workers={max_concurrent}"
-            )
+            errors.append(f"workers.wave: wave {wave} has {count} workers, above max_concurrent_workers={max_concurrent}")
 
     _validate_dependencies([w for w in workers if isinstance(w, dict)], errors)
 
@@ -403,22 +478,26 @@ def render_notice(data: dict[str, Any]) -> str:
     suffix = "等待用户确认后执行。" if approval_mode == "require_user_confirmation" else "通知后直接执行。"
     state = data.get("user_input_state", "not_needed")
     clarification_count = len(data.get("clarifications", []))
-    clarification_summary = (
-        f"已合并 {clarification_count} 项用户澄清"
-        if state == "resolved"
-        else "无需额外用户澄清"
-    )
+    clarification_summary = f"已合并 {clarification_count} 项用户澄清" if state == "resolved" else "无需额外用户澄清"
+    lead_model = data.get("lead_model")
+    lead_effort = data.get("lead_reasoning_effort")
     lines = [
         f"准备创建 {len(workers)} 个 SubAgent；{suffix}",
         f"路由模式：{data.get('routing_mode', '<missing>')}",
         "成本目标：最小化预期总成本",
-        f"用户输入：{clarification_summary}",
-        "",
     ]
+    if lead_model:
+        lines.append(
+            f"主 Agent：{MODEL_LABEL.get(lead_model, lead_model)} / {CN_LEVEL.get(lead_effort, lead_effort)} ({lead_effort})"
+        )
+    lines.extend([f"用户输入：{clarification_summary}", ""])
+
     for index, worker in enumerate(workers, start=1):
         effort = worker.get("reasoning_effort", "unknown")
         complexity = worker.get("complexity", "unknown")
         model = worker.get("model", "<missing>")
+        minimum = worker.get("minimum_capability")
+        direction = _route_direction(lead_model, model)
         lines.extend(
             [
                 f"{index}. {worker.get('brief', '<missing brief>')}",
@@ -428,6 +507,16 @@ def render_notice(data: dict[str, Any]) -> str:
                 f"   - 模型：{MODEL_LABEL.get(model, model)}",
                 f"   - 思考强度：{CN_LEVEL.get(effort, effort)} ({effort})",
                 f"   - Agent：{worker.get('agent_profile') or worker.get('route_binding', '<missing>')}",
+            ]
+        )
+        if minimum:
+            lines.append(f"   - 最低能力：{CN_CAPABILITY.get(minimum, minimum)} ({minimum})")
+        if direction:
+            lines.append(f"   - 路由方向：{DIRECTION_LABEL[direction]} ({direction})")
+        if worker.get("capability_gap_reason"):
+            lines.append(f"   - 能力差距理由：{worker['capability_gap_reason']}")
+        lines.extend(
+            [
                 "   - 上下文：fresh / minimal_sufficient",
                 f"   - 委派成本理由：{worker.get('delegation_cost_reason', '<missing>')}",
                 f"   - 选择理由：{worker.get('selection_reason', '<missing>')}",
