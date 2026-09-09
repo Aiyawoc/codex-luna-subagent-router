@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.5.0 — 2026-09-09
+
+- Adaptive 新增本地确定性 `scripts/route_advisor.py`：Lead 只提供非敏感 task family 与 `task_kind / task_scope / reasoning_depth / verifiability / failure_cost / context_volume` 六轴，Advisor 零模型调用、零网络调用地给出 `lead_only | delegate`、model、effort、profile、minimum capability 与 route direction。
+- 三层自动模型继续保持 **Luna → `gpt-5.6-sol` → Astra**；Terra 不重新进入自动候选。Advisor 不可用或输入无效时回退现有静态三层 policy，不用更贵模型掩盖路由工具故障。
+- 新增 Verified Outcome Registry，默认 `$CODEX_HOME/state/codex-luna-subagent-router/outcomes.jsonl`；项目场景只保存项目路径 hash scope，不保存真实路径。
+- Registry 只允许受控 metadata，不保存 prompt、用户正文、Worker 回复、源码、文件内容、完整日志、账号或密钥；verification summary 必须为单行且最多 200 字符。
+- 新增 `evidence_calibration = off | conservative`。缺失按 `off`；只有 Adaptive + conservative 才读写历史，因此旧 v2.4.1 routing.json 升级后不会静默改变路由行为。
+- Conservative history：同 model 降 effort 至少 2 次同类 verified pass；跨 tier downshift 至少 3 次，且仅限可验证、非 high failure cost、非 architecture；任一 verified failure 阻止对应 cheaper combo。
+- 静态首选 model/effort 已有 verified failure 时可沿 bundled route 做 bounded escalation；自动 escalation 链耗尽则 `lead_only`，不发明未声明第三路径；`partial` 不参与自动 downshift。
+- 新增 `scripts/configure_evidence_calibration.py`，作为第 5 个 Adaptive 引导配置项，安全、幂等地合并 evidence calibration 字段并保留 routing.json 其它字段。
+- 新增 `test_route_advisor.py`、`test_configure_evidence_calibration.py`、`test_evidence_calibrated_policy.py` 与配套 eval，覆盖 Luna→Sol、Astra 高风险路由、同层/跨层 verified history、failure escalation、registry privacy 与安装契约。
+- 新增 `docs/v2.5.0-evidence-calibrated-routing.md`；中英文 README、安装引导、验收文档和 installer 同步升级至 v2.5.0。
+
 ## 2.4.1 — 2026-09-09
 
 - `adaptive` 自动模型从 Luna / Terra / Sol / Astra 收敛为 **Luna / Sol / Astra** 三层：Luna=极致经济、Sol=中等能力、Astra=专家能力。
