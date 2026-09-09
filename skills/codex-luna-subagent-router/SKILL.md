@@ -12,51 +12,54 @@ description: 成本优先的 Codex SubAgent 路由。仅在委派可能降低预
 ## 入口
 
 - **安装、升级、配置**：只读取 `references/codex-guided-install.md`，不要创建 SubAgent。
-- **普通任务**：先读取有效路由模式。`luna_only` 继续使用普通成本门；`adaptive` 在决定 `lead_only` 前先做下面的 Capability Gap Gate。
-- **可能值得委派或存在 capability gap**：读取 `references/routing-policy.md`，选择最低足够的模型与 reasoning。
+- **普通任务**：先读取有效路由模式。`luna_only` 使用普通成本门；`adaptive` 在决定 `lead_only` 前先做 Capability Gap Gate。
+- **可能值得委派或存在 capability gap**：读取 `references/routing-policy.md`，选择最低足够 model + reasoning。
 - **确定要派遣后**：按需读取 `references/task-packet.md` 与 `references/lifecycle-and-context.md`，生成 compact RoutePlan 和 fresh Worker。
-- **当前 Lead 是 GPT-6 Astra，或准备创建 Astra Worker**：额外读取 `references/astra-guidance.md`；其他模型不要加载该文档。
+- **当前 Lead 是 GPT-6 Astra，或准备创建 Astra Worker**：额外读取 `references/astra-guidance.md`；其他模型不要加载。
 
 ## 两种路由模式
 
-从用户级或项目级 `routing.json` 读取模式；项目级覆盖用户级。缺失配置按 `luna_only`，避免升级后意外增费。
+从用户级或项目级 `routing.json` 读取；项目级覆盖用户级。缺失配置按 `luna_only`。
 
-- `luna_only`：自动 Worker 只用 `gpt-5.6-luna`。Luna 不足时由 Lead 接管，不自动升到更贵模型。
-- `adaptive`：在 Luna → Terra → `gpt-5.6-sol`（Sol）→ GPT-6 Astra 中选择**能够可靠完成子任务的最低成本组合**；允许相对 Lead 向下或向上路由。
+- `luna_only`：自动 Worker 只用 `gpt-5.6-luna`。Luna 不足时由 Lead 接管，不自动升级。
+- `adaptive`：自动候选收敛为 **Luna → `gpt-5.6-sol` → GPT-6 Astra**，分别对应经济、中等、专家层。Terra 不再进入新自动路由。
 
-Sol 自动 Worker 必须使用显式 runtime ID `gpt-5.6-sol`。`gpt-5.6` 虽是公开 API alias，但部分 Codex SubAgent Surface 会按账号可用模型列表拒绝 alias，因此不得用于自动 spawn 或 installed profile。
+Sol 自动 Worker 必须使用显式 runtime ID `gpt-5.6-sol`；不得用 `gpt-5.6` alias 做自动 spawn 或 installed profile。
 
 ## Adaptive Capability Gap Gate
 
-`adaptive` 在决定 `lead_only` 前必须先估计子任务的最低能力层级。不要仅因为当前 Lead 更便宜，就跳过更高阶 Worker 的评估。
+`adaptive` 在 `lead_only` 前估计子任务最低能力。不要仅因当前 Lead 更便宜就跳过必要的高阶 Worker。
 
 默认信号：
 
-- 清晰、局部、机械叶子任务：Luna；
-- 大量文件 / 长材料的 read-heavy 扫描、探索、归纳：Terra；
-- 高歧义多步 debug、跨模块因果、race / concurrency / lifecycle / ordering、多竞争假设或困难 invariant 复核：Sol；
-- 架构级高歧义 + 高失败代价、需要独立 adversarial review：Astra 候选，仍选最低足够层级。
+- 清晰、局部、机械修改、普通 scan/read-heavy 归纳：Luna；
+- 高歧义多步 debug、跨模块因果、race / concurrency / lifecycle / ordering、多竞争假设、困难 invariant：Sol；
+- 架构级高歧义 + 高失败代价、独立 adversarial review：Astra 候选，仍选最低足够层级。
 
-如果最低能力高于当前 Lead，必须读取 `routing-policy.md` 并评估最低足够的更高阶 Worker。`Luna max` 仍是 Luna，不能因为 reasoning 已到 max 就视为等价于 Sol。客观 capability gap 已明确时，不要先浪费一次低阶 attempt 来“证明”不足。
+文件数量本身不触发模型升级。大量读取优先 Luna 合适 reasoning；只有出现明显非局部推理、高歧义或高失败代价时才升 Sol。
+
+`Luna max` 仍是 Luna。若 Lead 已在当前层 `max` 仍需向上一层，下一层 Worker reasoning **至少 medium**；当前 bundled Sol/Astra profiles 从 high 起，天然满足。客观 capability gap 明确时，不先浪费一次低阶 attempt 来证明不足。
 
 用户本轮可显式覆盖某个 Worker 的模型、reasoning、是否委派、是否先确认和 Worker 数量。
 
 ## 运行时最小流程
 
-1. 从用户最新请求和现有上下文推断目标与完成标准；只有答案会实质改变范围、权限、风险或验收时才提问。
-2. 读取有效路由模式和委派授权。用户本轮明确要求委派，或适用 `AGENTS.md` 有长期授权，才可自动创建 Worker。
-3. `adaptive` 先做 Capability Gap Gate；若存在明显能力差距，读取 `routing-policy.md` 并优先评估最低足够的更高 tier Worker。否则再用普通 ExpectedCost gate 判断 Lead / 下放 / 同层委派。
-4. 预检当前 Surface 能否**精确固定**披露的 model + effort。不能证明时 `lead_only`，禁止静默继承或替换模型。
-5. 确定派遣后，使用 RoutePlan 2.1（记录 Lead model/effort 与 Worker `minimum_capability`）、fresh 新线程和最小充分且人类可读的任务包。派遣前简洁披露 task、model、effort 与成本/能力理由；用户要求审批时才等待。
-6. Worker 回传必须人类可读、简洁且只含有效信息，并用 `TASK_ACK <task_id>` 与当前目标核对。同一 wave 等待所有**仍必要**的 Worker；若某 Worker 已无足够信息价值，stop 并 close，不机械等待。
-7. Lead 去重综合 Worker 证据，不原样转贴 Worker 回复或日志。结果采纳且无需 steering 后 close thread；重试前先 stop/close 旧 attempt，再用新 `task_id` fresh 创建。Lead 持续到用户请求的完成标准。
+1. 从用户最新请求和上下文推断目标与完成标准；只有答案会实质改变范围、权限、风险或验收时才提问。
+2. 读取有效路由和委派授权。用户本轮明确要求委派，或适用 `AGENTS.md` 有长期授权，才可自动创建 Worker。
+3. `adaptive` 先做 Capability Gap Gate；有明显能力差距时优先评估最低足够高阶 Worker，否则再用 ExpectedCost gate 判断 Lead / 下放 / 同层委派。
+4. 预检 Surface 能否**精确固定**披露的 model + effort。不能证明时 `lead_only`，禁止静默继承或替换。
+5. 派遣使用 RoutePlan 2.1（记录 Lead model/effort 与 Worker `minimum_capability`）、fresh 线程和 minimal-sufficient task packet。派遣前简洁披露 task、model、effort 与成本/能力理由。
+6. Worker 回传必须人类可读、简洁且只含有效信息，并用 `TASK_ACK <task_id>` 核对。同波等待所有**仍必要** Worker；新增信息价值低于继续成本时 stop + close。
+7. Lead 去重综合证据，不原样转贴 Worker 回复/日志。结果采纳且无需 steering 后 close；retry 前 stop/close 旧 attempt，再用新 `task_id` fresh 创建。
 
 ## 硬边界
 
 - `luna_only` 未经用户本轮明确覆盖，不得自动使用非 Luna Worker。
-- 每个子任务最多 2 个 attempt；不要用更贵模型掩盖权限、环境、任务包或上下文问题。
-- 明显 capability gap 不做牺牲性低价试错；默认先创建 1 个最低足够的更高阶 Worker，并保持其子目标窄而高价值。
-- 本 Skill 默认单波最多 3 个 Worker；若用户级 `config.toml` 显式设置更低的 `agents.max_concurrent_threads_per_session`，有效单波上限为 `min(3, 该值)`。设置高于 3 不会自动放宽本 Skill 的成本保护。
+- 新 `adaptive` 自动 Worker 只考虑 Luna / Sol / Astra；Terra 仅保留旧 RoutePlan 解析兼容。
+- 每个子任务最多 2 个 attempt；明显 capability gap 不做牺牲性低价试错。
+- 当前层 `max` 向上一层时，目标 Worker effort 不得低于 `medium`。
+- capability-gap 默认先创建 1 个最低足够高阶 Worker，并保持其子目标窄而高价值。
+- 默认单波最多 3 Worker；若用户显式配置更低的 `agents.max_concurrent_threads_per_session`，有效上限为 `min(3, 该值)`。
 - 同波写入不得重叠；Worker 不创建下级 SubAgent，不执行最终不可逆外部动作。
 - fresh Worker 不继承旧目标；任务包与结果都应最短充分，不复制无关历史、整仓内容或原始大日志。
 
