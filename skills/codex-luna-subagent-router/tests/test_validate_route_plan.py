@@ -33,8 +33,9 @@ class RoutePlanValidationTests(unittest.TestCase):
         notice = render_notice(self.plan())
         self.assertIn("adaptive", notice)
         self.assertIn("主 Agent：gpt-5.6-luna / 最高 (max)", notice)
-        self.assertIn("gpt-5.6-terra", notice)
+        self.assertIn("gpt-5.6-luna", notice)
         self.assertIn("gpt-5.6-sol (Sol)", notice)
+        self.assertNotIn("gpt-5.6-terra", notice)
         self.assertIn("最低能力：Sol (sol)", notice)
         self.assertIn("路由方向：向上 (up)", notice)
         self.assertIn("能力差距理由", notice)
@@ -152,7 +153,7 @@ class RoutePlanValidationTests(unittest.TestCase):
     def test_profile_must_match_model_and_effort(self) -> None:
         plan = self.plan()
         plan["workers"][0]["agent_profile"] = "luna_medium"
-        self.assertInvalidContains(plan, 'expected "terra_medium"')
+        self.assertInvalidContains(plan, 'expected "luna_high"')
 
     def test_live_spawn_requires_no_profile_and_verified_capability(self) -> None:
         plan = self.plan()
@@ -165,9 +166,9 @@ class RoutePlanValidationTests(unittest.TestCase):
 
     def test_unbundled_profile_combo_must_use_live_spawn(self) -> None:
         plan = self.plan()
-        worker = plan["workers"][0]
-        worker["model"] = "gpt-5.6-terra"
-        worker["reasoning_effort"] = "xhigh"
+        worker = plan["workers"][1]
+        worker["model"] = "gpt-5.6-sol"
+        worker["reasoning_effort"] = "max"
         self.assertInvalidContains(plan, "no installed cost-aware profile")
         worker["route_binding"] = "live_spawn"
         worker["agent_profile"] = None
@@ -180,10 +181,7 @@ class RoutePlanValidationTests(unittest.TestCase):
 
     def test_resolved_clarification_is_forwarded_only_when_relevant(self) -> None:
         plan = self.plan()
-        clarification = {
-            "question": "本次只分析还是直接修复？",
-            "answer": "直接修复并运行针对性回归测试。",
-        }
+        clarification = {"question": "本次只分析还是直接修复？", "answer": "直接修复并运行针对性回归测试。"}
         plan["user_input_state"] = "resolved"
         plan["clarifications"] = [clarification]
         plan["workers"][1]["task_packet"]["clarifications"] = [copy.deepcopy(clarification)]
@@ -192,25 +190,13 @@ class RoutePlanValidationTests(unittest.TestCase):
 
     def test_packet_clarification_must_exist_at_root(self) -> None:
         plan = self.plan()
-        plan["workers"][0]["task_packet"]["clarifications"] = [
-            {"question": "额外问题？", "answer": "额外答案"}
-        ]
+        plan["workers"][0]["task_packet"]["clarifications"] = [{"question": "额外问题？", "answer": "额外答案"}]
         self.assertInvalidContains(plan, "resolved root clarifications")
 
     def test_compact_packet_does_not_require_repeated_scaffolding(self) -> None:
         plan = self.plan()
         packet = plan["workers"][0]["task_packet"]
-        for key in (
-            "normalized_goal",
-            "in_scope",
-            "out_of_scope",
-            "necessary_context",
-            "clarifications",
-            "output_contract",
-            "no_subagents",
-            "sole_source_of_truth",
-            "start_response_with_task_ack",
-        ):
+        for key in ("normalized_goal", "in_scope", "out_of_scope", "necessary_context", "clarifications", "output_contract", "no_subagents", "sole_source_of_truth", "start_response_with_task_ack"):
             self.assertNotIn(key, packet)
         self.assertEqual(validate_plan(plan), [])
 
