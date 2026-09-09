@@ -30,9 +30,9 @@ class SolRuntimeIdTests(unittest.TestCase):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         policy = (ROOT / "references" / "routing-policy.md").read_text(encoding="utf-8")
         self.assertIn("gpt-5.6-sol", skill)
-        self.assertIn("不得用于自动 spawn", skill)
+        self.assertIn("不得用 `gpt-5.6` alias 做自动 spawn", skill)
         self.assertIn("gpt-5.6-sol", policy)
-        self.assertIn("自动 Sol 路由都使用显式 ID", policy)
+        self.assertIn("不用于自动 installed profile / RoutePlan / spawn", policy)
 
 
 if __name__ == "__main__":

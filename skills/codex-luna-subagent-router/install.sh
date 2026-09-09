@@ -79,8 +79,12 @@ if dst.exists():
 shutil.copytree(src, dst, ignore=ignore)
 PY
 
-# Refresh every profile bundled by this release. User-created profiles with
-# other names are outside this installer's management scope.
+# v2.4.1 retires Terra from this Skill's managed automatic profiles.
+# Remove only the two names historically managed by this package; unrelated
+# user-created profiles remain untouched.
+rm -f "$AGENTS_BASE/terra-medium.toml" "$AGENTS_BASE/terra-high.toml"
+
+# Refresh every profile bundled by this release.
 cp "$SOURCE_DIR"/assets/codex-agents/*.toml "$AGENTS_BASE"/
 chmod +x \
   "$DEST_SKILL/install.sh" \
@@ -97,9 +101,9 @@ echo "Installed/updated Skill: $DEST_SKILL"
 echo "Installed version: $INSTALLED_VERSION"
 echo "Refreshed cost-aware profiles:"
 echo "  Luna:  luna-{low,medium,high,xhigh,max}.toml"
-echo "  Terra: terra-{medium,high}.toml"
 echo "  Sol:   sol-{high,xhigh}.toml"
 echo "  Astra: astra-{high,xhigh,max}.toml"
+echo "Retired managed profiles: terra-{medium,high}.toml"
 echo
 echo "Upgrade rule:"
 echo "  Keep the entire Skill directory and every bundled profile on this same release."
@@ -111,6 +115,6 @@ echo "1. Ask Codex to follow $DEST_SKILL/references/codex-guided-install.md."
 echo "2. Choose standing delegation authorization: global / project / none."
 echo "3. Choose routing mode:"
 echo "   - luna_only: maximum economy and cost predictability; automatic Workers use Luna only, hard tasks stay with the Lead."
-echo "   - adaptive: check capability gap before lead_only, then choose the cheapest sufficient Luna/Terra/Sol/Astra combination; supports both down-routing and necessary up-routing."
+echo "   - adaptive: check capability gap before lead_only, then choose the cheapest sufficient Luna/Sol/Astra tier; supports down-routing and necessary up-routing."
 echo "4. Choose the maximum concurrently open SubAgents (excluding the primary): keep current/Codex default, 3 recommended, or another integer >= 1."
 echo "5. Existing v1 routing tables are backed up during guided migration."
