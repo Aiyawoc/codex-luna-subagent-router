@@ -50,7 +50,7 @@ Sol 自动 Worker 必须使用显式 runtime ID `gpt-5.6-sol`；不得用 `gpt-5
 4. 预检 Surface 能否**精确固定**披露的 model + effort。不能证明时 `lead_only`，禁止静默继承或替换。
 5. 派遣使用 RoutePlan 2.1（记录 Lead model/effort 与 Worker `minimum_capability`）、fresh 线程和 minimal-sufficient task packet。派遣前简洁披露 task、model、effort 与成本/能力理由。
 6. Worker 回传必须人类可读、简洁且只含有效信息，并用 `TASK_ACK <task_id>` 核对。同波等待所有**仍必要** Worker；新增信息价值低于继续成本时 stop + close。
-7. Lead 去重综合 Worker 证据，不原样转贴 Worker 回复/日志。结果采纳且无需 steering 后 close；retry 前 stop/close 旧 attempt，再用新 `task_id` fresh 创建。
+7. Lead 去重综合 Worker 证据，不原样转贴 Worker 回复或日志。结果采纳且无需 steering 后 close；retry 前 stop/close 旧 attempt，再用新 `task_id` fresh 创建。
 
 ## 硬边界
 
