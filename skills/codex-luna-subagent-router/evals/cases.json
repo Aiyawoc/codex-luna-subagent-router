@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.3",
+  "schema_version": "2.4",
   "objective": "minimize_expected_total_cost",
   "cases": [
     {"id":"simple-answer","prompt":"解释这个函数为什么返回空数组。","expected_mode":"lead_only"},
@@ -116,6 +116,55 @@
       "forbid_model":"gpt-5.6-terra"
     },
     {
+      "id":"advisor-deterministic-luna-to-sol",
+      "prompt":"Luna max 处理 bounded deep debug，verifiability=partial，failure_cost=medium。",
+      "routing_mode":"adaptive",
+      "advisor":"route_advisor.py",
+      "expected_model":"gpt-5.6-sol",
+      "expected_effort":"high",
+      "expected_route_direction":"up"
+    },
+    {
+      "id":"evidence-same-tier-effort-downshift",
+      "prompt":"同一安全任务族已有两次 Luna high verified_pass，静态建议 Luna max。",
+      "routing_mode":"adaptive",
+      "evidence_calibration":"conservative",
+      "history":{"verified_pass":{"model":"gpt-5.6-luna","effort":"high","count":2}},
+      "expected_model":"gpt-5.6-luna",
+      "expected_effort":"high"
+    },
+    {
+      "id":"evidence-safe-cross-tier-downshift",
+      "prompt":"可验证、非高失败代价、非架构任务已有三次 Luna max verified_pass，静态建议 Sol high。",
+      "routing_mode":"adaptive",
+      "evidence_calibration":"conservative",
+      "history":{"verified_pass":{"model":"gpt-5.6-luna","effort":"max","count":3}},
+      "expected_model":"gpt-5.6-luna"
+    },
+    {
+      "id":"evidence-high-risk-no-cross-tier-downshift",
+      "prompt":"高失败代价任务即使已有三次 Luna max verified_pass，也不得从静态 Sol/Astra 自动跨 tier 降档。",
+      "routing_mode":"adaptive",
+      "evidence_calibration":"conservative",
+      "failure_cost":"high",
+      "forbid_history_cross_tier_downshift":true
+    },
+    {
+      "id":"evidence-verified-failure-escalation",
+      "prompt":"静态首选 Sol high，但同类历史有 Sol high verified_fail。",
+      "routing_mode":"adaptive",
+      "evidence_calibration":"conservative",
+      "history":{"verified_fail":{"model":"gpt-5.6-sol","effort":"high","count":1}},
+      "expected_model":"gpt-5.6-sol",
+      "expected_effort":"xhigh"
+    },
+    {
+      "id":"evidence-registry-privacy",
+      "prompt":"记录 verified outcome。",
+      "expected_registry_fields":["scope_id","task_family","axes","model","effort","outcome","verification_summary","policy_version","router_version","identity_verified","route_binding"],
+      "forbid_registry_fields":["raw_prompt","response","source_code","file_content","project_path","api_key","token"]
+    },
+    {
       "id":"sol-runtime-id",
       "prompt":"为一个困难调试 Worker 选择 Sol high。",
       "routing_mode":"adaptive",
@@ -145,7 +194,7 @@
       "id":"guided-install",
       "prompt":"请由 Codex 安装并引导配置这个 Skill。",
       "expected_mode":"guided_install",
-      "expected_questions":["request_user_input_mode","delegation_scope","routing_mode","max_concurrent_subagents"],
+      "expected_questions":["request_user_input_mode","delegation_scope","routing_mode","max_concurrent_subagents","evidence_calibration"],
       "expected_workers":0
     },
     {"id":"v1-migration","prompt":"升级已有 additional_responsibilities routing.json。","expected_default_recommendation":"luna_only","expected_backup":"routing.v1.backup.json"},
