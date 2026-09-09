@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.4.1 — 2026-09-09
+
+- `adaptive` 自动模型从 Luna / Terra / Sol / Astra 收敛为 **Luna / Sol / Astra** 三层：Luna=极致经济、Sol=中等能力、Astra=专家能力。
+- 普通 scan/read-heavy/大文件归纳不再因为文件数量自动升级 Terra，优先由 Luna 使用合适 reasoning；只有非局部因果、高歧义或高失败代价才进入 Sol/Astra。
+- Terra 不再进入新 Skill 的自动候选、示例、eval、README、安装引导或 bundled profiles；validator 仅为旧 RoutePlan 2.0/2.1 保留 Terra legacy 解析兼容。
+- `install.sh` 升级时清理本 Skill 历史托管的 `terra-medium.toml` / `terra-high.toml`，不影响其它用户自定义 profiles。
+- 新增跨层 effort 下限：当前模型已到 `max` 仍需向上一层时，目标 Worker reasoning 至少 `medium`；现有 Sol/Astra bundled profiles 从 `high` 起，天然满足。
+- 示例 RoutePlan 改为 Luna Max Lead 的 Luna read-heavy Worker + Sol capability-gap Worker，不再包含 Terra。
+- eval 增加三层候选、read-heavy stays Luna、Luna Max→Sol、Sol Max→Astra 与跨层 effort floor 场景。
+- 新增 `test_three_tier_routing.py`，锁定三层策略、Terra 退役、installer 清理和 max upward effort floor。
+- 新增 `docs/v2.4.1-three-tier-routing.md`，README/安装引导/验收文档同步升级至 v2.4.1。
+
 ## 2.4.0 — 2026-09-09
 
 - `adaptive` 新增前置 **Capability Gap Gate**：低阶 Lead 在 `lead_only` 前先判断子任务最低能力，不能仅因 Lead 更便宜就跳过必要的高阶 Worker。
