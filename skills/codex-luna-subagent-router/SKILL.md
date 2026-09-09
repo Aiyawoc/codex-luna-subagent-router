@@ -20,9 +20,9 @@ description: 成本优先的 Codex SubAgent 路由。仅在委派可能降低预
 
 Sol 自动 Worker 必须使用显式 runtime ID `gpt-5.6-sol`；不得用 `gpt-5.6` alias 自动 spawn。
 
-## Adaptive：确定性 Advisor
+## Adaptive Capability Gap Gate + 确定性 Advisor
 
-在决定 `lead_only` 前，Lead 为当前 bounded 子目标生成**非敏感** `task_family` 与六个离散轴：`task_kind / task_scope / reasoning_depth / verifiability / failure_cost / context_volume`，然后调用 `route_advisor.py recommend`。不要把 prompt、项目名、客户名、源码或日志放进 `task_family`。
+`adaptive` 在 `lead_only` 前先检查 capability gap。Lead 为当前 bounded 子目标生成**非敏感** `task_family` 与六个离散轴：`task_kind / task_scope / reasoning_depth / verifiability / failure_cost / context_volume`，然后调用 `route_advisor.py recommend`。不要把 prompt、项目名、客户名、源码或日志放进 `task_family`。
 
 Advisor 本地运行、零模型调用、零网络调用。它把三层静态策略与可选 verified history 合并后返回 `lead_only | delegate`、model、effort、profile、minimum capability、route direction 与理由。Advisor 不可用或输入失效时，回退 `references/routing-policy.md` 的静态规则；不要用更贵模型掩盖脚本/环境故障。
 
@@ -32,7 +32,7 @@ Advisor 本地运行、零模型调用、零网络调用。它把三层静态策
 - 高歧义多步 debug、跨模块因果、race / concurrency / lifecycle / ordering、多竞争假设：Sol；
 - 架构级高歧义 + 高失败代价、独立 adversarial review：Astra 候选。
 
-文件数量本身不触发升级。`Luna max` 仍是 Luna；当前层 `max` 向上一层时目标 Worker effort 至少 `medium`，现有 Sol/Astra bundled profile 从 `high` 起。
+文件数量本身不触发升级。`Luna max` 仍是 Luna；当前层 `max` 向上一层时目标 Worker effort 至少 `medium`，现有 Sol/Astra bundled profile 从 `high` 起。明显 capability gap 时**不先浪费一次低阶 attempt**来证明不足。
 
 ## Verified Outcome Calibration
 
