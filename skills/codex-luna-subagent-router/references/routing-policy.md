@@ -65,7 +65,7 @@ ExpectedCost(delegate) < ExpectedCost(lead)
 - Luna Lead 再创建 Luna 处理几分钟线性任务通常不值得；
 - 多 Worker 会重复模型和工具工作，不因“可并行”就自动并行。
 
-Worker 启动后成本门仍生效；新增信息价值低于继续运行成本时 stop + close。
+Worker 启动后成本门仍生效；若某个运行中 Worker 的**预期新增信息价值**低于继续运行成本，且不承担仍必要的独立验收职责，则 stop + close。
 
 ## 4. 两种模式
 
