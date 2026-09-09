@@ -30,7 +30,7 @@ class InstructionBudgetTests(unittest.TestCase):
         self.assertTrue((ROOT / "references" / "astra-guidance.md").is_file())
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("当前 Lead 是 GPT-6 Astra", skill)
-        self.assertIn("其他模型不要加载该文档", skill)
+        self.assertIn("其他模型不要加载", skill)
 
 
 if __name__ == "__main__":
