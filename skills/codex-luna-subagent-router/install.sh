@@ -17,7 +17,7 @@ on the same release.
 
 The script does not edit user-managed config.toml, AGENTS.md, or routing.json.
 Use references/codex-guided-install.md after installation/upgrade for managed
-configuration and migration, including the optional SubAgent concurrency cap.
+configuration and migration, including concurrency and evidence calibration.
 EOF
 }
 
@@ -79,9 +79,7 @@ if dst.exists():
 shutil.copytree(src, dst, ignore=ignore)
 PY
 
-# v2.4.1 retires Terra from this Skill's managed automatic profiles.
-# Remove only the two names historically managed by this package; unrelated
-# user-created profiles remain untouched.
+# Terra remains retired from this Skill's managed automatic profiles.
 rm -f "$AGENTS_BASE/terra-medium.toml" "$AGENTS_BASE/terra-high.toml"
 
 # Refresh every profile bundled by this release.
@@ -90,6 +88,8 @@ chmod +x \
   "$DEST_SKILL/install.sh" \
   "$DEST_SKILL/scripts/configure_guided_install.py" \
   "$DEST_SKILL/scripts/configure_subagent_limit.py" \
+  "$DEST_SKILL/scripts/configure_evidence_calibration.py" \
+  "$DEST_SKILL/scripts/route_advisor.py" \
   "$DEST_SKILL/scripts/validate_route_plan.py"
 
 python3 "$DEST_SKILL/scripts/validate_route_plan.py" \
@@ -114,7 +114,8 @@ echo "Next steps:"
 echo "1. Ask Codex to follow $DEST_SKILL/references/codex-guided-install.md."
 echo "2. Choose standing delegation authorization: global / project / none."
 echo "3. Choose routing mode:"
-echo "   - luna_only: maximum economy and cost predictability; automatic Workers use Luna only, hard tasks stay with the Lead."
-echo "   - adaptive: check capability gap before lead_only, then choose the cheapest sufficient Luna/Sol/Astra tier; supports down-routing and necessary up-routing."
+echo "   - luna_only: maximum economy and cost predictability; automatic Workers use Luna only."
+echo "   - adaptive: deterministic Advisor chooses the cheapest sufficient Luna/Sol/Astra route with capability-gap checks."
 echo "4. Choose the maximum concurrently open SubAgents (excluding the primary): keep current/Codex default, 3 recommended, or another integer >= 1."
-echo "5. Existing v1 routing tables are backed up during guided migration."
+echo "5. For adaptive, choose verified-outcome calibration: conservative (recommended) or off."
+echo "6. Existing v1 routing tables are backed up during guided migration."
