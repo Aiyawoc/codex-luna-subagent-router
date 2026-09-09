@@ -19,7 +19,7 @@ class EvidenceCalibratedPolicyTests(unittest.TestCase):
     def test_guided_install_has_fifth_evidence_calibration_choice(self) -> None:
         text = (ROOT / "references" / "codex-guided-install.md").read_text(encoding="utf-8")
         self.assertIn("### 5. 是否启用 Verified Outcome Calibration", text)
-        self.assertIn("conservative（推荐）", text)
+        self.assertIn("`conservative`（推荐）", text)
         self.assertIn("configure_evidence_calibration.py", text)
         self.assertIn("缺失按 `off`", text)
 
