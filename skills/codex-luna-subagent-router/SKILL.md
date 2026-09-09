@@ -18,7 +18,7 @@ description: 成本优先的 Codex SubAgent 路由。仅在委派可能降低预
 - **确定要派遣后**：按需读取 `references/task-packet.md` 与 `references/lifecycle-and-context.md`，生成 RoutePlan 2.1 与 fresh Worker。
 - **当前 Lead 是 GPT-6 Astra，或准备创建 Astra Worker**：额外读取 `references/astra-guidance.md`；其他模型不要加载该文档。
 
-Sol 自动 Worker 必须使用显式 runtime ID `gpt-5.6-sol`；不得用 `gpt-5.6` alias 自动 spawn。
+Sol 自动 Worker 必须使用显式 runtime ID `gpt-5.6-sol`；不得用 `gpt-5.6` alias 做自动 spawn。
 
 ## Adaptive Capability Gap Gate + 确定性 Advisor
 
@@ -32,7 +32,7 @@ Advisor 本地运行、零模型调用、零网络调用。它把三层静态策
 - 高歧义多步 debug、跨模块因果、race / concurrency / lifecycle / ordering、多竞争假设：Sol；
 - 架构级高歧义 + 高失败代价、独立 adversarial review：Astra 候选。
 
-文件数量本身不触发升级。`Luna max` 仍是 Luna；当前层 `max` 向上一层时目标 Worker effort 至少 `medium`，现有 Sol/Astra bundled profile 从 `high` 起。明显 capability gap 时**不先浪费一次低阶 attempt**来证明不足。
+文件数量本身不触发升级。`Luna max` 仍是 Luna；当前层 `max` 向上一层时目标 Worker effort 至少 `medium`（至少 medium），现有 Sol/Astra bundled profile 从 `high` 起。明显 capability gap 时**不先浪费一次低阶 attempt**来证明不足。
 
 ## Verified Outcome Calibration
 
