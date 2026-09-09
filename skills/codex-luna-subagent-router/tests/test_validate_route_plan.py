@@ -29,13 +29,75 @@ class RoutePlanValidationTests(unittest.TestCase):
     def test_valid_example(self) -> None:
         self.assertEqual(validate_plan(self.plan()), [])
 
-    def test_notice_mirrors_cost_route(self) -> None:
+    def test_notice_mirrors_cost_and_capability_route(self) -> None:
         notice = render_notice(self.plan())
         self.assertIn("adaptive", notice)
+        self.assertIn("主 Agent：gpt-5.6-luna / 最高 (max)", notice)
         self.assertIn("gpt-5.6-terra", notice)
         self.assertIn("gpt-5.6-sol (Sol)", notice)
+        self.assertIn("最低能力：Sol (sol)", notice)
+        self.assertIn("路由方向：向上 (up)", notice)
+        self.assertIn("能力差距理由", notice)
         self.assertIn("最小化预期总成本", notice)
-        self.assertIn("req-example-002-w1-a1", notice)
+
+    def test_schema_21_requires_lead_identity(self) -> None:
+        plan = self.plan()
+        del plan["lead_model"]
+        self.assertInvalidContains(plan, "root.lead_model")
+
+        plan = self.plan()
+        del plan["lead_reasoning_effort"]
+        self.assertInvalidContains(plan, "lead_reasoning_effort")
+
+    def test_schema_20_remains_backward_compatible(self) -> None:
+        plan = self.plan()
+        plan["schema_version"] = "2.0"
+        plan.pop("lead_model")
+        plan.pop("lead_reasoning_effort")
+        for worker in plan["workers"]:
+            worker.pop("minimum_capability")
+            worker.pop("capability_gap_reason", None)
+        self.assertEqual(validate_plan(plan), [])
+
+    def test_schema_21_requires_minimum_capability(self) -> None:
+        plan = self.plan()
+        del plan["workers"][0]["minimum_capability"]
+        self.assertInvalidContains(plan, "minimum_capability")
+
+    def test_capability_gap_requires_reason(self) -> None:
+        plan = self.plan()
+        del plan["workers"][1]["capability_gap_reason"]
+        self.assertInvalidContains(plan, "required when minimum_capability exceeds Lead capability")
+
+    def test_worker_cannot_be_below_minimum_capability(self) -> None:
+        plan = self.plan()
+        worker = plan["workers"][1]
+        worker["model"] = "gpt-5.6-luna"
+        worker["reasoning_effort"] = "max"
+        worker["agent_profile"] = "luna_max"
+        self.assertInvalidContains(plan, "below minimum_capability=sol")
+
+    def test_luna_max_is_still_below_sol_tier(self) -> None:
+        plan = self.plan()
+        self.assertEqual(plan["lead_model"], "gpt-5.6-luna")
+        self.assertEqual(plan["lead_reasoning_effort"], "max")
+        worker = plan["workers"][1]
+        self.assertEqual(worker["minimum_capability"], "sol")
+        self.assertEqual(worker["model"], "gpt-5.6-sol")
+        self.assertEqual(validate_plan(plan), [])
+
+    def test_downward_route_is_visible(self) -> None:
+        plan = self.plan()
+        plan["lead_model"] = "gpt-6-astra"
+        plan["lead_reasoning_effort"] = "high"
+        worker = plan["workers"][0]
+        worker["minimum_capability"] = "luna"
+        worker.pop("capability_gap_reason", None)
+        worker["model"] = "gpt-5.6-luna"
+        worker["reasoning_effort"] = "medium"
+        worker["agent_profile"] = "luna_medium"
+        self.assertEqual(validate_plan(plan), [])
+        self.assertIn("路由方向：向下 (down)", render_notice(plan))
 
     def test_sol_route_uses_explicit_runtime_id(self) -> None:
         plan = self.plan()
@@ -58,6 +120,8 @@ class RoutePlanValidationTests(unittest.TestCase):
         plan = self.plan()
         plan["routing_mode"] = "luna_only"
         for worker in plan["workers"]:
+            worker["minimum_capability"] = "luna"
+            worker.pop("capability_gap_reason", None)
             worker["model"] = "gpt-5.6-luna"
             worker["reasoning_effort"] = "medium"
             worker["agent_profile"] = "luna_medium"
@@ -75,9 +139,11 @@ class RoutePlanValidationTests(unittest.TestCase):
         plan["workers"][0]["model"] = "gpt-4.1"
         self.assertInvalidContains(plan, "approved built-in model")
 
-    def test_low_luna_is_allowed(self) -> None:
+    def test_low_luna_is_allowed_when_minimum_is_luna(self) -> None:
         plan = self.plan()
         worker = plan["workers"][0]
+        worker["minimum_capability"] = "luna"
+        worker.pop("capability_gap_reason", None)
         worker["model"] = "gpt-5.6-luna"
         worker["reasoning_effort"] = "low"
         worker["agent_profile"] = "luna_low"
