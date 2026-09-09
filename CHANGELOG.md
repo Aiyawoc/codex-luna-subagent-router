@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.4.0 — 2026-09-09
+
+- `adaptive` 新增前置 **Capability Gap Gate**：低阶 Lead 在 `lead_only` 前先判断子任务最低能力，不能仅因 Lead 更便宜就跳过必要的高阶 Worker。
+- 明确能力层级 `luna < terra < sol < astra`，并把大型 read-heavy、跨模块因果、race / concurrency / lifecycle / ordering、多竞争假设、架构级高失败代价审查等客观信号映射到最低能力层级。
+- 明确 `Luna max` 仍属于 Luna tier；reasoning effort 提高不能替代模型 capability tier。
+- 明显 capability gap 禁止牺牲性低价试错；默认直接评估 1 个最低足够的更高阶 Worker，并保持高级 Worker 子目标窄而高价值。
+- RoutePlan 新生成格式升级至 schema 2.1，新增根级 `lead_model` / `lead_reasoning_effort` 和 Worker `minimum_capability` / `capability_gap_reason`；validator 继续兼容旧 2.0。
+- validator 可验证 Worker model tier 不低于 `minimum_capability`，并在 notice 中根据 Lead / Worker 自动显示 `up / down / same` 路由方向。
+- 示例 RoutePlan 改为 Luna Max Lead 向上路由 Terra / Sol，新增 Luna→Terra、Luna→Sol/Astra、Terra→Sol、Sol/Astra→低阶模型和禁止 Luna probe 的专门 eval / 单元测试。
+- README、安装引导、验收文档与 `install.sh` 同步说明 capability-gap 双门路由。
+
 ## 2.3.1 — 2026-09-08
 
 - 修复 Codex SubAgent runtime 对 Sol 模型 ID 的兼容问题：bundled `sol_high` / `sol_xhigh` profile 从 `gpt-5.6` alias 改为显式 `gpt-5.6-sol`。

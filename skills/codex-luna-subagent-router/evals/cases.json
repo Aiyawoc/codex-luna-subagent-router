@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.1",
+  "schema_version": "2.2",
   "objective": "minimize_expected_total_cost",
   "cases": [
     {
@@ -15,26 +15,82 @@
     {
       "id": "expensive-lead-downroute",
       "prompt": "当前主 Agent 很强，请扫描 80 个文件定位某 API 调用。",
+      "lead_model": "gpt-6-astra",
       "routing_mode": "adaptive",
       "expected_delegate": true,
-      "preferred_model_family": [
-        "gpt-5.6-luna",
-        "gpt-5.6-terra"
-      ]
+      "preferred_model_family": ["gpt-5.6-luna", "gpt-5.6-terra"],
+      "expected_route_direction": "down"
     },
     {
-      "id": "cheap-lead-no-formal-delegation",
+      "id": "luna-simple-lead-only",
       "prompt": "当前主 Agent 是 Luna，只需改一个明确的配置键。",
+      "lead_model": "gpt-5.6-luna",
       "routing_mode": "adaptive",
       "expected_mode": "lead_only"
+    },
+    {
+      "id": "luna-read-heavy-uproute",
+      "prompt": "当前主 Agent 是 Luna，请只读扫描大型仓库 120 个文件，归纳入口、调用链和依赖。",
+      "lead_model": "gpt-5.6-luna",
+      "routing_mode": "adaptive",
+      "expected_model": "gpt-5.6-terra",
+      "expected_minimum_capability": "terra",
+      "expected_route_direction": "up",
+      "expected_effort": ["medium", "high"]
+    },
+    {
+      "id": "luna-max-cross-module-race-uproute",
+      "prompt": "当前主 Agent 是 Luna max。根据多个模块的共享状态、锁顺序和日志，定位高歧义竞态根因。",
+      "lead_model": "gpt-5.6-luna",
+      "lead_reasoning_effort": "max",
+      "routing_mode": "adaptive",
+      "expected_model": "gpt-5.6-sol",
+      "expected_minimum_capability": "sol",
+      "expected_route_direction": "up",
+      "expected_effort": ["high", "xhigh"],
+      "forbid": "sacrificial_luna_attempt"
+    },
+    {
+      "id": "luna-max-architecture-review-uproute",
+      "prompt": "当前主 Agent 是 Luna max。对高失败代价的跨服务迁移架构做独立 adversarial review。",
+      "lead_model": "gpt-5.6-luna",
+      "lead_reasoning_effort": "max",
+      "routing_mode": "adaptive",
+      "allowed_models": ["gpt-5.6-sol", "gpt-6-astra"],
+      "expected_minimum_capability": "astra",
+      "expected_route_direction": "up",
+      "minimum_effort": "high"
+    },
+    {
+      "id": "terra-hard-causal-uproute",
+      "prompt": "当前主 Agent 是 Terra，请分析一个跨模块、多个竞争假设的因果链调试问题。",
+      "lead_model": "gpt-5.6-terra",
+      "routing_mode": "adaptive",
+      "expected_model": "gpt-5.6-sol",
+      "expected_minimum_capability": "sol",
+      "expected_route_direction": "up"
+    },
+    {
+      "id": "sol-simple-scan-downroute",
+      "prompt": "当前主 Agent 是 Sol，只需扫描大量文件并列出某 API 的调用点，不做复杂推理。",
+      "lead_model": "gpt-5.6-sol",
+      "routing_mode": "adaptive",
+      "preferred_model_family": ["gpt-5.6-luna", "gpt-5.6-terra"],
+      "expected_route_direction": "down"
+    },
+    {
+      "id": "astra-mechanical-downroute",
+      "prompt": "当前主 Agent 是 Astra，任务只是机械检查 60 个配置文件中的同一键。",
+      "lead_model": "gpt-6-astra",
+      "routing_mode": "adaptive",
+      "preferred_model_family": ["gpt-5.6-luna", "gpt-5.6-terra"],
+      "expected_route_direction": "down"
     },
     {
       "id": "luna-only-hard",
       "prompt": "Luna Only 下独立复核一个非常困难的跨模块竞态。",
       "routing_mode": "luna_only",
-      "allowed_auto_models": [
-        "gpt-5.6-luna"
-      ],
+      "allowed_auto_models": ["gpt-5.6-luna"],
       "fallback": "lead_only"
     },
     {
@@ -42,29 +98,20 @@
       "prompt": "读取大型仓库并归纳入口与依赖，不修改代码。",
       "routing_mode": "adaptive",
       "expected_model": "gpt-5.6-terra",
-      "expected_effort": [
-        "medium",
-        "high"
-      ]
+      "expected_effort": ["medium", "high"]
     },
     {
       "id": "adaptive-hard-debug",
       "prompt": "根据少量日志和并发代码定位高歧义竞态根因。",
       "routing_mode": "adaptive",
       "expected_model": "gpt-5.6-sol",
-      "expected_effort": [
-        "high",
-        "xhigh"
-      ]
+      "expected_effort": ["high", "xhigh"]
     },
     {
       "id": "adaptive-critical-review",
       "prompt": "对关键迁移方案做高失败代价、独立反证审查。",
       "routing_mode": "adaptive",
-      "allowed_models": [
-        "gpt-5.6-sol",
-        "gpt-6-astra"
-      ],
+      "allowed_models": ["gpt-5.6-sol", "gpt-6-astra"],
       "minimum_effort": "high"
     },
     {
@@ -84,6 +131,14 @@
       "expected_effort": "xhigh"
     },
     {
+      "id": "capability-gap-no-sacrificial-attempt",
+      "prompt": "Luna max 遇到明确跨模块 race，客观最低能力已判定为 Sol。",
+      "routing_mode": "adaptive",
+      "lead_model": "gpt-5.6-luna",
+      "expected_first_worker_model": "gpt-5.6-sol",
+      "forbid": ["luna_probe_first", "mechanical_model_ladder"]
+    },
+    {
       "id": "stale-thread",
       "prompt": "本轮改为分析支付模块，不要继续上一次 UI 任务。",
       "expected_context": "fresh_new_thread"
@@ -100,7 +155,8 @@
       "expected_questions": [
         "request_user_input_mode",
         "delegation_scope",
-        "routing_mode"
+        "routing_mode",
+        "max_concurrent_subagents"
       ],
       "expected_workers": 0
     },
@@ -137,10 +193,7 @@
       "id": "astra-targeted-testing",
       "prompt": "Astra 完成一个可逆、低影响的小修改，相关检查已经通过。",
       "expected": "stop_after_relevant_verification",
-      "forbid": [
-        "broad_test_expansion_without_signal",
-        "mirror_implementation_tests"
-      ]
+      "forbid": ["broad_test_expansion_without_signal", "mirror_implementation_tests"]
     },
     {
       "id": "astra-persistence",
@@ -151,12 +204,7 @@
     {
       "id": "compact-worker-packet",
       "prompt": "为一个边界清晰的 Worker 构造任务包。",
-      "required_fields": [
-        "task_id",
-        "current_user_request",
-        "subtask_goal",
-        "acceptance_criteria"
-      ],
+      "required_fields": ["task_id", "current_user_request", "subtask_goal", "acceptance_criteria"],
       "forbid": "repeat_global_worker_scaffolding"
     }
   ]
