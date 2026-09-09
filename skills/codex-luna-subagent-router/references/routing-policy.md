@@ -12,18 +12,14 @@ ExpectedCost =
 + Lead 集成与复核成本
 ```
 
-不要内置长期固定美元价格；模型价格会变化。路由使用相对成本/能力层级和任务特征。
+不要内置长期固定美元价格；模型价格会变化。v2.5.0 用静态能力规则 + 本地确定性 Advisor + 可选 verified history 近似失败概率和重试成本。
 
 ## 2. 三层自动路由
-
-v2.4.1 的新 `adaptive` 自动候选收敛为：
 
 ```text
 gpt-5.6-luna  →  gpt-5.6-sol  →  gpt-6-astra
 经济              中等             专家
 ```
-
-Terra 不再进入新自动路由。validator 可继续解析旧 RoutePlan 中的 Terra，仅用于历史兼容。
 
 能力层级：
 
@@ -31,78 +27,123 @@ Terra 不再进入新自动路由。validator 可继续解析旧 RoutePlan 中�
 luna < sol < astra
 ```
 
-## 3. 两道门：Capability Gap 优先
+Terra 不进入新自动路由；validator 仅为旧 RoutePlan 保留 legacy 解析。
 
-### Capability Gap Gate
+## 3. Adaptive Capability Gap Gate
 
-`adaptive` 在决定 `lead_only` 前先估计 `minimum_capability`：
+`adaptive` 在决定 `lead_only` 前先估计最低能力；“Lead 更便宜”不是跳过必要向上路由的理由。
 
-| 特征 | minimum_capability |
+基础信号：
+
+| 特征 | 最低能力 |
 | --- | --- |
-| 清晰、局部、机械修改、普通 scan/read-heavy 归纳、常规验证 | `luna` |
-| 高歧义多步 debugging、跨模块因果、race / concurrency / lifecycle / ordering、多竞争假设、困难 invariant | `sol` |
-| 架构级高歧义 + 高失败代价、需要独立 adversarial review | `astra` 候选，仍选最低足够层级 |
+| 清晰、局部、机械、普通 scan/read-heavy、常规验证 | Luna |
+| 高歧义多步 debugging、跨模块因果、race / concurrency / lifecycle / ordering、多竞争假设、困难 invariant | Sol |
+| 架构级高歧义 + 高失败代价、独立 adversarial review | Astra 候选 |
 
-文件数量本身不再代表更高 capability。大规模读取优先让 Luna 用合适 reasoning 完成；若同时存在非局部因果、高歧义或高失败代价，再升级 Sol。
+文件数量本身不代表更高 capability。`Luna max` 仍是 Luna；reasoning effort 不能替代 model tier。
 
-`Luna max` 仍是 Luna；reasoning effort 不能替代模型 capability tier。
+明显 gap **禁止牺牲性低价试错**：不要先浪费一次低阶 attempt 来证明不足。高阶 Worker 窄而贵，只承接真正需要高能力的 bounded 子问题。
 
-如果 `minimum_capability` 高于当前 Lead tier，必须先评估最低足够高阶 Worker；“Lead 更便宜”不是拒绝理由。
+## 4. Deterministic Advisor
 
-### 普通 ExpectedCost Gate
+Lead 不直接自由选择最终 Worker，而是先生成非敏感 `task_family` 和六个离散轴：
 
-不存在 upward capability gap 时，再比较：
+- `task_kind`；
+- `task_scope = micro | bounded | workflow`；
+- `reasoning_depth = shallow | medium | deep`；
+- `verifiability = yes | partial | no`；
+- `failure_cost = low | medium | high`；
+- `context_volume = low | medium | high`。
 
-```text
-ExpectedCost(delegate) < ExpectedCost(lead)
+然后调用：
+
+```bash
+python3 scripts/route_advisor.py recommend \
+  --task-family cross-module-race \
+  --task-kind debug \
+  --task-scope bounded \
+  --reasoning-depth deep \
+  --verifiability partial \
+  --failure-cost medium \
+  --context-volume medium \
+  --lead-model gpt-5.6-luna \
+  --lead-effort max \
+  --calibration off
 ```
 
-或者额外成本能被独立验证、并行、上下文隔离等收益覆盖。
+项目任务应额外传 `--project-root <repo>`，只生成项目路径 hash scope；不得把真实项目名、客户名、prompt、源码或日志编码进 `task_family`。
 
-典型判断：
+Advisor 是本地确定性脚本：零模型调用、零网络调用。输出 `decision / model / effort / agent_profile / minimum_capability / route_direction / static_rule / history_basis / selection_reason`。
+
+Advisor 不可用、Python 缺失或输入无效时，回退本文件的静态三层规则；不要为了路由脚本故障升级更贵模型。
+
+## 5. 普通 ExpectedCost Gate
+
+没有 upward capability gap 时，再比较委派与 Lead 自己完成的总成本。典型判断：
 
 - Sol/Astra Lead 的机械扫描可下放 Luna；
-- Luna Lead 再创建 Luna 处理几分钟线性任务通常不值得；
+- Luna Lead 再创建相同 model+effort 处理几分钟线性任务通常不值得；
+- 高上下文 scan/research/verification 可因上下文隔离而值得同层 Worker；
 - 多 Worker 会重复模型和工具工作，不因“可并行”就自动并行。
 
 Worker 启动后成本门仍生效；若某个运行中 Worker 的**预期新增信息价值**低于继续运行成本，且不承担仍必要的独立验收职责，则 stop 并 close。
 
-## 4. 两种模式
+## 6. Verified Outcome Registry
 
-### `luna_only`
+仅 `adaptive + evidence_calibration=conservative` 读写历史；缺失或 `off` 时只用静态 Advisor。
 
-自动 Worker 只能使用 `gpt-5.6-luna`：
+默认：
 
-- `low`：直接、窄范围、低风险；
-- `medium`：普通叶子实现、扫描、验证；
-- `high`：边界较多、多步但 Luna 仍足够；
-- `xhigh`：较困难调试/复核；
-- `max`：Luna 能力范围内、错误代价较高的最难任务。
+```text
+$CODEX_HOME/state/codex-luna-subagent-router/outcomes.jsonl
+```
 
-Luna 不足时 `lead_only`，不自动升级。
+可用 `CODEX_LUNA_ROUTER_REGISTRY` 或 `--registry` 覆盖。
 
-### `adaptive`
+只记录：scope hash、非敏感 task family、六个分类轴、model/effort、outcome、单行短 verification summary、policy/router version、identity verified 和 route binding。
 
-- Luna：默认经济层；
-- Sol：困难多步实现/调试/复核、跨模块因果、race / ordering；
-- Astra：架构级高歧义、深度反证、高失败代价独立审查。
+禁止存储 prompt、用户正文、Worker 回复、源码、文件内容、完整日志、真实项目路径、账号、token 或密钥。
 
-选择最低足够层级，不机械从最便宜模型一路失败升级。
+### Conservative override
 
-## 5. 向上路由与 reasoning 下限
+仅匹配同 scope、同 task family、同六轴、同 policy version、90 天内记录：
 
-当 `minimum_capability > lead tier`：
+1. `identity_verified=true` 才参与自动校准；
+2. 同 model 降 effort：至少 2 次 verified pass，且该 combo 无 verified fail；
+3. 跨 tier 降档：至少 3 次 verified pass，且必须 `verifiability=yes`、`failure_cost != high`、非 architecture；
+4. 任一 verified fail 阻止对应 cheaper combo；
+5. 静态首选 combo 已 verified fail 时，沿 bundled route 向上选择首个未失败组合；
+6. escalation 链耗尽 → `lead_only`，不猜未声明第三路径；
+7. `partial` 可记录用于审计，但不参与自动 downshift。
 
-1. **禁止牺牲性低价试错。** 明显 gap 不先跑一次低阶 Worker 来证明不足；
-2. **直接评估最低足够高阶层。** Luna + 高歧义跨模块 race 可直接选 Sol；
-3. **高阶 Worker 窄而贵。** 只交付真正需要高级能力的子问题；
-4. **默认 1 个高级 Worker。** 只有独立验证价值明显时才增加；
-5. **深度失败与能力失败分开。** 同模型方向正确但证据不足可提高 effort；无法闭合非局部因果链应升级 model tier；
-6. **精确绑定仍是硬要求。** 不能证明目标 model + effort 时 `lead_only`。
+因此历史证据可以证明某类安全任务长期可用更便宜路线，但不能自动降低 high-risk、不可验证或 architecture 的跨 tier 安全边界。
 
-### Max 跨层 effort floor
+记录 verified pass 示例：
 
-如果 Lead 已使用当前层 `max`，仍需向上一层：
+```bash
+python3 scripts/route_advisor.py record \
+  --project-root "$PWD" \
+  --task-family cross-module-race \
+  --task-kind debug \
+  --task-scope bounded \
+  --reasoning-depth deep \
+  --verifiability yes \
+  --failure-cost medium \
+  --context-volume medium \
+  --model gpt-5.6-sol \
+  --effort high \
+  --outcome verified_pass \
+  --verification-summary "targeted race regression passed" \
+  --identity-verified \
+  --route-binding installed_profile
+```
+
+只有 exact model + effort identity 已验证、Lead 已执行与任务相关的验收并采纳结果时才记录 verified pass；verified fail 也必须来自明确验证证据，而不是“感觉回答不好”。
+
+## 7. Max 跨层 effort floor
+
+当前层已经 `max` 仍需向上一层：
 
 ```text
 worker_reasoning_effort >= medium
@@ -115,36 +156,30 @@ Luna max → Sol low
 Sol max  → Astra low
 ```
 
-当前 bundled Sol/Astra profiles 从 `high` 起，因此 installed-profile 路径自然满足；若未来 live spawn/新 profile 暴露更低 effort，仍需遵守此下限。
+当前 bundled Sol/Astra profiles 从 `high` 起，天然满足。
 
-若 Lead 不是 `max`，继续按最低足够 effort 选择，但明显 capability gap 不应靠过低 reasoning 抵消升级价值。
-
-## 6. Retry
+## 8. Retry
 
 每个子任务最多 2 attempt：
 
 - 深度不足：同模型提高 effort；
 - capability 不足：升级模型；
-- 环境、权限、歧义、packet 或上下文问题：先修原因再 fresh retry；
+- 环境、权限、歧义、packet、Advisor 或上下文问题：先修原因再 fresh retry；
 - retry 前 stop/close 旧 attempt，再用新 `task_id`；
-- 禁止从 Luna low 一路失败到 Astra；
+- 禁止机械地从 Luna low 一路失败到 Astra；
 - 明显 gap 不浪费第一个低价 attempt。
 
-## 7. 精确绑定与 Sol runtime ID
+## 9. 精确绑定
 
-| 模型 | 能力层级 | 新版 bundled profile |
-| --- | --- | --- |
-| Luna | `luna` | `luna_low/medium/high/xhigh/max` |
-| `gpt-5.6-sol` | `sol` | `sol_high/xhigh` |
-| Astra | `astra` | `astra_high/xhigh/max` |
+| 模型 | bundled profiles |
+| --- | --- |
+| Luna | `luna_low/medium/high/xhigh/max` |
+| `gpt-5.6-sol` | `sol_high/xhigh` |
+| Astra | `astra_high/xhigh/max` |
 
-Sol 自动 Worker canonical runtime ID 是 `gpt-5.6-sol`。`gpt-5.6` 仅作为公开 API alias，不用于自动 installed profile / RoutePlan / spawn。
+Sol canonical runtime ID 是 `gpt-5.6-sol`。`gpt-5.6` 仅是公开 API alias，不用于自动 installed profile / RoutePlan / spawn。
 
-Terra profiles 自 v2.4.1 起不再随本 Skill 安装；旧 RoutePlan 中 Terra 只保留解析兼容。
-
-未预装组合只有在 live spawn schema 明确支持并验证 model + effort 时才允许。
-
-无法证明精确路由时：
+未预装组合只有 live spawn schema 明确支持并验证 exact model + effort 时才允许。无法证明时：
 
 ```text
 on_route_rejected = lead_only
@@ -152,47 +187,8 @@ on_route_rejected = lead_only
 
 不得静默继承 Lead 模型。
 
-## 8. RoutePlan 2.1
+## 10. RoutePlan / 并发 / 用户覆盖
 
-新 RoutePlan 继续使用 schema `2.1`：
+新计划继续使用 RoutePlan 2.1，记录 Lead model/effort、Worker `minimum_capability` 和 gap reason；历史 downshift 后按 Advisor 最终最低能力生成计划，并可附简短 `calibration_basis` 供审计。
 
-- 根级：`lead_model`、`lead_reasoning_effort`；
-- Worker：`minimum_capability`；
-- 最低能力高于已知 Lead tier 时记录 `capability_gap_reason`；
-- Worker model tier 不得低于 `minimum_capability`；
-- `route_direction` 由 Lead/Worker 推导为 `up / down / same`。
-
-v2.4.1 新计划的 `minimum_capability` 应只使用 `luna / sol / astra`。validator 保留 Terra legacy 解析，不代表自动路由仍可选择 Terra。
-
-## 9. 用户覆盖
-
-用户本轮明确模型/effort 要求优先。记录：
-
-- `user_model_override = true`
-- `override_source = "user"`
-- `override_reason`
-
-长期 `AGENTS.md` 授权不等于允许静默改变路由模式。
-
-## 10. 并发
-
-公开配置：
-
-```toml
-[agents]
-max_concurrent_threads_per_session = N
-```
-
-本 Skill：
-
-- 默认单波最多 3 Worker；
-- Codex 显式配置 1/2 时同步收紧；
-- 设置 >3 不自动放宽；
-- 一个 Worker 足够时只创建一个；
-- 同波禁止重叠写入；
-- capability-gap 默认先创建 1 个最低足够高级 Worker；
-- 同波等待所有仍必要 Worker 后统一 synthesis；完成后 close。
-
-```text
-effective_wave_limit = min(3, configured_subagent_limit_if_known)
-```
+用户本轮明确 model/effort 要求优先。默认单波最多 3 Worker；Codex 显式配置 1/2 时同步收紧，设置 >3 不自动放宽。同波禁止重叠写入，一个 Worker 足够时只创建一个。
