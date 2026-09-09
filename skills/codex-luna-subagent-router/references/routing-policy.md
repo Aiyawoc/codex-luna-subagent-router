@@ -27,7 +27,7 @@ gpt-5.6-luna  →  gpt-5.6-sol  →  gpt-6-astra
 luna < sol < astra
 ```
 
-Terra 不进入新自动路由；validator 仅为旧 RoutePlan 保留 legacy 解析。
+Terra 不再进入新自动路由；validator 仅为旧 RoutePlan 保留 legacy 解析。
 
 ## 3. Adaptive Capability Gap Gate
 
