@@ -1,36 +1,29 @@
 # GPT-6 Astra 按需校准
 
-仅当当前 Lead 是 `gpt-6-astra`，或当前计划选择 Astra Worker 时读取。本文件不要作为所有模型的常驻指令。
+只在 Astra Lead/Worker 时读取，不作为所有模型常驻上下文。官方 Model Guidance 指出 Astra 可能比工作流期望更少委派，建议明确何时和多少工作交给 SubAgent；以下按本项目成本目标应用，而不机械追求并行。
 
-依据：OpenAI 官方 GPT-6 Astra Model Guidance，以及 Eric Provencher 的《Rethinking skills and prompts for GPT-6 Astra》。两者共同强调：Astra 的指令遵循更强，因此旧模型时代的冗长脚手架、重复验证和过硬审批边界可能反而降低效果与增加 token。
+## Astra Lead（包括 high）
 
-## Lead 为 Astra
+多目标先列全部可独立下放候选，使用 route_advisor.py plan 统一评估。普通实现/扫描用 Luna 是正常向下路由；高歧义跨模块 debug/因果分析选 Sol，不能把所有 Worker 都标签化为 Luna。
 
-- **偏向完成，而不是过早停下。** 从用户请求和上下文推断常规细节；只有缺失信息会实质改变结果时才提问。除非用户明确设置 review checkpoint，或下一步是破坏性/不可逆操作，否则继续到用户定义的完成标准。
-- **显式考虑向下委派，但仍服从成本门。** Astra 可能比预期更少使用 SubAgent。遇到大量扫描、整理、窄范围实现或独立验证时，主动比较廉价 Worker 与 Astra Lead 自行完成的预期总成本；没有净收益就不要委派。
-- **不要过度测试。** 小型、可逆、低影响修改只做与改动直接相关的验证。相关检查通过后，只有新失败、新改动或未解决风险才扩大或重复测试；不要写与实现同构、仅为形式存在的测试。
-- **不要预读所有文档。** 先读取目标直接相关的文件和调用路径；只有影响范围不清楚时才扩大搜索。Skill references 也按根 `SKILL.md` 的渐进式披露规则读取。
-- **边界要解释清楚。** 如果本 Skill 的硬规则导致暂停、`lead_only` 或需要用户确认，简短指出触发的是哪条规则，区分 Skill 明确要求与模型自己的判断。
-- **输出保持紧凑。** Worker reply 是证据，不是最终用户文案；去重后只保留最终结果、必要证据和真正影响用户的路由/风险信息，不转贴 Agent 日志或重复回复。
+相同条件的两个 bounded 任务应按相同规则分配。共享上下文的小任务可合并给一个 Worker；独立且有净收益可同波安排 2～3 个，再 wait。不要为了占满容量创建 Worker，也不要把一个高级 Worker 的升级默认值误套到向下委派。
+
+昂贵 Lead 不为保持忙碌而亲自做另一个同类廉价任务。确有关键路径、不可交接上下文、权限或副作用边界时留在 Lead 并给理由。等待期间可做整合准备与关键判断，不重复执行已派任务。
+
+持续推进到用户要求的完成标准，不在第一版后无故停下。只对实质影响范围/权限/验收的歧义提问；破坏性或不可逆步骤保留必要确认。
+
+针对性验证足够时不扩大测试；不要写仅复述实现的形式测试。文档和源码按需读取，不先读整仓。最终输出紧凑，合并证据，不转贴 Worker 回复。
+
+conservative 下使用 begin/finalize/stats；日志失败不能阻止及时关闭 Worker。未知 model/effort 不冒充已验证身份。
 
 ## Astra Worker
 
-Astra Worker 仍是叶子 Worker，并遵循 `task-packet.md` 的公共通信契约：
+仍是叶子，只完成当前目标、不创建下级、不改模型/权限。遵循 task-packet.md 公共通信协议：正常空格、人类可读、简洁有效，约 200 词软预算，空 section 省略、原始日志只保留必要短摘录。不要另定义一套模板。
 
-- 只完成当前 task packet 的目标，不扩展到新的独立项目；
-- 不创建 SubAgent；
-- 使用工具读取需要的资源，不要求 Lead 复制整仓或长历史；
-- 完成验收所需的验证后停止，不追加无关测试；
-- Agent 间消息与最终回答都按人类可读标准书写，单词和数字之间使用正常空格；
-- 回传保持简洁，只包含 decision-useful 的结果与必要证据；空的可选 section 不输出，原始日志只保留最小必要摘录。
+## 依据
 
-不要在 Astra 专属文件重复定义另一套结果模板；`TASK_ACK / STATUS / RESULT`、软长度预算和可选 section 统一由公共 Worker contract 管理。
+- https://developers.openai.com/api/docs/guides/latest-model
+- https://learn.chatgpt.com/docs/agent-configuration/subagents
+- Eric Provencher, Rethinking skills and prompts for GPT-6 Astra（既有研究依据）：https://x.com/pvncher/status/2095991462416490862
 
-## 指令优先级
-
-用户本轮明确目标与边界优先于本 Skill 的默认偏好；仓库的真实安全/权限边界与平台限制仍必须遵守。不要因为历史 Skill 或 AGENTS 中较泛的旧规则而覆盖用户最新的明确要求。
-
-## Sources
-
-- OpenAI Model Guidance: https://developers.openai.com/api/docs/guides/latest-model
-- Eric Provencher, “Rethinking skills and prompts for GPT-6 Astra”: https://x.com/pvncher/status/2095991462416490862
+官方通用递归派遣示例不覆盖本项目 Worker 禁止下级的边界。新版真实模型行为仍需实机验收，规则测试不等于自然触发率保证。

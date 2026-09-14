@@ -2,223 +2,88 @@
 
 [简体中文](README.md) | English
 
-An Agent Skill for Codex / ChatGPT desktop Code workflows. Its goal is to delegate work to the cheapest SubAgent configuration that can still complete the task reliably.
+Code version: **2.5.1**. Keep the user's Lead model unchanged and delegate only when a bounded Worker provides meaningful expected-cost or verification value.
 
-Current version: **2.5.0**
+## Two routing strategies
 
-## Routing modes
+| Property | luna_only | adaptive |
+|---|---|---|
+| Goal | Maximum economy and predictable automatic Worker tier | Cost-aware capability routing |
+| Workers | Luna only | Luna → Sol → Astra |
+| Difficult work | Lead takes over when Luna is insufficient | Localized upward delegation when needed |
+| Ordinary work | Luna or Lead | Expensive Leads can delegate down to Luna |
+| Calibration | Off | Optional conservative; absent means off |
 
-| Characteristic | `luna_only` | `adaptive` |
-| --- | --- | --- |
-| Positioning | Maximum economy | Three-tier routing + deterministic advisor + optional evidence calibration |
-| Automatic Worker models | `gpt-5.6-luna` only | Luna / `gpt-5.6-sol` / Astra |
-| Capability ladder | Luna | Luna → Sol → Astra |
-| Relative routing | Luna only; hard work stays with Lead | Down-route cheap work or up-route clear capability gaps |
+Canonical automatic models are gpt-5.6-luna, gpt-5.6-sol, and gpt-6-astra. Terra remains readable in historical plans, not a new automatic candidate. Do not use the unsuffixed Sol alias.
 
-### `luna_only`
+Ordinary implementation and read-heavy work normally use Luna. Ambiguous causal debugging and races require considering Sol; expert architecture review may require Astra. A max-effort Lead moving upward requires at least medium effort on the higher tier. Bundled Sol/Astra profiles start at high.
 
-Automatic Workers use Luna only, with `low / medium / high / xhigh / max`. If Luna is insufficient, the Lead keeps the task instead of automatically escalating.
+## 2.5.1: collection, observability and whole-workload planning
 
-### `adaptive` — three-tier routing
+Receipts: begin before actual spawn, verify, finalize, then close. Receipts freeze scope and route metadata; repeated identical finalization is idempotent. Unknown identity, environmental blocks, cancellation, early stops and material Lead rework are partial, never fabricated verified successes. Storage failure must not delay stopping a Worker.
 
-```text
-gpt-5.6-luna  →  gpt-5.6-sol  →  gpt-6-astra
-Economy           Mid-tier         Expert
+Scope: invoke the script by absolute path from the project working directory. Git roots are discovered automatically; pass --project-root for non-Git projects. Global installation does not mean global evidence. Old global records are not guessed into projects.
+
+Statistics: stats shows distributions, last recording time, pending receipts, legacy/invalid/duplicate rows, sparse buckets, available recommendations and sample gaps. Recommendations are not observed overrides or measured savings.
+
+Planning: plan all candidate siblings together. Similar tasks use consistent classifications. Shared-context tasks can batch into one Worker; worthwhile independent tasks can use two or three Workers in the same wave. An expensive Lead should not repeat a delegated sibling merely to stay busy. Retained work needs a critical-path, context, permission or side-effect reason. Dependencies and read/write conflicts serialize work. Neither full concurrency nor model diversity is a quota.
+
+## Inspect outcomes
+
+```bash
+python3 /path/to/skill/scripts/route_advisor.py stats
+python3 /path/to/skill/scripts/route_advisor.py stats --json
+python3 /path/to/skill/scripts/route_advisor.py stats --current-scope --json
+python3 /path/to/skill/scripts/route_advisor.py --global-scope stats --json
 ```
 
-**Terra is not part of new automatic routing.** Ordinary scans/read-heavy synthesis stay on Luna; high-ambiguity multi-step debugging, cross-module causality, race/concurrency/lifecycle/ordering and competing hypotheses use Sol; architecture-level ambiguity with high failure cost may use Astra.
+Default: ${CODEX_HOME:-~/.codex}/state/codex-luna-subagent-router/outcomes.jsonl. Override with --registry or CODEX_LUNA_ROUTER_REGISTRY. Back up the adjacent outcomes.jsonl.receipts.jsonl too.
 
-File count alone does not trigger an upgrade. A 100+ file read-only scan normally remains on Luna at an appropriate reasoning level unless it also requires non-local causal reasoning or carries high failure cost.
+This is a local protocol, not an engine hook or background collector. Workers that never call begin cannot be automatically counted. Runtime collection coverage still needs real-use acceptance.
 
-## Capability Gap and upward routing
+## Conservative history
 
-Adaptive checks capability before `lead_only`:
+Exact-family evidence uses the same scope, six axes, policy and 90-day window. Lower-effort candidates need two verified passes of their own; safe cross-tier candidates need three. High failure cost, unverifiable work and architecture cannot cross-tier downshift.
 
-```text
-luna < sol < astra
+Related-family evidence requires five distinct receipts from at least two families, the same scope/axes/policy, and safe verifiable work. It can lower effort by only one step on the same model, never cross tiers. Failures veto reuse; partials and unidentified work do not train. Legacy records without receipt IDs cannot contribute to related-family evidence. These are conservative heuristics, not statistical guarantees; do not manufacture sample runs.
+
+## Plan work
+
+```bash
+python3 /path/to/skill/scripts/route_advisor.py plan /path/to/work-plan.json \
+  --lead-model gpt-6-astra --lead-effort high --open-workers 0
 ```
 
-Examples:
+Use examples/work-plan.json. Supply the actual open-thread count, not an assumed zero. The planner does not spawn anything; authorization, exact-route preflight and real free capacity remain required. Future waves are estimates, not completed prerequisites.
 
-```text
-Luna Lead + ordinary read-heavy scan        → Luna
-Luna Max + high-ambiguity cross-module race → Sol high / xhigh
-Sol Lead + mechanical scan                  → Luna
-Sol Max + expert high-cost review           → Astra high / xhigh / max
-Astra Lead + mechanical check               → Luna
-```
+## Full installation or upgrade
 
-`Luna max` is still Luna-tier. A clear capability gap does not burn a cheaper probe merely to prove the lower model is insufficient.
-
-If a Lead is already at `max` and still moves up one model tier, the next Worker must use at least `medium` reasoning. Bundled Sol/Astra profiles already start at `high`.
-
-## v2.5.0 — Evidence-Calibrated Routing
-
-v2.5.0 upgrades Adaptive from a high-quality static router to:
-
-```text
-Lead anonymous classification
-        ↓
-local Deterministic Advisor
-        ↓
-three-tier static policy
-        ↓
-[optional] verified outcome history
-        ↓
-Lead / Luna / Sol / Astra
-```
-
-### Deterministic Advisor
-
-New `scripts/route_advisor.py` receives a non-sensitive `task_family` and six categorical axes:
-
-```text
-task_kind
-task_scope
-reasoning_depth
-verifiability
-failure_cost
-context_volume
-```
-
-It performs **zero model calls and zero network calls** and returns `lead_only | delegate`, model, effort, bundled profile, minimum capability, route direction, static rule, history basis and selection reason.
-
-This reduces reliance on a weaker Lead subjectively deciding whether it should ask a stronger model for help. If the Advisor is unavailable or invalid, the Skill falls back to the documented static three-tier policy; it does not escalate to a more expensive model to hide a routing-tool failure.
-
-### Verified Outcome Registry
-
-Adaptive can set:
-
-```json
-"evidence_calibration": "off | conservative"
-```
-
-Missing means `off`, so upgrading an old v2.4.1 routing file does not silently enable history-based behavior.
-
-`conservative` stores only controlled metadata after an exact route was verified and the Lead performed task-relevant verification and adopted the result. Default registry:
-
-```text
-$CODEX_HOME/state/codex-luna-subagent-router/outcomes.jsonl
-```
-
-Project history uses only a SHA-256-derived scope fingerprint; it does not store the real project path. The registry does **not** store prompts, user text, Worker replies, source code, file contents, full logs, account data or secrets.
-
-Conservative history rules:
-
-- Lower effort within the same model requires at least **2** matching `verified_pass` records and no verified failure for that combo.
-- Cross-tier downshift requires at least **3** matching passes and is allowed only for `verifiability=yes`, non-high failure cost, non-architecture tasks.
-- Any verified failure blocks that cheaper combo.
-- If the static preferred combo has a verified failure, the advisor may perform bounded escalation along bundled routes.
-- `partial` records never cause automatic downshift.
-- Exhausted automatic escalation returns `lead_only` instead of inventing an undeclared route.
-
-The router can therefore learn that a certain safe task family is consistently solvable by Luna without allowing a few successes to weaken high-risk safety boundaries.
-
-See `docs/v2.5.0-evidence-calibrated-routing.md`.
-
-## Why Terra remains retired
-
-The automatic ladder remains Luna = extreme economy, Sol = middle capability, Astra = expert capability. Terra is parsed only in historical RoutePlan 2.0/2.1 records for compatibility; new routing does **not** select, install, or recommend Terra.
-
-On upgrade, `install.sh` removes the two Terra profiles historically managed by this Skill while leaving unrelated user profiles untouched.
-
-## RoutePlan
-
-New plans continue to use schema **2.1** and record root Lead model/effort, Worker `minimum_capability`, capability-gap reason when routing upward, and derived `up / down / same`. Evidence-based downshifts may include a short `calibration_basis` for audit.
-
-## Cost guardrails
-
-- The main Agent keeps the user's selected model and reasoning level.
-- Adaptive checks capability gap, then calls the deterministic Advisor.
-- Clear capability gaps do not use sacrificial cheap probes.
-- Default to one narrow stronger Worker when escalation is needed.
-- At most two attempts per subtask.
-- At most three Workers per wave by default; lower Codex concurrency settings tighten that limit.
-- Task packets use `minimal_sufficient`; Worker results use `concise_sufficient`.
-- If exact model + reasoning cannot be fixed, the Lead keeps the task; no silent substitution.
-- History is used only in `conservative` mode and cannot cross-tier downshift high-risk, unverifiable, or architecture work.
-
-## Agent communication and lifecycle
-
-Since v2.3, Agent messages are human-readable and concise; Worker replies default to `TASK_ACK / STATUS / RESULT`; the Lead deduplicates evidence instead of pasting logs; low-value Workers can be stopped and closed early; retries close the old attempt before creating a fresh task ID.
-
-## Sol runtime ID
-
-Automatic Sol Workers use the explicit runtime ID:
-
-```text
-gpt-5.6-sol
-```
-
-The unsuffixed `gpt-5.6` alias is not used for automatic SubAgent routing.
-
-## Install / upgrade
-
-Recommended Codex install:
-
-```text
-Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.0/skills/codex-luna-subagent-router
-
-If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
-
-After installation or upgrade, read references/codex-guided-install.md and continue the guided setup/migration.
-```
-
-Manual global install:
+From a complete version checkout:
 
 ```bash
 ./skills/codex-luna-subagent-router/install.sh --global
-```
-
-Project install:
-
-```bash
+# Or:
 ./skills/codex-luna-subagent-router/install.sh --project /path/to/repository
 ```
 
-## Guided setup
+Codex skill-installer may install the complete published Skill directory, followed by references/codex-guided-install.md. Never replace only SKILL.md or one script: route_advisor.py now depends on outcome_store.py and plan_work.py. Refresh bundled profiles, preserving user configuration and custom profiles. Historical managed Terra profiles are removed.
 
-The guided flow now asks five things:
+The guide keeps five questions: structured input, standing delegation, routing mode, SubAgent concurrency, and conservative/off calibration. Preserve existing choices; absent calibration remains off. Do not remove outcome files during upgrade.
 
-1. Experimental `default_mode_request_user_input`.
-2. Standing delegation authorization: global / project / none.
-3. Routing mode: `luna_only` or `adaptive`.
-4. Maximum concurrent SubAgents excluding the primary: keep current/default, `3` recommended, or another integer `>= 1`.
-5. Adaptive Verified Outcome Calibration: `conservative` recommended, or `off`.
+## Stable boundaries and testing
 
-Enable user-level conservative calibration with:
+Two attempts per subtask; no sacrificial low-tier probes for clear gaps. At most min(3, explicit Codex limit) Workers per wave, reduced by occupied slots. Workers remain leaves and cannot expand authority or perform final irreversible actions. Fresh context, TASK_ACK, concise human-readable results, deduplicated synthesis and early stop/close remain.
 
-```bash
-python3 scripts/configure_evidence_calibration.py \
-  --scope user \
-  --mode conservative
-```
-
-For project scope add `--scope project --project-root /path/to/repo`.
-
-## Bundled profiles
-
-| Model | Profiles |
-| --- | --- |
-| Luna | `luna_low`, `luna_medium`, `luna_high`, `luna_xhigh`, `luna_max` |
-| `gpt-5.6-sol` | `sol_high`, `sol_xhigh` |
-| GPT-6 Astra | `astra_high`, `astra_xhigh`, `astra_max` |
-
-## Validate
+RoutePlan remains 2.1. Luna profiles: low/medium/high/xhigh/max; Sol: high/xhigh; Astra: high/xhigh/max.
 
 ```bash
 cd skills/codex-luna-subagent-router
 python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
 python3 -m unittest discover -s tests -v
-python3 scripts/route_advisor.py recommend --help
 ```
 
-CI also verifies `MANIFEST.sha256`.
+CI checks the Manifest. Script tests do not establish real Codex delegation rates or runtime model identity. See references/outcome-collection.md, references/work-planning.md and docs/v2.5.1-outcome-collection-observability.md.
 
-Design references:
+Pinned install source: https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.1/skills/codex-luna-subagent-router
 
-- https://learn.chatgpt.com/zh-Hans/docs/agent-configuration/subagents?surface=app
-- https://developers.openai.com/api/docs/guides/latest-model
-- https://developers.openai.com/api/docs/models/gpt-5.6-sol
-- https://developers.openai.com/codex/config-reference
+Replanning accepts `in_progress_task_ids` to avoid recreating running tasks. Retained Lead ownership is checked alongside Worker read/write ownership. Batch only tasks with the same prerequisites; runtime capacity is a ceiling, not a quota.

@@ -7,30 +7,53 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONUTF8: "1"
+
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.12"]
+        include:
+          - os: ubuntu-latest
+            python: "3.13"
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-
+          python-version: ${{ matrix.python }}
       - name: Validate example route plan
         working-directory: skills/codex-luna-subagent-router
-        run: python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
-
-      - name: Run unit tests
+        run: python scripts/validate_route_plan.py examples/route-plan.valid.json --notice
+      - name: Run unit and integration tests
         working-directory: skills/codex-luna-subagent-router
-        run: python3 -m unittest discover -s tests -v
-
-      - name: Verify manifest
-        run: sha256sum -c MANIFEST.sha256
-
+        run: python -m unittest discover -s tests -v
+      - name: Verify complete manifest
+        shell: python
+        run: |
+          import hashlib
+          import subprocess
+          from pathlib import Path
+          lines = Path("MANIFEST.sha256").read_text(encoding="utf-8").splitlines()
+          entries = [line.split("  ", 1) for line in lines]
+          paths = [path for digest, path in entries]
+          tracked = set(subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")) - {"", "MANIFEST.sha256"}
+          assert len(paths) == len(set(paths)), "duplicate manifest paths"
+          assert set(paths) == tracked, "manifest does not cover exactly all tracked files"
+          for digest, path in entries:
+              assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == digest, path
+          print(f"Verified {len(entries)} tracked files")
       - name: Validate Agent Skill layout when supported
+        if: runner.os == 'Linux' && matrix.python == '3.12'
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
