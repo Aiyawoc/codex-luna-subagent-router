@@ -117,7 +117,7 @@ class GuidedInstallTests(unittest.TestCase):
         target = Path(result["routing_config"]["path"])
         self.assertEqual(
             target,
-            self.project / ".codex" / "codex-luna-subagent-router" / "routing.json",
+            self.project.resolve() / ".codex" / "codex-luna-subagent-router" / "routing.json",
         )
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["routing_mode"], "adaptive")
 
