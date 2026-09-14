@@ -33,3 +33,7 @@ conservative 模式在 close 前插入 finalize：有可信观察身份并通过
 ## 叶子边界
 
 Worker 不创建 SubAgent，不改模型/effort，不扩大权限，不执行最终不可逆动作。派遣前授权、精确 model+effort、同波写入隔离和最小上下文要求不因采集而放宽。
+
+## 可选 token 用量
+
+仅 token_accounting=on 时使用 SubAgent hooks 或明确子 ID 的手动采集。SubagentStop 不等于已取得最终账单；若尾部未刷盘先 partial，finalize/close 后复核。用量以 child 线程生命周期累计，steering 更新不重复加总，新 retry 单独计数。调用失败继续 stop/close；不得请求新轮次来补记 tokens。只展示可信总量/输入/缓存命中输入/输出，k/m/b；原始整数见 stats --json。详情按需读 token-accounting.md。

@@ -129,15 +129,19 @@ class ReleaseIntegrationTests(unittest.TestCase):
         registry.parent.mkdir(parents=True)
         registry.write_text('{"synthetic":"untouched"}\n')
         env = dict(os.environ, CODEX_SKILLS_DIR=str(skills), CODEX_AGENTS_DIR=str(agents))
-        before = config.read_bytes(), registry.read_bytes()
+        usage = registry.with_name('usage.jsonl')
+        usage.write_text('{"synthetic_usage":"untouched"}\n')
+        hooks = home / 'hooks.json'
+        hooks.write_text('{"hooks":{}}\n')
+        before = config.read_bytes(), registry.read_bytes(), usage.read_bytes(), hooks.read_bytes()
         for _ in range(2):
             result = subprocess.run(['bash', str(ROOT / 'install.sh'), '--global'], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
         installed = skills / 'codex-luna-subagent-router'
-        for file in ('route_advisor.py', 'outcome_store.py', 'plan_work.py'):
+        for file in ('route_advisor.py', 'outcome_store.py', 'plan_work.py', 'token_usage.py', 'usage_reader.py', 'configure_token_accounting.py'):
             self.assertEqual((installed / 'scripts' / file).read_bytes(), (ROOT / 'scripts' / file).read_bytes())
-        self.assertEqual((installed / 'VERSION').read_text().strip(), '2.5.1')
-        self.assertEqual((config.read_bytes(), registry.read_bytes()), before)
+        self.assertEqual((installed / 'VERSION').read_text().strip(), '2.5.2')
+        self.assertEqual((config.read_bytes(), registry.read_bytes(), usage.read_bytes(), hooks.read_bytes()), before)
         self.assertTrue((agents / 'my-custom.toml').exists())
         self.assertFalse((agents / 'terra-medium.toml').exists())
 

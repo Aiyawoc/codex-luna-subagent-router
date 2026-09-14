@@ -288,7 +288,8 @@
         "delegation_scope",
         "routing_mode",
         "max_concurrent_subagents",
-        "evidence_calibration"
+        "evidence_calibration",
+        "token_accounting"
       ],
       "expected_workers": 0
     },
@@ -375,6 +376,34 @@
       "id": "replan-running-worker",
       "prompt": "第一个 Worker 仍运行，重新规划其依赖任务。",
       "expected": "mark_in_progress_and_do_not_respawn"
+    },
+    {
+      "id": "token-four-metrics",
+      "prompt": "子 Agent 完成后显示 token 总量、输入、缓存命中和输出。",
+      "expected": "trusted_usage_only_si_units",
+      "forbid": [
+        "worker_self_estimate",
+        "double_count_cached_input",
+        "unknown_as_zero"
+      ]
+    },
+    {
+      "id": "token-hooks-trust",
+      "prompt": "安装 token 自动采集。",
+      "required": [
+        "check_client_hook_support",
+        "user_hook_trust",
+        "preserve_existing_hooks"
+      ],
+      "forbid": [
+        "bypass_hook_trust",
+        "request_extra_worker_turn"
+      ]
+    },
+    {
+      "id": "token-failed-worker",
+      "prompt": "Worker 被返工且有可信用量。",
+      "expected": "keep_partial_outcome_and_independent_usage"
     }
   ]
 }

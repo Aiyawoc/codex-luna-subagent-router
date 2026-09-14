@@ -69,3 +69,7 @@ B 仅允许同 scope/六轴/policy，>=5 个唯一回执、>=2 个不同 family 
 ## 隐私和局限
 
 只保存受控元数据、scope hash 和最长 200 字符单行摘要。摘要和 task_family 也不能包含密钥、账号、客户/项目名、prompt、源码或日志正文；格式校验不是语义脱敏。旧坏行只报告和排除，不静默改写原文件。
+
+## 与 token 用量关联
+
+可独立开启 token_accounting=on。token hooks 不自动替代 outcome 的人工/Lead 验收；用 token_usage.py attach 将真实 child/parent ID 关联 receipt_id。finalize 可带 --usage-agent-id / --usage-parent-id，复核已记录用量。usage 失败不撤销已完成 outcome，partial 任务的 token 也不丢弃。账本为同目录 usage.jsonl，不把旧 outcome 补成 0。详见 token-accounting.md。
