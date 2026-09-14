@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "task_id": "request-work-one",
+      "task_family": "bounded-implementation",
+      "axes": {"task_kind": "implementation", "task_scope": "bounded", "reasoning_depth": "medium", "verifiability": "yes", "failure_cost": "medium", "context_volume": "medium"},
+      "write_paths": ["src/module_a.py"],
+      "read_paths": ["specs/module_a.md"]
+    },
+    {
+      "task_id": "request-work-two",
+      "task_family": "bounded-implementation",
+      "axes": {"task_kind": "implementation", "task_scope": "bounded", "reasoning_depth": "medium", "verifiability": "yes", "failure_cost": "medium", "context_volume": "medium"},
+      "write_paths": ["src/module_b.py"],
+      "read_paths": ["specs/module_b.md"]
+    }
+  ]
+}

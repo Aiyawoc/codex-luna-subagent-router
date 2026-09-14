@@ -2,236 +2,90 @@
 
 简体中文 | [English](README.en.md)
 
-一个面向 Codex / ChatGPT 桌面端 Code 工作流的 Agent Skill。目标不是尽量多创建 SubAgent，而是：
+当前代码版本：**2.5.1**。保持用户当前主模型，把有明确净收益的工作交给最低足够的 model + reasoning；不是尽量多创建 Agent。
 
-> **让任意主模型把合适的工作交给“最便宜且足够完成任务”的 SubAgent，从而降低整个任务的预期总成本。**
+## 两种策略
 
-当前版本：**2.5.0**
+| 特点 | luna_only | adaptive |
+|---|---|---|
+| 定位 | 极致经济、自动子模型边界可预测 | 成本优先的综合能力路由 |
+| 自动 Worker | 只用 Luna | Luna → Sol → Astra |
+| 难题 | Luna 不足由当前 Lead 接管 | 必要时局部向上升级 |
+| 普通任务 | Luna 或 Lead | 昂贵 Lead 可以向下使用 Luna |
+| 历史校准 | 不启用 | 可选 conservative，缺失为 off |
 
-## 两种路由模式
+三层对应 `gpt-5.6-luna`（经济）、`gpt-5.6-sol`（中等）、`gpt-6-astra`（专家）。Terra 不进入新自动路由，旧 RoutePlan 保留解析兼容。Sol 不使用无后缀 alias。
 
-两种模式都不会切换主 Agent 的模型或推理强度。
+普通局部实现、机械检查、scan/read-heavy 优先 Luna；高歧义调试、跨模块因果与竞态选 Sol；专家级架构反证再评估 Astra。Luna max 不等于 Sol，当前层 max 向上时至少上层 medium；当前 Sol/Astra profiles 从 high 起。
 
-| 特点 | `luna_only` | `adaptive` |
-| --- | --- | --- |
-| 核心定位 | 极致经济、成本边界最可预测 | 三层能力路由 + 确定性 Advisor + 可选证据校准 |
-| 自动 Worker 模型 | 仅 `gpt-5.6-luna` | Luna / `gpt-5.6-sol` / Astra |
-| 能力层级 | Luna | Luna → Sol → Astra |
-| 相对 Lead | 只向 Luna 下放；Luna 不足时 Lead 接管 | 可向下省成本，也可在 capability gap 明显时向上升级 |
-| 更适合 | 严格预算控制 | 希望低阶 Lead 能可靠调用更高阶专家 Worker，并逐步从真实验证结果中校准 |
+## v2.5.1：采集、统计与整组规划
 
-### `luna_only`
+**回执采集**：conservative 下 begin → 实际 Worker → Lead 验收 → finalize → close。派遣前固化 metadata 与 scope，结算幂等，pending 可检查。未知身份、环境阻塞、取消、early stop、Lead 实质返工只能 partial，不捏造 verified_pass。记录失败不能阻塞及时停止线程。
 
-- 自动 Worker 只使用 `gpt-5.6-luna`；
-- reasoning 可选 `low / medium / high / xhigh / max`；
-- Luna 不足时由主 Agent 自己完成，不自动创建 Sol/Astra。
+**项目识别**：在项目工作目录调用绝对路径脚本，自动识别 Git 根并保存 hash；非 Git 项目显式 `--project-root`。全局安装不等于全局 evidence。旧 global 记录原样保留，不自动猜测归属。
 
-### `adaptive` — 三层模型
+**统计**：stats 无需六轴，默认所有 scope，可筛项目。显示分布、最后写入、pending、旧/坏/重复记录、稀疏 bucket、可用建议和样本缺口。可用建议不等于已执行覆盖，不声称真实节省金额。
 
-```text
-gpt-5.6-luna  →  gpt-5.6-sol  →  gpt-6-astra
-经济              中等             专家
+**整组规划**：多个候选先 plan。相似任务统一分类；共享上下文可合并一个 Worker，独立且有净收益可同时派 2～3 个。昂贵 Lead 不为“保持忙碌”而亲自做另一份同类廉价工作；关键路径、不可交接上下文、权限或外部副作用可留在 Lead 并说明理由。依赖或读写冲突分波。不强制开满，也不强制出现 Sol/Astra。
+
+## 查看 outcome
+
+```bash
+python3 /path/to/skill/scripts/route_advisor.py stats
+python3 /path/to/skill/scripts/route_advisor.py stats --json
+python3 /path/to/skill/scripts/route_advisor.py stats --current-scope --json
+python3 /path/to/skill/scripts/route_advisor.py --global-scope stats --json
 ```
 
-**Terra 不再进入新自动路由。** 普通 scan/read-heavy/大量文件归纳优先 Luna；高歧义多步 debug、跨模块因果、race / concurrency / lifecycle / ordering、多竞争假设进入 Sol；架构级高歧义 + 高失败代价再评估 Astra。
+默认 `${CODEX_HOME:-~/.codex}/state/codex-luna-subagent-router/outcomes.jsonl`；`--registry` 或 `CODEX_LUNA_ROUTER_REGISTRY` 可覆盖。回执是旁边 `outcomes.jsonl.receipts.jsonl`，两者一起备份。
 
-文件数量本身不触发模型升级。扫描 100+ 文件但只做读取归纳，仍优先 Luna 合适 reasoning；只有同时出现非局部因果、高歧义或高失败代价时才升级 Sol。
+详见 [采集与统计](skills/codex-luna-subagent-router/references/outcome-collection.md)。工具没有后台 collector/引擎 hook，完全没有 begin 的 Worker 无法自动被发现；必须通过实机任务检查采集覆盖。
 
-## Capability Gap：低阶 Lead 向上路由
+## 证据校准
 
-Adaptive 在决定 `lead_only` 前先判断最低能力层级：
+Advisor 零额外模型/网络调用，根据六个离散分类轴选择候选。`evidence_calibration=conservative` 才使用本地历史；缺失/off 保留静态选择。
 
-```text
-luna < sol < astra
+A：同项目 scope、family、六轴、policy 和 90 天窗口；便宜组合自己 >=2 次成功可同模型降 effort，安全跨 tier >=3。高失败代价、不可验证和 architecture 禁止历史跨 tier 降档。
+
+B：同 scope/六轴/policy、>=5 个唯一回执、>=2 个 family，安全场景仅同模型下降一个 effort 档；不跨模型。partial 不训练，失败否决，旧无 ID 行不能贡献 B。这些是保守启发式，不是成功率统计保证；不主动凑样本。
+
+## 多任务示例
+
+```bash
+python3 /path/to/skill/scripts/route_advisor.py plan /path/to/work-plan.json \
+  --lead-model gpt-6-astra --lead-effort high --open-workers 0
 ```
 
-例如：
+使用 [输入模板](skills/codex-luna-subagent-router/examples/work-plan.json)。open-workers 需填实际仍打开线程数，不把默认 0 当事实。planner 不创建 Agent，输出 ready 候选后仍需权限、精确模型和空闲容量预检。详见 [任务规划](skills/codex-luna-subagent-router/references/work-planning.md)。
 
-```text
-Luna Lead + 普通 read-heavy scan        → Luna
-Luna Max + 高歧义跨模块 race            → Sol high / xhigh
-Sol Lead + 机械扫描                      → Luna
-Sol Max + 专家级高失败代价独立审查      → Astra high / xhigh / max
-Astra Lead + 机械检查                    → Luna
-```
+## 安装与全量升级
 
-`Luna max` 仍然只是 Luna tier；明显 capability gap 已确定时，不先浪费一次 Luna attempt 来“证明”Luna 不足。
-
-### Max 跨层 reasoning 下限
-
-当前层已经 `max` 仍需向上一层时：
-
-```text
-next_model_effort >= medium
-```
-
-当前 bundled Sol/Astra profiles 从 `high` 起，因此 installed-profile 路径天然满足。
-
-## v2.5.0：Evidence-Calibrated Routing
-
-v2.5.0 把 Adaptive 从“高质量静态规则”升级为：
-
-```text
-Lead 只做匿名分类
-        ↓
-本地 Deterministic Advisor
-        ↓
-三层静态策略
-        ↓
-[可选] Verified Outcome History
-        ↓
-Lead / Luna / Sol / Astra
-```
-
-### Deterministic Advisor
-
-新增 `scripts/route_advisor.py`。Lead 只需要为 bounded 子目标提供非敏感 `task_family` 和六个离散轴：
-
-```text
-task_kind
-task_scope
-reasoning_depth
-verifiability
-failure_cost
-context_volume
-```
-
-Advisor 本地运行，**零模型调用、零网络调用**，输出最终 `lead_only | delegate`、model、effort、profile、minimum capability、route direction 和选择理由。这样低阶 Lead 不需要自己自由解释“是否应该请更强模型”。
-
-如果 Advisor 不可用或输入无效，回退 `references/routing-policy.md` 的静态三层规则，不因为脚本故障升级更贵模型。
-
-### Verified Outcome Registry
-
-Adaptive 可选择：
-
-```json
-"evidence_calibration": "off | conservative"
-```
-
-缺失按 `off`，因此 v2.4.1 旧配置升级后不会自动改变历史行为。
-
-`conservative` 会把已经**验证并采纳**的 Worker 结果记录为受控 metadata：task family、六轴、model/effort、outcome、短 verification summary、route binding 和项目 scope hash。默认文件：
-
-```text
-$CODEX_HOME/state/codex-luna-subagent-router/outcomes.jsonl
-```
-
-Registry **不保存** prompt、用户正文、Worker 回复、源码、文件内容、完整日志、真实项目路径、账号或密钥。
-
-保守历史覆盖规则：
-
-- 同模型降低 effort：至少 **2 次**同类 `verified_pass`，且该组合无 `verified_fail`；
-- 跨 tier 降档：至少 **3 次** verified pass；仅允许 `verifiability=yes`、`failure_cost != high`、非 architecture；
-- 任一 verified failure 会阻止对应 cheaper combo；
-- 静态首选已 verified failure 时，可沿 bundled route 做 bounded escalation；
-- `partial` 可记录，但不参与自动 downshift；
-- 自动 escalation 链耗尽时回 `lead_only`，不猜未声明第三路径。
-
-这意味着 Router 可以逐步学会“某类任务其实 Luna 已经稳定够用”，但不会因为少量成功样本把高风险或不可验证任务自动降档。
-
-完整设计见 `docs/v2.5.0-evidence-calibrated-routing.md`。
-
-## 为什么仍然不恢复 Terra
-
-v2.5.0 的三层仍是：Luna = 极低成本，Sol = 中间能力层，Astra = 专家层。Terra 只保留旧 RoutePlan 2.0/2.1 解析兼容；**新 Skill 不会自动选择、安装或推荐 Terra**。
-
-升级时 `install.sh` 会移除本 Skill 历史托管的：
-
-```text
-terra-medium.toml
-terra-high.toml
-```
-
-不会删除其它用户自定义 profile。
-
-## RoutePlan
-
-新生成计划继续使用 schema **2.1**：
-
-- 根级：`lead_model` / `lead_reasoning_effort`；
-- Worker：`minimum_capability`；
-- 向上路由：`capability_gap_reason`；
-- notice 自动显示 `up / down / same`；
-- evidence downshift 后，可附简短 `calibration_basis` 供审计。
-
-## 核心成本规则
-
-- 主 Agent 保持用户当前模型和 reasoning；
-- Adaptive 先 Capability Gap，再调用确定性 Advisor；
-- 明显 capability gap 不做牺牲性低价 probe；
-- 默认只创建 1 个最低足够高级 Worker，并保持子目标“窄而贵”；
-- 每个子任务最多 2 attempt；
-- 默认每波最多 3 Worker；Codex 上限设为 1/2 时同步收紧；
-- task packet 使用 `minimal_sufficient`；Worker result 使用 `concise_sufficient`；
-- model + reasoning 无法精确固定时由 Lead 接管，禁止静默替换；
-- history 只在 `conservative` 下使用，并受高风险安全边界限制。
-
-## Agent 通信与生命周期
-
-v2.3 起：Agent 间消息保持正常空格和人类可读格式；Worker 默认只返回 `TASK_ACK / STATUS / RESULT`；结果默认约 `<= 200` 英文词或等量中文；Lead 去重综合；失去信息价值的 Worker early stop + close；retry 前 stop/close 旧 attempt，再 fresh 创建。
-
-## Sol runtime ID
-
-Sol 自动 Worker 必须使用：
-
-```text
-gpt-5.6-sol
-```
-
-不要用 `gpt-5.6` alias 做自动 SubAgent route。
-
-## 安装
-
-推荐由 Codex 使用 `$skill-installer`：
-
-```text
-Use $skill-installer to install or upgrade the Skill from:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.0/skills/codex-luna-subagent-router
-
-If an older version is already installed, replace the entire Skill package and refresh every bundled Agent profile from this release. Do not update only SKILL.md or selected files.
-
-After installation or upgrade, read references/codex-guided-install.md and continue the guided setup/migration.
-```
-
-手动：
+在已取得完整本版本 checkout 后：
 
 ```bash
 ./skills/codex-luna-subagent-router/install.sh --global
-```
-
-或：
-
-```bash
+# 或：
 ./skills/codex-luna-subagent-router/install.sh --project /path/to/repository
 ```
 
-## 引导配置
+推荐交给 Codex 安装：
 
-向导现在有五项：
-
-1. 是否开启实验性的 `default_mode_request_user_input`；
-2. 长期自动委派授权：全局 / 当前项目 / 不安装；
-3. 路由模式：`luna_only` / `adaptive`；
-4. 最大并发 SubAgent 数量（不含主 Agent）：保持当前/Codex 默认、`3`（推荐）或自定义 `>= 1`；
-5. Adaptive 的 Verified Outcome Calibration：`conservative`（推荐）/ `off`。
-
-启用 conservative：
-
-```bash
-python3 scripts/configure_evidence_calibration.py \
-  --scope user \
-  --mode conservative
+```text
+请使用 $skill-installer 全量安装或升级：
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.1/skills/codex-luna-subagent-router
+刷新所有随包 Agent profiles，并读取 references/codex-guided-install.md。
+保留已有 adaptive/conservative 选择、并发上限和 outcome/receipt 数据。
 ```
 
-项目级使用 `--scope project --project-root /path/to/repo`。
+**不要只替换 SKILL.md/单个脚本**：本版 route_advisor.py 依赖 outcome_store.py、plan_work.py。更新全部 bundled profiles；旧托管 Terra profiles 清理，自定义 profiles 保留。
 
-## 内置 profiles
+向导保持五项：结构化提问开关、全局/项目委派授权、luna_only/adaptive、最大 SubAgent 数、Adaptive 的 conservative/off。保留已有用户设置，不因升级重置校准；未知配置不静默覆盖。
 
-| 模型 | profiles |
-| --- | --- |
-| Luna | `luna_low`, `luna_medium`, `luna_high`, `luna_xhigh`, `luna_max` |
-| `gpt-5.6-sol` | `sol_high`, `sol_xhigh` |
-| GPT-6 Astra | `astra_high`, `astra_xhigh`, `astra_max` |
+## 不变的边界
+
+每子任务最多两次 attempt；明显能力差距不做牺牲性低价试跑；默认单波最多 min(3, Codex 显式上限)。Worker 是叶子，不继续派遣，不越权，不做最终不可逆操作。fresh 上下文、TASK_ACK、人类可读简洁回传、Lead 去重、early stop/close 继续生效。
+
+RoutePlan 继续 2.1。Luna profiles：low/medium/high/xhigh/max；Sol：high/xhigh；Astra：high/xhigh/max。
 
 ## 验证
 
@@ -241,21 +95,6 @@ python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
 python3 -m unittest discover -s tests -v
 ```
 
-Advisor：
+CI 校验 Manifest。脚本测试不等于 Codex 实机自然触发率，也不能证明实际 model/effort；metadata 只校验声明的一致性。
 
-```bash
-python3 scripts/route_advisor.py recommend --help
-python3 scripts/route_advisor.py record --help
-python3 scripts/route_advisor.py query --help
-```
-
-仓库 CI 还会校验 `MANIFEST.sha256`。
-
-## 设计依据
-
-- ChatGPT Learn — Subagents: https://learn.chatgpt.com/zh-Hans/docs/agent-configuration/subagents?surface=app
-- GPT-6 Astra model guidance: https://developers.openai.com/api/docs/guides/latest-model
-- GPT-5.6 Sol model: https://developers.openai.com/api/docs/models/gpt-5.6-sol
-- Codex Config Reference: https://developers.openai.com/codex/config-reference
-
-每个 SubAgent 都会独立消耗模型与工具 token，因此本 Skill 把是否委派、向上升级、继续运行、历史校准和结果长度都作为成本决策。
+研究依据：OpenAI Model Guidance 与 Subagents 官方文档；原 v2.5.0 的同类项目研究。设计见 docs/v2.5.1-outcome-collection-observability.md。

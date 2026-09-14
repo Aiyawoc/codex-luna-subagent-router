@@ -1,609 +1,372 @@
 #!/usr/bin/env python3
-"""Deterministic three-tier routing advice with conservative verified-outcome calibration."""
-
+"""Three-tier advice, receipt-based outcome collection and read-only statistics."""
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
-import re
+import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-POLICY_VERSION = "2026-09-09.v1"
-ROUTER_VERSION = "2.5.0"
-TTL_DAYS = 90
+# Also support importlib loading by the package's contract tests.
+SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+import outcome_store as store
 
-TASK_KINDS = (
-    "leaf",
-    "scan",
-    "implementation",
-    "debug",
-    "review",
-    "architecture",
-    "verification",
-    "research",
-    "other",
-)
-TASK_SCOPES = ("micro", "bounded", "workflow")
-DEPTHS = ("shallow", "medium", "deep")
-VERIFIABILITY = ("yes", "partial", "no")
-FAILURE_COSTS = ("low", "medium", "high")
-CONTEXT_VOLUMES = ("low", "medium", "high")
+POLICY_VERSION = store.POLICY_VERSION
+ROUTER_VERSION = store.ROUTER_VERSION
+TTL_DAYS = 90
+AdvisorError = store.StoreError
+TASK_KINDS = store.AXES["task_kind"]
+TASK_SCOPES = store.AXES["task_scope"]
+DEPTHS = store.AXES["reasoning_depth"]
+VERIFIABILITY = store.AXES["verifiability"]
+FAILURE_COSTS = store.AXES["failure_cost"]
+CONTEXT_VOLUMES = store.AXES["context_volume"]
 CALIBRATION_MODES = ("off", "conservative")
 OUTCOMES = ("verified_pass", "verified_fail", "partial")
-LEAD_EFFORTS = ("none", "low", "medium", "high", "xhigh", "max")
 ROUTE_EFFORTS = ("low", "medium", "high", "xhigh", "max")
-EFFORT_RANK = {name: index for index, name in enumerate(ROUTE_EFFORTS)}
-
-ROUTES = (
-    ("gpt-5.6-luna", "low", "luna_low", "luna"),
-    ("gpt-5.6-luna", "medium", "luna_medium", "luna"),
-    ("gpt-5.6-luna", "high", "luna_high", "luna"),
-    ("gpt-5.6-luna", "xhigh", "luna_xhigh", "luna"),
-    ("gpt-5.6-luna", "max", "luna_max", "luna"),
-    ("gpt-5.6-sol", "high", "sol_high", "sol"),
-    ("gpt-5.6-sol", "xhigh", "sol_xhigh", "sol"),
-    ("gpt-6-astra", "high", "astra_high", "astra"),
-    ("gpt-6-astra", "xhigh", "astra_xhigh", "astra"),
-    ("gpt-6-astra", "max", "astra_max", "astra"),
-)
-ROUTE_INDEX = {(model, effort): index for index, (model, effort, _, _) in enumerate(ROUTES)}
-PROFILE_BY_ROUTE = {(model, effort): profile for model, effort, profile, _ in ROUTES}
-TIER_BY_MODEL = {
-    "gpt-5.6-luna": "luna",
-    "gpt-5.6-sol": "sol",
-    "gpt-5.6": "sol",
-    "gpt-6-astra": "astra",
-}
+LEAD_EFFORTS = ("none",) + ROUTE_EFFORTS
+EFFORT_RANK = {e: i for i, e in enumerate(ROUTE_EFFORTS)}
+TIER_BY_MODEL = {"gpt-5.6-luna": "luna", "gpt-5.6-sol": "sol", "gpt-5.6": "sol", "gpt-6-astra": "astra"}
 TIER_RANK = {"luna": 0, "sol": 1, "astra": 2}
-FAMILY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
-ALLOWED_RECORD_FIELDS = {
-    "recorded_at",
-    "scope_id",
-    "task_family",
-    "axes",
-    "model",
-    "effort",
-    "outcome",
-    "verification_summary",
-    "policy_version",
-    "router_version",
-    "identity_verified",
-    "route_binding",
-}
-AXIS_KEYS = {
-    "task_kind",
-    "task_scope",
-    "reasoning_depth",
-    "verifiability",
-    "failure_cost",
-    "context_volume",
-}
+ROUTES = tuple((m, e, TIER_BY_MODEL[m] + "_" + e, TIER_BY_MODEL[m]) for m, e in store.PAIRS)
+ROUTE_INDEX = {(m, e): i for i, (m, e, _, _) in enumerate(ROUTES)}
+PROFILE_BY_ROUTE = {(m, e): p for m, e, p, _ in ROUTES}
+ALLOWED_RECORD_FIELDS = store.BASE_FIELDS | store.EXTRA_FIELDS
+AXIS_KEYS = set(store.AXES)
+FAMILY_RE = store.FAMILY_RE
+default_registry_path = store.default_registry_path
+scope_id = store.scope_id
+append_record = store.append_record
 
 
-class AdvisorError(ValueError):
-    """Raised when advisor input or registry data is invalid."""
-
-
-def default_registry_path() -> Path:
-    explicit = os.environ.get("CODEX_LUNA_ROUTER_REGISTRY", "").strip()
-    if explicit:
-        return Path(explicit).expanduser()
-    home = Path(os.environ.get("CODEX_HOME", "~/.codex")).expanduser()
-    return home / "state" / "codex-luna-subagent-router" / "outcomes.jsonl"
-
-
-def scope_id(project_root: str | None) -> str:
-    if not project_root:
-        return "global"
-    resolved = str(Path(project_root).expanduser().resolve())
-    return "project-" + hashlib.sha256(resolved.encode("utf-8")).hexdigest()[:16]
-
-
-def _route(model: str, effort: str) -> dict[str, str]:
-    profile = PROFILE_BY_ROUTE.get((model, effort))
-    if profile is None:
+def _route(model, effort):
+    if (model, effort) not in PROFILE_BY_ROUTE:
         raise AdvisorError(f"unsupported bundled route: {model} / {effort}")
-    return {
-        "model": model,
-        "effort": effort,
-        "agent_profile": profile,
-        "minimum_capability": TIER_BY_MODEL[model],
-    }
+    return dict(model=model, effort=effort, agent_profile=PROFILE_BY_ROUTE[model, effort], minimum_capability=TIER_BY_MODEL[model])
 
 
-def classify_static(axes: Mapping[str, str]) -> tuple[dict[str, str], str]:
-    kind = axes["task_kind"]
-    scope = axes["task_scope"]
-    depth = axes["reasoning_depth"]
-    verifiable = axes["verifiability"]
-    failcost = axes["failure_cost"]
-    volume = axes["context_volume"]
+def _validate_family(family):
+    if not isinstance(family, str) or not FAMILY_RE.fullmatch(family):
+        raise AdvisorError("task_family must be a non-sensitive lowercase hyphen-case label")
 
+
+def _validate_axes(axes):
+    if not isinstance(axes, Mapping) or set(axes) != AXIS_KEYS:
+        raise AdvisorError("axes must contain exactly the six classification fields")
+    for k, choices in store.AXES.items():
+        if not isinstance(axes[k], str) or axes[k] not in choices:
+            raise AdvisorError(f"invalid {k}")
+
+
+def classify_static(axes):
+    """Preserve v2.5.0 static policy; workload planning does not force upgrades."""
+    kind, scope, depth, verifiable, failcost, volume = (axes[k] for k in ("task_kind", "task_scope", "reasoning_depth", "verifiability", "failure_cost", "context_volume"))
+    def pick(tier, effort, rule):
+        model = {"luna": "gpt-5.6-luna", "sol": "gpt-5.6-sol", "astra": "gpt-6-astra"}[tier]
+        return _route(model, effort), rule
     if scope == "micro":
-        return _route("gpt-5.6-luna", "low"), "micro-task"
-
+        return pick("luna", "low", "micro-task")
     if kind == "architecture":
         if failcost == "high" and depth == "deep" and verifiable == "no":
-            return _route("gpt-6-astra", "xhigh"), "architecture-critical-ambiguous"
+            return pick("astra", "xhigh", "architecture-critical-ambiguous")
         if failcost == "high" or verifiable == "no":
-            return _route("gpt-6-astra", "high"), "architecture-high-risk"
-        return _route("gpt-5.6-sol", "high"), "architecture-bounded"
-
-    if kind in {"debug", "review"}:
+            return pick("astra", "high", "architecture-high-risk")
+        return pick("sol", "high", "architecture-bounded")
+    if kind in ("debug", "review"):
         if depth == "deep":
-            effort = "xhigh" if failcost == "high" or verifiable == "no" else "high"
-            return _route("gpt-5.6-sol", effort), "deep-causal-work"
+            return pick("sol", "xhigh" if failcost == "high" or verifiable == "no" else "high", "deep-causal-work")
         if depth == "medium" and (failcost == "high" or verifiable != "yes"):
-            return _route("gpt-5.6-sol", "high"), "ambiguous-medium-depth"
+            return pick("sol", "high", "ambiguous-medium-depth")
         if depth == "medium":
-            return _route("gpt-5.6-luna", "max"), "verifiable-medium-depth"
-        return _route("gpt-5.6-luna", "high"), "bounded-review-debug"
-
+            return pick("luna", "max", "verifiable-medium-depth")
+        return pick("luna", "high", "bounded-review-debug")
     if kind == "implementation":
         if depth == "deep":
-            return _route("gpt-5.6-sol", "high"), "deep-implementation"
+            return pick("sol", "high", "deep-implementation")
         if depth == "medium":
-            effort = "max" if failcost == "high" else "high"
-            return _route("gpt-5.6-luna", effort), "bounded-implementation"
-        effort = "high" if failcost == "high" or volume == "high" else "medium"
-        return _route("gpt-5.6-luna", effort), "routine-implementation"
-
-    if kind in {"scan", "research", "verification"}:
+            return pick("luna", "max" if failcost == "high" else "high", "bounded-implementation")
+        return pick("luna", "high" if failcost == "high" or volume == "high" else "medium", "routine-implementation")
+    if kind in ("scan", "research", "verification"):
         if depth == "deep" and (failcost == "high" or verifiable == "no"):
-            return _route("gpt-5.6-sol", "high"), "deep-evidence-work"
+            return pick("sol", "high", "deep-evidence-work")
         if depth == "deep":
-            return _route("gpt-5.6-luna", "max"), "deep-verifiable-scan"
+            return pick("luna", "max", "deep-verifiable-scan")
         if volume == "high":
-            return _route("gpt-5.6-luna", "high"), "high-volume-evidence"
+            return pick("luna", "high", "high-volume-evidence")
         if depth == "medium" or verifiable != "yes":
-            return _route("gpt-5.6-luna", "high"), "moderate-evidence"
-        return _route("gpt-5.6-luna", "medium"), "routine-evidence"
-
+            return pick("luna", "high", "moderate-evidence")
+        return pick("luna", "medium", "routine-evidence")
     if kind == "leaf":
-        if depth == "deep":
-            return _route("gpt-5.6-luna", "max"), "hard-leaf"
-        if depth == "medium":
-            return _route("gpt-5.6-luna", "high"), "ordinary-leaf"
-        return _route("gpt-5.6-luna", "low"), "simple-leaf"
-
+        return pick("luna", {"deep": "max", "medium": "high", "shallow": "low"}[depth], {"deep": "hard-leaf", "medium": "ordinary-leaf", "shallow": "simple-leaf"}[depth])
     if depth == "deep" and (failcost == "high" or verifiable == "no"):
-        return _route("gpt-5.6-sol", "high"), "deep-other"
-    if depth == "deep":
-        return _route("gpt-5.6-luna", "max"), "deep-verifiable-other"
-    if depth == "medium":
-        return _route("gpt-5.6-luna", "high"), "medium-other"
-    return _route("gpt-5.6-luna", "medium"), "balanced-default"
+        return pick("sol", "high", "deep-other")
+    return pick("luna", {"deep": "max", "medium": "high", "shallow": "medium"}[depth], {"deep": "deep-verifiable-other", "medium": "medium-other", "shallow": "balanced-default"}[depth])
 
 
-def _axes_key(record: Mapping[str, Any], axes: Mapping[str, str]) -> bool:
-    candidate = record.get("axes")
-    return isinstance(candidate, dict) and all(candidate.get(key) == axes[key] for key in AXIS_KEYS)
+def _eligible_records(rows, scope=None, axes=None, task_family=None, now=None, ttl_days=TTL_DAYS):
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    cutoff = now - timedelta(days=ttl_days)
+    return [r for r in rows if cutoff <= store.parse_time(r["recorded_at"]) <= now
+            and r.get("policy_version") == POLICY_VERSION
+            and (scope is None or r["scope_id"] == scope)
+            and (axes is None or r["axes"] == dict(axes))
+            and (task_family is None or r["task_family"] == task_family)]
 
 
-def query_records(
-    path: Path,
-    *,
-    scope: str,
-    task_family: str,
-    axes: Mapping[str, str],
-    now: datetime | None = None,
-    ttl_days: int = TTL_DAYS,
-) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    cutoff = current - timedelta(days=ttl_days)
-    matches: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-        try:
-            item = json.loads(line)
-            stamped = datetime.fromisoformat(str(item["recorded_at"]).replace("Z", "+00:00"))
-            if stamped.tzinfo is None:
-                stamped = stamped.replace(tzinfo=timezone.utc)
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            continue
-        if stamped.astimezone(timezone.utc) < cutoff:
-            continue
-        if item.get("scope_id") != scope or item.get("task_family") != task_family:
-            continue
-        if item.get("policy_version") != POLICY_VERSION:
-            continue
-        if not _axes_key(item, axes):
-            continue
-        matches.append(item)
-    return matches
+def query_records(path, *, scope, task_family, axes, now=None, ttl_days=TTL_DAYS):
+    rows, _ = store.read_records(path)
+    return _eligible_records(rows, scope, axes, task_family, now, ttl_days)
 
 
-def _can_cross_tier_downshift(axes: Mapping[str, str]) -> bool:
-    return (
-        axes["failure_cost"] != "high"
-        and axes["verifiability"] == "yes"
-        and axes["task_kind"] != "architecture"
-    )
+def _can_cross_tier_downshift(axes):
+    return axes["failure_cost"] != "high" and axes["verifiability"] == "yes" and axes["task_kind"] != "architecture"
 
 
-def apply_history(
-    base: Mapping[str, str],
-    axes: Mapping[str, str],
-    records: list[Mapping[str, Any]],
-) -> dict[str, Any]:
+def apply_history(base, axes, records, pooled_records=None):
     result = dict(base)
-    base_key = (str(base["model"]), str(base["effort"]))
-    failures = {
-        (str(item.get("model")), str(item.get("effort")))
-        for item in records
-        if item.get("outcome") == "verified_fail" and item.get("identity_verified") is True
-    }
-
-    if base_key in failures:
-        start = ROUTE_INDEX[base_key] + 1
-        chosen = None
-        for model, effort, profile, tier in ROUTES[start:]:
-            if (model, effort) not in failures:
-                chosen = (model, effort, profile, tier)
-                break
-        if chosen is None:
-            result.update(
-                {
-                    "decision": "lead_only",
-                    "history_rule": "verified-failure-exhausted",
-                    "history_basis": "verified failures exhausted the bundled escalation chain",
-                    "avoid_combos": sorted(f"{m} / {e}" for m, e in failures),
-                }
-            )
-            return result
-        model, effort, profile, tier = chosen
-        result.update(
-            {
-                "model": model,
-                "effort": effort,
-                "agent_profile": profile,
-                "minimum_capability": tier,
-                "history_rule": "verified-failure-escalation",
-                "history_basis": f"verified failure for {base_key[0]} / {base_key[1]}",
-                "avoid_combos": sorted(f"{m} / {e}" for m, e in failures),
-            }
-        )
+    base_key = (base["model"], base["effort"])
+    def failed(rows):
+        return {(r.get("model"), r.get("effort")) for r in rows if r.get("identity_verified") is True and r.get("outcome") == "verified_fail"}
+    exact_failures = failed(records)
+    pooled = list(pooled_records or [])
+    failures = exact_failures | failed(pooled)
+    result["avoid_combos"] = sorted(f"{m} / {e}" for m, e in failures)
+    # Only an exact-family failure escalates; related-family failures merely veto reuse.
+    if base_key in exact_failures:
+        for m, e, _, _ in ROUTES[ROUTE_INDEX[base_key] + 1:]:
+            if (m, e) not in failures:
+                result.update(_route(m, e), history_rule="verified-failure-escalation", history_basis=f"verified failure for {base_key[0]} / {base_key[1]}")
+                return result
+        result.update(decision="lead_only", history_rule="verified-failure-exhausted", history_basis="verified failures exhausted the bundled escalation chain")
         return result
-
-    passes = Counter(
-        (str(item.get("model")), str(item.get("effort")))
-        for item in records
-        if item.get("outcome") == "verified_pass"
-        and item.get("identity_verified") is True
-        and (item.get("model"), item.get("effort")) in ROUTE_INDEX
-    )
-    base_index = ROUTE_INDEX[base_key]
-    stable: list[tuple[int, int, str, str, str, str]] = []
-    for (model, effort), count in passes.items():
-        if (model, effort) in failures:
-            continue
-        index = ROUTE_INDEX[(model, effort)]
-        if index >= base_index:
-            continue
-        base_tier = TIER_BY_MODEL[base_key[0]]
-        candidate_tier = TIER_BY_MODEL[model]
-        cross_tier = TIER_RANK[candidate_tier] < TIER_RANK[base_tier]
-        required_passes = 3 if cross_tier else 2
-        if count < required_passes:
-            continue
-        if cross_tier and not _can_cross_tier_downshift(axes):
-            continue
-        stable.append((index, -count, model, effort, PROFILE_BY_ROUTE[(model, effort)], candidate_tier))
-
-    if stable:
-        _, neg_count, model, effort, profile, tier = min(stable)
-        count = -neg_count
-        result.update(
-            {
-                "model": model,
-                "effort": effort,
-                "agent_profile": profile,
-                "minimum_capability": tier,
-                "history_rule": "verified-history-downshift",
-                "history_basis": f"{count} recent verified passes for {model} / {effort}",
-                "avoid_combos": sorted(f"{m} / {e}" for m, e in failures),
-            }
-        )
-    else:
-        result.update(
-            {
-                "history_rule": "no-history-override",
-                "history_basis": "no conservative verified-history override",
-                "avoid_combos": sorted(f"{m} / {e}" for m, e in failures),
-            }
-        )
+    passes = Counter((r.get("model"), r.get("effort")) for r in records if r.get("identity_verified") is True and r.get("outcome") == "verified_pass")
+    for key in store.PAIRS[:ROUTE_INDEX[base_key]]:
+        cross = TIER_BY_MODEL[key[0]] != TIER_BY_MODEL[base_key[0]]
+        required = 3 if cross else 2
+        if key not in failures and passes[key] >= required and (not cross or _can_cross_tier_downshift(axes)):
+            result.update(_route(*key), history_rule="verified-history-downshift", history_basis=f"{passes[key]} recent verified passes for {key[0]} / {key[1]}")
+            return result
+    # B: five distinct receipts across >=2 families; same model, just one effort step.
+    if pooled and _can_cross_tier_downshift(axes):
+        previous = EFFORT_RANK[base_key[1]] - 1
+        if previous >= 0:
+            key = (base_key[0], ROUTE_EFFORTS[previous])
+            rows = [r for r in pooled if (r.get("model"), r.get("effort")) == key and r.get("outcome") == "verified_pass" and r.get("identity_verified") is True and r.get("receipt_id")]
+            ids = {r["receipt_id"] for r in rows}
+            families = {r["task_family"] for r in rows}
+            if key in ROUTE_INDEX and key not in failures and len(ids) >= 5 and len(families) >= 2:
+                result.update(_route(*key), history_rule="axes-history-effort-downshift", history_basis=f"{len(ids)} distinct verified receipts across {len(families)} families; same-model one-step effort reduction")
+                return result
+    result.update(history_rule="no-history-override", history_basis="no conservative verified-history override")
     return result
 
 
-def _route_direction(lead_model: str, worker_model: str) -> str:
-    lead_tier = TIER_BY_MODEL.get(lead_model)
-    worker_tier = TIER_BY_MODEL.get(worker_model)
-    if lead_tier is None or worker_tier is None:
+def _route_direction(lead_model, worker_model):
+    lead, worker = TIER_BY_MODEL.get(lead_model), TIER_BY_MODEL.get(worker_model)
+    if lead is None or worker is None:
         return "unknown"
-    if TIER_RANK[worker_tier] > TIER_RANK[lead_tier]:
-        return "up"
-    if TIER_RANK[worker_tier] < TIER_RANK[lead_tier]:
-        return "down"
-    return "same"
+    delta = TIER_RANK[worker] - TIER_RANK[lead]
+    return "up" if delta > 0 else "down" if delta < 0 else "same"
 
 
-def _decide_dispatch(
-    recommendation: Mapping[str, Any],
-    axes: Mapping[str, str],
-    lead_model: str,
-    lead_effort: str,
-) -> tuple[str, str]:
+def _decide_dispatch(rec, axes, lead_model, lead_effort):
     if axes["task_scope"] == "micro":
         return "lead_only", "micro task startup cost exceeds delegation value"
-
-    worker_model = str(recommendation["model"])
-    worker_effort = str(recommendation["effort"])
-    direction = _route_direction(lead_model, worker_model)
+    direction = _route_direction(lead_model, rec["model"])
     if direction == "up":
         return "delegate", "capability gap exceeds current Lead tier"
     if direction == "down":
         return "delegate", "bounded work can use a cheaper sufficient Worker"
-
-    if worker_model == lead_model:
-        if lead_effort in EFFORT_RANK and EFFORT_RANK[worker_effort] > EFFORT_RANK[lead_effort]:
+    if direction == "unknown":
+        return "lead_only", "unknown Lead cost/capability; require an explicit scoped delegation decision"
+    # Canonicalize the Sol Lead alias for effort comparisons.
+    if TIER_BY_MODEL[lead_model] == TIER_BY_MODEL[rec["model"]]:
+        if lead_effort in EFFORT_RANK and EFFORT_RANK[rec["effort"]] > EFFORT_RANK[lead_effort]:
             return "delegate", "same-tier Worker needs higher reasoning than the current Lead"
-        if worker_effort == lead_effort:
-            if axes["context_volume"] == "high" and axes["task_kind"] in {"scan", "research", "verification"}:
+        if rec["effort"] == lead_effort:
+            if axes["context_volume"] == "high" and axes["task_kind"] in ("scan", "research", "verification"):
                 return "delegate", "context isolation is worth same-tier Worker startup cost"
             return "lead_only", "same model and effort provide no clear delegation benefit"
-        if axes["context_volume"] == "high" or axes["task_kind"] in {"scan", "research", "verification"}:
+        if axes["context_volume"] == "high" or axes["task_kind"] in ("scan", "research", "verification"):
             return "delegate", "cheaper same-tier effort plus context isolation has expected-cost benefit"
-        return "lead_only", "same-tier delegation benefit is too small"
-
-    return "delegate", "model-specific Worker route is beneficial"
+    return "lead_only", "same-tier delegation benefit is too small"
 
 
-def recommend(
-    *,
-    task_family: str,
-    axes: Mapping[str, str],
-    lead_model: str,
-    lead_effort: str,
-    calibration: str,
-    registry: Path,
-    scope: str,
-    now: datetime | None = None,
-) -> dict[str, Any]:
+def recommend(*, task_family, axes, lead_model, lead_effort, calibration, registry, scope, now=None):
     _validate_family(task_family)
     _validate_axes(axes)
-    if calibration not in CALIBRATION_MODES:
-        raise AdvisorError(f"calibration must be one of: {', '.join(CALIBRATION_MODES)}")
-    if lead_effort not in LEAD_EFFORTS:
-        raise AdvisorError("unsupported lead effort")
-
-    base, rule_id = classify_static(axes)
-    result: dict[str, Any] = {
-        **base,
-        "task_family": task_family,
-        "axes": dict(axes),
-        "static_rule": rule_id,
-        "static_model": base["model"],
-        "static_effort": base["effort"],
-        "static_minimum_capability": base["minimum_capability"],
-        "policy_version": POLICY_VERSION,
-        "router_version": ROUTER_VERSION,
-        "calibration": calibration,
-        "scope_id": scope,
-    }
+    if calibration not in CALIBRATION_MODES or lead_effort not in LEAD_EFFORTS:
+        raise AdvisorError("invalid calibration or lead effort")
+    base, rule = classify_static(axes)
+    result = dict(base, task_family=task_family, axes=dict(axes), static_rule=rule,
+                  static_model=base["model"], static_effort=base["effort"], static_minimum_capability=base["minimum_capability"],
+                  policy_version=POLICY_VERSION, router_version=ROUTER_VERSION, calibration=calibration, scope_id=scope)
     if calibration == "conservative":
-        history = query_records(
-            registry,
-            scope=scope,
-            task_family=task_family,
-            axes=axes,
-            now=now,
-        )
-        result = apply_history(result, axes, history)
+        rows, diagnostics = store.read_records(registry)
+        pool = _eligible_records(rows, scope, axes, now=now)
+        exact = [r for r in pool if r["task_family"] == task_family]
+        result = apply_history(result, axes, exact, pool)
+        result["registry_diagnostics"] = diagnostics
     else:
-        result.update(
-            {
-                "history_rule": "calibration-off",
-                "history_basis": "verified outcome calibration is disabled",
-                "avoid_combos": [],
-            }
-        )
-
-    if result.get("decision") == "lead_only" and result.get("history_rule") == "verified-failure-exhausted":
-        result["route_direction"] = "none"
-        result["selection_reason"] = result["history_basis"]
+        result.update(history_rule="calibration-off", history_basis="verified outcome calibration is disabled", avoid_combos=[])
+    if result.get("history_rule") == "verified-failure-exhausted":
+        result.update(route_direction="none", selection_reason=result["history_basis"])
         return result
-
     decision, reason = _decide_dispatch(result, axes, lead_model, lead_effort)
-    result["decision"] = decision
-    result["route_direction"] = _route_direction(lead_model, str(result["model"]))
-    result["selection_reason"] = reason
+    result.update(decision=decision, route_direction=_route_direction(lead_model, result["model"]), selection_reason=reason)
     return result
 
 
-def _validate_family(task_family: str) -> None:
-    if not FAMILY_RE.fullmatch(task_family):
-        raise AdvisorError("task_family must be a non-sensitive lowercase hyphen-case label")
+def stats(path, scope=None, now=None):
+    rows, diagnostics = store.read_records(path)
+    selected = [r for r in rows if scope is None or r["scope_id"] == scope]
+    active = _eligible_records(selected, now=now)
+    receipts, begun, invalid_receipts = store.pending(path)
+    pending_rows = [r for r in receipts if scope is None or r["scope_id"] == scope]
+    buckets = {}
+    for r in active:
+        key = (r["scope_id"], r["task_family"], json.dumps(r["axes"], sort_keys=True))
+        buckets.setdefault(key, []).append(r)
+    suggestions, thresholds = [], []
+    for (sid, family, axis_json), items in sorted(buckets.items()):
+        axes = json.loads(axis_json)
+        base, _ = classify_static(axes)
+        pooled = [r for r in active if r["scope_id"] == sid and r["axes"] == axes]
+        calibrated = apply_history(base, axes, items, pooled)
+        if calibrated.get("history_rule") in ("verified-history-downshift", "axes-history-effort-downshift", "verified-failure-escalation", "verified-failure-exhausted"):
+            suggestions.append(dict(scope_id=sid, task_family=family, axes=axes, static_model=base["model"], static_effort=base["effort"], model=calibrated["model"], effort=calibrated["effort"], rule=calibrated["history_rule"]))
+        for m, e in sorted({(r["model"], r["effort"]) for r in items}):
+            passes = sum(r["outcome"] == "verified_pass" and r["identity_verified"] for r in items if (r["model"], r["effort"]) == (m, e))
+            cross = m != base["model"]
+            eligible = ROUTE_INDEX[m, e] < ROUTE_INDEX[base["model"], base["effort"]] and (not cross or _can_cross_tier_downshift(axes))
+            failed = any(r["outcome"] == "verified_fail" and r["identity_verified"] and (r["model"], r["effort"]) == (m, e) for r in pooled)
+            thresholds.append(dict(scope_id=sid, task_family=family, axes=axes, model=m, effort=e, verified_passes=passes,
+                                   eligible_cheaper_candidate=eligible and not failed, remaining_passes=max(0, (3 if cross else 2) - passes) if eligible and not failed else None))
+    distribution = Counter((r["model"], r["effort"], r["outcome"]) for r in selected)
+    return dict(registry=str(path), scope=scope or "all", total_outcomes=len(selected), outcomes=dict(Counter(r["outcome"] for r in selected)),
+                by_model=[dict(model=m, effort=e, outcome=o, count=n) for (m, e, o), n in sorted(distribution.items())],
+                by_scope=dict(Counter(r["scope_id"] for r in selected)), eligible_history_rows=len(active),
+                latest_recorded_at=max((r["recorded_at"] for r in selected), key=store.parse_time, default=None),
+                registered_receipts_all_scopes=begun, pending_count=len(pending_rows), pending_receipts=pending_rows,
+                invalid_receipt_rows=invalid_receipts, sparse_buckets=sum(len(v) == 1 for v in buckets.values()),
+                available_recommendations=suggestions, sample_thresholds=thresholds, **diagnostics,
+                limitation="Registered receipts only; not total runtime Workers. Recommendations are not observed overrides or measured cost savings.")
 
 
-def _validate_axes(axes: Mapping[str, str]) -> None:
-    if set(axes) != AXIS_KEYS:
-        raise AdvisorError(f"axes must contain exactly: {', '.join(sorted(AXIS_KEYS))}")
-    allowed = {
-        "task_kind": TASK_KINDS,
-        "task_scope": TASK_SCOPES,
-        "reasoning_depth": DEPTHS,
-        "verifiability": VERIFIABILITY,
-        "failure_cost": FAILURE_COSTS,
-        "context_volume": CONTEXT_VOLUMES,
-    }
-    for key, choices in allowed.items():
-        if axes[key] not in choices:
-            raise AdvisorError(f"{key} must be one of: {', '.join(choices)}")
+def _add_axes(parser):
+    for key, choices in store.AXES.items():
+        parser.add_argument("--" + key.replace("_", "-"), choices=choices, required=True)
 
 
-def _single_line_summary(value: str) -> str:
-    text = value.strip()
-    if not text or "\n" in text or "\r" in text or len(text) > 200:
-        raise AdvisorError("verification_summary must be one non-empty line of at most 200 characters")
-    return text
+def _axes_from_args(args):
+    return {k: getattr(args, k) for k in store.AXES}
 
 
-def append_record(path: Path, record: Mapping[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
-    unsupported = set(record) - ALLOWED_RECORD_FIELDS
-    if unsupported:
-        raise AdvisorError(f"unsupported record fields: {sorted(unsupported)}")
-    required = {
-        "scope_id",
-        "task_family",
-        "axes",
-        "model",
-        "effort",
-        "outcome",
-        "verification_summary",
-        "identity_verified",
-        "route_binding",
-    }
-    missing = required - set(record)
-    if missing:
-        raise AdvisorError(f"record missing fields: {sorted(missing)}")
-    _validate_family(str(record["task_family"]))
-    axes = record["axes"]
-    if not isinstance(axes, dict):
-        raise AdvisorError("axes must be an object")
-    _validate_axes(axes)
-    route = (str(record["model"]), str(record["effort"]))
-    if route not in ROUTE_INDEX:
-        raise AdvisorError("record model/effort must match a bundled route")
-    if record["outcome"] not in OUTCOMES:
-        raise AdvisorError("unsupported outcome")
-    if record["identity_verified"] is not True:
-        raise AdvisorError("verified outcome records require identity_verified=true")
-    summary = _single_line_summary(str(record["verification_summary"]))
-    route_binding = str(record["route_binding"])
-    if route_binding not in {"installed_profile", "live_spawn"}:
-        raise AdvisorError("route_binding must be installed_profile or live_spawn")
-
-    payload = {
-        "recorded_at": str(record.get("recorded_at") or (now or datetime.now(timezone.utc)).isoformat()),
-        "scope_id": str(record["scope_id"]),
-        "task_family": str(record["task_family"]),
-        "axes": dict(axes),
-        "model": route[0],
-        "effort": route[1],
-        "outcome": record["outcome"],
-        "verification_summary": summary,
-        "policy_version": POLICY_VERSION,
-        "router_version": ROUTER_VERSION,
-        "identity_verified": True,
-        "route_binding": route_binding,
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_symlink():
-        raise AdvisorError("refusing to append to a symbolic-link registry")
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
-    return payload
+def _parser():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--registry", type=Path, default=default_registry_path())
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--project-root")
+    g.add_argument("--global-scope", action="store_true")
+    commands = p.add_subparsers(dest="command", required=True)
+    for name in ("recommend", "record", "query", "begin"):
+        sub = commands.add_parser(name)
+        sub.add_argument("--task-family", required=True)
+        _add_axes(sub)
+        if name == "recommend":
+            sub.add_argument("--lead-model", required=True)
+            sub.add_argument("--lead-effort", choices=LEAD_EFFORTS, required=True)
+            sub.add_argument("--calibration", choices=CALIBRATION_MODES)
+        if name in ("record", "begin"):
+            sub.add_argument("--model", required=True)
+            sub.add_argument("--effort", choices=ROUTE_EFFORTS, required=True)
+            sub.add_argument("--route-binding", choices=("installed_profile", "live_spawn"), required=True)
+        if name == "begin":
+            sub.add_argument("--task-id", required=True)
+        if name == "record":
+            sub.add_argument("--outcome", choices=OUTCOMES, required=True)
+            sub.add_argument("--verification-summary", required=True)
+            sub.add_argument("--identity-verified", action="store_true")
+    sub = commands.add_parser("finalize")
+    sub.add_argument("--receipt-id", required=True)
+    sub.add_argument("--outcome", choices=OUTCOMES, required=True)
+    sub.add_argument("--verification-summary", required=True)
+    sub.add_argument("--observed-model")
+    sub.add_argument("--observed-effort", choices=LEAD_EFFORTS)
+    sub.add_argument("--identity-source", choices=("unknown", "runtime_metadata", "spawn_response"), default="unknown")
+    sub.add_argument("--completion-reason", choices=store.REASONS, default="accepted")
+    sub = commands.add_parser("stats")
+    sub.add_argument("--current-scope", action="store_true")
+    sub.add_argument("--json", action="store_true")
+    sub = commands.add_parser("plan")
+    sub.add_argument("request", type=Path)
+    sub.add_argument("--lead-model", required=True)
+    sub.add_argument("--lead-effort", choices=LEAD_EFFORTS, required=True)
+    sub.add_argument("--calibration", choices=CALIBRATION_MODES)
+    sub.add_argument("--max-workers", type=int, default=3)
+    sub.add_argument("--open-workers", type=int, default=0)
+    return p
 
 
-def _axes_from_args(args: argparse.Namespace) -> dict[str, str]:
-    return {
-        "task_kind": args.task_kind,
-        "task_scope": args.task_scope,
-        "reasoning_depth": args.reasoning_depth,
-        "verifiability": args.verifiability,
-        "failure_cost": args.failure_cost,
-        "context_volume": args.context_volume,
-    }
+def plan_limit(config, requested):
+    configured = config.get("max_concurrent_workers", 3)
+    if not isinstance(configured, int) or isinstance(configured, bool) or configured < 1:
+        raise AdvisorError("max_concurrent_workers must be a positive integer")
+    if not isinstance(requested, int) or isinstance(requested, bool) or requested < 1:
+        raise AdvisorError("max-workers must be a positive integer")
+    return min(configured, requested)
 
 
-def _add_axes(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--task-kind", choices=TASK_KINDS, required=True)
-    parser.add_argument("--task-scope", choices=TASK_SCOPES, required=True)
-    parser.add_argument("--reasoning-depth", choices=DEPTHS, required=True)
-    parser.add_argument("--verifiability", choices=VERIFIABILITY, required=True)
-    parser.add_argument("--failure-cost", choices=FAILURE_COSTS, required=True)
-    parser.add_argument("--context-volume", choices=CONTEXT_VOLUMES, required=True)
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--registry", type=Path, default=default_registry_path())
-    parser.add_argument("--project-root")
-    commands = parser.add_subparsers(dest="command", required=True)
-
-    recommend_parser = commands.add_parser("recommend")
-    recommend_parser.add_argument("--task-family", required=True)
-    _add_axes(recommend_parser)
-    recommend_parser.add_argument("--lead-model", required=True)
-    recommend_parser.add_argument("--lead-effort", choices=LEAD_EFFORTS, required=True)
-    recommend_parser.add_argument("--calibration", choices=CALIBRATION_MODES, default="off")
-
-    record_parser = commands.add_parser("record")
-    record_parser.add_argument("--task-family", required=True)
-    _add_axes(record_parser)
-    record_parser.add_argument("--model", required=True)
-    record_parser.add_argument("--effort", choices=ROUTE_EFFORTS, required=True)
-    record_parser.add_argument("--outcome", choices=OUTCOMES, required=True)
-    record_parser.add_argument("--verification-summary", required=True)
-    record_parser.add_argument("--identity-verified", action="store_true")
-    record_parser.add_argument("--route-binding", choices=("installed_profile", "live_spawn"), required=True)
-
-    query_parser = commands.add_parser("query")
-    query_parser.add_argument("--task-family", required=True)
-    _add_axes(query_parser)
-    return parser
-
-
-def main(argv: list[str] | None = None) -> int:
+def main(argv=None):
     args = _parser().parse_args(argv)
-    registry = args.registry.expanduser()
-    scope = scope_id(args.project_root)
     try:
+        path = args.registry.expanduser()
+        if args.command == "stats" and not (args.current_scope or args.project_root or args.global_scope):
+            scope, root = None, None
+        elif args.command == "finalize":
+            scope, root = None, None  # Receipt fixes the original scope; never use cwd.
+        else:
+            scope, root = store.resolve_scope(args.project_root, args.global_scope)
+        config = store.effective_config(root) if args.command in ("begin", "record", "recommend", "plan") else {}
+        calibration = getattr(args, "calibration", None) or config.get("evidence_calibration", "off")
+        if args.command in ("begin", "record") and (config.get("routing_mode") != "adaptive" or calibration != "conservative"):
+            raise AdvisorError("collection is off; explicitly enable adaptive + conservative in effective routing.json")
         if args.command == "recommend":
-            output = recommend(
-                task_family=args.task_family,
-                axes=_axes_from_args(args),
-                lead_model=args.lead_model,
-                lead_effort=args.lead_effort,
-                calibration=args.calibration,
-                registry=registry,
-                scope=scope,
-            )
-        elif args.command == "record":
-            output = append_record(
-                registry,
-                {
-                    "scope_id": scope,
-                    "task_family": args.task_family,
-                    "axes": _axes_from_args(args),
-                    "model": args.model,
-                    "effort": args.effort,
-                    "outcome": args.outcome,
-                    "verification_summary": args.verification_summary,
-                    "identity_verified": args.identity_verified,
-                    "route_binding": args.route_binding,
-                },
-            )
+            if config.get("routing_mode") != "adaptive":
+                raise AdvisorError("effective routing mode is not adaptive; use the Luna-only policy")
+            output = recommend(task_family=args.task_family, axes=_axes_from_args(args), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope)
+        elif args.command in ("begin", "record"):
+            data = dict(scope_id=scope, task_family=args.task_family, axes=_axes_from_args(args), model=args.model, effort=args.effort, route_binding=args.route_binding)
+            if args.command == "begin":
+                output = store.begin(path, data, args.task_id)
+            else:
+                data.update(outcome=args.outcome, verification_summary=args.verification_summary, identity_verified=args.identity_verified)
+                output = append_record(path, data)
+        elif args.command == "finalize":
+            output = store.finalize(path, args.receipt_id, args.outcome, args.verification_summary, observed_model=args.observed_model, observed_effort=args.observed_effort, identity_source=args.identity_source, completion_reason=args.completion_reason)
         elif args.command == "query":
-            output = query_records(
-                registry,
-                scope=scope,
-                task_family=args.task_family,
-                axes=_axes_from_args(args),
-            )
-        else:  # pragma: no cover
-            raise AssertionError(args.command)
-    except (AdvisorError, OSError, UnicodeError, json.JSONDecodeError) as exc:
-        print(f"ERROR: {exc}", file=os.sys.stderr)
+            output = query_records(path, scope=scope, task_family=args.task_family, axes=_axes_from_args(args))
+        elif args.command == "plan":
+            from plan_work import plan_work
+            output = plan_work(json.loads(args.request.read_text(encoding="utf-8")), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root)
+        else:
+            output = stats(path, scope)
+            if not args.json:
+                print(f"Registry: {output['registry']}\nScope: {output['scope']}\nTotal outcomes: {output['total_outcomes']}")
+                for key in OUTCOMES:
+                    print(f"{key}: {output['outcomes'].get(key, 0)}")
+                print(f"Pending receipts: {output['pending_count']}\nAvailable recommendations (not actual overrides): {len(output['available_recommendations'])}\nSparse buckets: {output['sparse_buckets']}\nLegacy rows without ID: {output['legacy_rows_without_id']}\nInvalid lines: {output['invalid_lines']}\nDuplicate rows: {output['duplicate_rows']}\nUse stats --json for distributions, receipts and sample thresholds.")
+                return 0
+        print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+    except (AdvisorError, OSError, UnicodeError, json.JSONDecodeError, TypeError, KeyError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
-    return 0
 
 
 if __name__ == "__main__":

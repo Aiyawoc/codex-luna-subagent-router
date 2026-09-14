@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.5.1 — 2026-09-14
+
+- 新增 begin/finalize 回执：派遣前固化 metadata/scope，结算幂等，重复不放大样本，冲突报错；pending 可观察。记录失败不阻塞 stop/close。
+- Git 顶层自动 scope、显式非 Git 项目根和 global-scope；finalize 不依赖后续 cwd，不猜测迁移旧 global 行。
+- 新增 stats（无需六轴）：分布、最后写入、pending、旧/坏/重复数据、稀疏 bucket、可用建议与样本缺口。
+- 未知身份、环境阻塞、取消、early stop、Lead 实质返工记录 partial；请求 profile 不等于观察身份。
+- B 层历史仅同 scope/六轴/policy、5 个唯一回执和 2 个 family，在安全场景同模型下降一个 effort 档，不跨模型；保留 A 层与失败否决。
+- 新增 plan：整组 sibling 一次评估，同类一致路由、显式 batch、独立任务同波先创建后 wait；依赖/读写冲突分波，Lead 保留任务需要具体原因。
+- 不强制开满或混用模型；普通任务保留 Luna，复杂因果工作仍评估 Sol；保持 Luna/Sol/Astra、两种模式、两次 attempt 与精确绑定边界。
+- 补充双语 README、安装指引、Astra 提示、生命周期、采集/规划文档与 44 项新增测试。
+- 无引擎 hook；不能统计完全未登记的 Worker，不能将可用建议视为已发生覆盖或实测费用节省。
+
+
+- 合入完整仓库后补齐渐进披露契约、依赖收缩循环、Lead/运行中任务读写冲突、重复派遣与用户/项目容量检查；回执结算与登记共用锁。
+
 ## 2.5.0 — 2026-09-09
 
 - Adaptive 新增本地确定性 `scripts/route_advisor.py`：Lead 只提供非敏感 task family 与 `task_kind / task_scope / reasoning_depth / verifiability / failure_cost / context_volume` 六轴，Advisor 零模型调用、零网络调用地给出 `lead_only | delegate`、model、effort、profile、minimum capability 与 route direction。

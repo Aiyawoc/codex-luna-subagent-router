@@ -89,6 +89,8 @@ chmod +x \
   "$DEST_SKILL/scripts/configure_guided_install.py" \
   "$DEST_SKILL/scripts/configure_subagent_limit.py" \
   "$DEST_SKILL/scripts/configure_evidence_calibration.py" \
+  "$DEST_SKILL/scripts/plan_work.py" \
+  "$DEST_SKILL/scripts/outcome_store.py" \
   "$DEST_SKILL/scripts/route_advisor.py" \
   "$DEST_SKILL/scripts/validate_route_plan.py"
 
@@ -119,3 +121,6 @@ echo "   - adaptive: deterministic Advisor chooses the cheapest sufficient Luna/
 echo "4. Choose the maximum concurrently open SubAgents (excluding the primary): keep current/Codex default, 3 recommended, or another integer >= 1."
 echo "5. For adaptive, choose verified-outcome calibration: conservative (recommended) or off."
 echo "6. Existing v1 routing tables are backed up during guided migration."
+
+echo "Outcome observability: use route_advisor.py stats; conservative tasks use begin/finalize receipts."
+echo "Multiple tasks: use route_advisor.py plan to compare all bounded siblings before dispatch."
