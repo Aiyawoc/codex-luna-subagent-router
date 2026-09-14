@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.5.2 — 2026-09-14
+
+- 新增独立 token_accounting on/off，缺失默认 off；两种路由和关闭证据校准的场景都可使用。
+- 支持经用户审查信任的 SubagentStart/SubagentStop，子线程只读采集；失败不阻塞停止，也不要求额外模型轮次。
+- 总量/输入/输入中的缓存命中/输出使用原数、k/m/b；JSON 保留原始整数与推理输出子项，未知为 null，不重复累加缓存或推理。
+- 受限 rollout 与手动 App Server 事件文件适配，按真实 child 身份及继承边界归属，累计去重；缺失基线、重置、未刷盘和格式不支持均明确降级。
+- 独立 usage.jsonl 最新快照、scope/父会话/child 筛选、字段覆盖统计；以 receipt 显式关联 finalize，不改质量 outcome，不丢失失败任务用量。
+- 第 6 个安装选项及安全 hook 合并、备份/异常回滚、短 timeout、版本变更重新审查；不触碰信任数据库或平台权限。
+- 完整包刷新新脚本，补齐文档与合成数据测试；保留 v2.5.1 原有路由、并发、采集与全部回归。
+
 ## 2.5.1 — 2026-09-14
 
 - 新增 begin/finalize 回执：派遣前固化 metadata/scope，结算幂等，重复不放大样本，冲突报错；pending 可观察。记录失败不阻塞 stop/close。

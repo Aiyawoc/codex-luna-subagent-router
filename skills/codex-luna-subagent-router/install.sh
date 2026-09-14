@@ -92,6 +92,9 @@ chmod +x \
   "$DEST_SKILL/scripts/plan_work.py" \
   "$DEST_SKILL/scripts/outcome_store.py" \
   "$DEST_SKILL/scripts/route_advisor.py" \
+  "$DEST_SKILL/scripts/token_usage.py" \
+  "$DEST_SKILL/scripts/usage_reader.py" \
+  "$DEST_SKILL/scripts/configure_token_accounting.py" \
   "$DEST_SKILL/scripts/validate_route_plan.py"
 
 python3 "$DEST_SKILL/scripts/validate_route_plan.py" \
@@ -120,7 +123,10 @@ echo "   - luna_only: maximum economy and cost predictability; automatic Workers
 echo "   - adaptive: deterministic Advisor chooses the cheapest sufficient Luna/Sol/Astra route with capability-gap checks."
 echo "4. Choose the maximum concurrently open SubAgents (excluding the primary): keep current/Codex default, 3 recommended, or another integer >= 1."
 echo "5. For adaptive, choose verified-outcome calibration: conservative (recommended) or off."
-echo "6. Existing v1 routing tables are backed up during guided migration."
+echo "6. Choose independent token accounting: on / off (absent means off). Review supported SubAgent hooks before enabling automatic collection."
+echo "Existing v1 routing tables are backed up during guided migration."
 
 echo "Outcome observability: use route_advisor.py stats; conservative tasks use begin/finalize receipts."
 echo "Multiple tasks: use route_advisor.py plan to compare all bounded siblings before dispatch."
+
+echo "Token statistics: token_usage.py stats shows total/input/cached input/output with k/m/b units. Hooks need explicit setup and trust."

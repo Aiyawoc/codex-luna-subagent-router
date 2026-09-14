@@ -1,10 +1,10 @@
 # Codex v2 引导安装与升级
 
-安装、升级是线性任务，不创建 Worker。正式版本 v2.5.1。
+安装、升级是线性任务，不创建 Worker。正式版本 v2.5.2。
 
 ## 必须全量更新
 
-用 skill-installer 或 install.sh 更新完整包：SKILL.md、VERSION、agents、assets、references、scripts、examples、evals 和所有 bundled profiles。不要只换根 Skill；本版新增 outcome_store.py、plan_work.py，route_advisor.py 需要它们。
+用 skill-installer 或 install.sh 更新完整包：SKILL.md、VERSION、agents、assets、references、scripts、examples、evals 和所有 bundled profiles。不要只换根 Skill；保留 outcome_store.py、plan_work.py，并全量安装 token_usage.py、usage_reader.py、configure_token_accounting.py。
 
 新版仍清理本 Skill 历史托管 terra-medium.toml/terra-high.toml，其它自定义 profiles 保留。config.toml、非托管 AGENTS.md、routing.json 的选择单独保留/迁移。outcomes.jsonl 与同目录回执文件不在 Skill 包内，不能因升级删除；旧 global 数据不自动重分项目。
 
@@ -48,6 +48,21 @@ python3 scripts/configure_evidence_calibration.py --scope user --mode conservati
 
 本版采集：begin → 验收 → finalize → close，结束 stats 检查 pending。未知身份、环境阻塞、取消或 Lead 实质返工记 partial，不冒充成功；没有引擎级自动回调。不要声称安装完成就已采集成功。
 
+### 6. 是否统计 SubAgent token 用量
+
+on / off（缺失默认 off），保留已有选择。独立于路由和 evidence calibration，Luna Only 也能启用。简述：子 Agent 停止后显示总量、输入、输入中的缓存命中、输出；使用 k/m/b，未知显示不可用，不当成 0。
+
+自动采集前检查当前客户端确有 SubagentStart/SubagentStop，并且未禁用 hooks；没有证据时仅配置手动采集。确认支持后使用以下命令，先加 --dry-run 查看差异：
+
+```bash
+python3 scripts/configure_token_accounting.py --scope user --mode on \
+  --install-hooks --hooks-supported
+```
+
+--hooks-supported 是操作者确认，不是绕过权限。通过客户端 hooks 审查入口信任新定义，CLI 可用 /hooks；桌面端支持以实际 build 为准。不写信任数据库，不擅自启用 features.hooks，不覆盖管理员策略。只做手动 fallback 时去掉 --install-hooks --hooks-supported。
+
+更新会保留 usage.jsonl；启用后至少用一个真实 Worker 验证。停止时未刷盘可先 partial；finalize 再核对。完整用法和允许路径见 token-accounting.md。
+
 ## 应用配置
 
 ```bash
@@ -82,3 +97,5 @@ python3 -m unittest discover -s tests -v
 ```
 
 实机至少：conservative 下 begin/finalize 后统计增加；unknown identity 为 partial；项目子目录 scope 一致；旧三条 global 仍可查看；两个独立有价值任务先创建两个再 wait，共享小任务可合并；有依赖/权限原因不强制并行；深度因果问题仍可选 Sol；记录失败仍关闭线程。
+
+用量查看：`python3 /path/to/skill/scripts/token_usage.py stats`；加 `--json` 保留原始整数和字段覆盖。hooks 测试通过不等于桌面端已授权/已自然触发。

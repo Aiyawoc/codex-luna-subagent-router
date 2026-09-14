@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | English
 
-Code version: **2.5.1**. Keep the user's Lead model unchanged and delegate only when a bounded Worker provides meaningful expected-cost or verification value.
+Code version: **2.5.2**. Keep the user's Lead model unchanged and delegate only when a bounded Worker provides meaningful expected-cost or verification value.
 
 ## Two routing strategies
 
@@ -17,6 +17,24 @@ Code version: **2.5.1**. Keep the user's Lead model unchanged and delegate only 
 Canonical automatic models are gpt-5.6-luna, gpt-5.6-sol, and gpt-6-astra. Terra remains readable in historical plans, not a new automatic candidate. Do not use the unsuffixed Sol alias.
 
 Ordinary implementation and read-heavy work normally use Luna. Ambiguous causal debugging and races require considering Sol; expert architecture review may require Astra. A max-effort Lead moving upward requires at least medium effort on the higher tier. Bundled Sol/Astra profiles start at high.
+
+## 2.5.2: SubAgent token accounting
+
+Opt in with `token_accounting=on`; absent means off. Independent of routing mode and conservative calibration. Supported, user-trusted SubagentStart/SubagentStop hooks capture local usage without another model call; unsupported clients retain an explicit manual collect fallback.
+
+Synthetic display example: `Sol high | total 45k | input 42k (cached 30k) | output 3k tokens`.
+
+Totals include cached input. Cached input is a subset of input, and reasoning output is a subset of output, never additional totals. Base values below 1000 have no suffix; k/m/b mean thousand/million/billion with at most one decimal. JSON retains exact integers or null; unavailable is not zero. Complete means a consistent terminal local snapshot, not backend billing settlement.
+
+```bash
+python3 /path/to/skill/scripts/configure_token_accounting.py --scope user --mode on --install-hooks --hooks-supported
+python3 /path/to/skill/scripts/token_usage.py stats
+python3 /path/to/skill/scripts/token_usage.py stats --json
+```
+
+Only pass --hooks-supported after checking the active Codex build supports both events. Review/trust the installed definitions in Codex; this helper never grants trust or changes platform permission/feature policies. Hooks use the child ID and child transcript, not the parent log. Delayed terminal records stay partial until a finalize/collect recheck. Repeated stops update one child snapshot rather than double-counting; retries have separate IDs.
+
+Usage is stored separately in usage.jsonl beside the outcome registry, joined by explicit receipt and real agent IDs. Failed or partial quality results still retain their known usage. Summaries show per-field coverage, not a claim that every runtime Worker was observed. No prompt/source/log content is persisted; safe relative locators allow bounded rechecks. No billing, subscription-credit or savings estimates. See references/token-accounting.md for schema assumptions, limits and real-client acceptance.
 
 ## 2.5.1: collection, observability and whole-workload planning
 
@@ -39,7 +57,7 @@ python3 /path/to/skill/scripts/route_advisor.py --global-scope stats --json
 
 Default: ${CODEX_HOME:-~/.codex}/state/codex-luna-subagent-router/outcomes.jsonl. Override with --registry or CODEX_LUNA_ROUTER_REGISTRY. Back up the adjacent outcomes.jsonl.receipts.jsonl too.
 
-This is a local protocol, not an engine hook or background collector. Workers that never call begin cannot be automatically counted. Runtime collection coverage still needs real-use acceptance.
+Outcome quality still needs begin/finalize; the optional token hooks do not replace acceptance checks. Runtime collection coverage still needs real-use acceptance.
 
 ## Conservative history
 
@@ -68,7 +86,7 @@ From a complete version checkout:
 
 Codex skill-installer may install the complete published Skill directory, followed by references/codex-guided-install.md. Never replace only SKILL.md or one script: route_advisor.py now depends on outcome_store.py and plan_work.py. Refresh bundled profiles, preserving user configuration and custom profiles. Historical managed Terra profiles are removed.
 
-The guide keeps five questions: structured input, standing delegation, routing mode, SubAgent concurrency, and conservative/off calibration. Preserve existing choices; absent calibration remains off. Do not remove outcome files during upgrade.
+The guide has six questions: structured input, standing delegation, routing mode, SubAgent concurrency, conservative/off calibration, and independent token accounting on/off. Preserve existing choices; absent calibration remains off. Do not remove outcome files during upgrade.
 
 ## Stable boundaries and testing
 
@@ -84,6 +102,6 @@ python3 -m unittest discover -s tests -v
 
 CI checks the Manifest. Script tests do not establish real Codex delegation rates or runtime model identity. See references/outcome-collection.md, references/work-planning.md and docs/v2.5.1-outcome-collection-observability.md.
 
-Pinned install source: https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.1/skills/codex-luna-subagent-router
+Pinned install source: https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.2/skills/codex-luna-subagent-router
 
 Replanning accepts `in_progress_task_ids` to avoid recreating running tasks. Retained Lead ownership is checked alongside Worker read/write ownership. Batch only tasks with the same prerequisites; runtime capacity is a ceiling, not a quota.

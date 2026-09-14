@@ -41,9 +41,13 @@ Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类
 
 验收后、close 前调用 `finalize`。未知身份、环境阻塞、取消、early stop 或 Lead 实质返工只能 `partial`；可观察到精确 model+effort 且通过相关验收才 `verified_pass`。明确质量失败且身份已知才 `verified_fail`。profile 名称不等于实际身份；不得伪造证据凑样本。
 
-同回执重复 finalize 幂等，冲突报错；retry 用新 task ID 和回执。记录失败应披露，但不能为日志阻塞 stop/close。任务结束用 `stats` 检查 pending，不猜测补写。无引擎 hook：完全跳过 begin 的 Worker 不会自动被发现。
+同回执重复 finalize 幂等，冲突报错；retry 用新 task ID 和回执。记录失败应披露，但不能为日志阻塞 stop/close。任务结束用 `stats` 检查 pending，不猜测补写。Outcome 验收仍无引擎 hook；完全跳过 begin 不会自动获得质量回执。
 
 只保存受控 metadata；不得记录 prompt、正文、源码、完整日志、账号或密钥。简短 verification summary 也需人工/Lead 去敏；字段白名单不是秘密检测器。详见 `references/outcome-collection.md`。
+
+## Token 统计
+
+`token_accounting` 缺失按 off，独立于路由和校准。开启后按需读 `references/token-accounting.md`；用真实 child/parent ID 关联回执，finalize 核对用量。只展示工具返回的总量、输入、缓存命中输入、输出，使用 k/m/b；缓存是输入子项。不可用不是 0，不让 Worker 自报估算，不为统计阻塞 close。
 
 ## 执行与边界
 

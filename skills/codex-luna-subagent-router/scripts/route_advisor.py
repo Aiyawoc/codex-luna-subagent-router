@@ -300,6 +300,9 @@ def _parser():
     sub.add_argument("--observed-effort", choices=LEAD_EFFORTS)
     sub.add_argument("--identity-source", choices=("unknown", "runtime_metadata", "spawn_response"), default="unknown")
     sub.add_argument("--completion-reason", choices=store.REASONS, default="accepted")
+    sub.add_argument("--usage-agent-id")
+    sub.add_argument("--usage-parent-id")
+    sub.add_argument("--usage-transcript", type=Path)
     sub = commands.add_parser("stats")
     sub.add_argument("--current-scope", action="store_true")
     sub.add_argument("--json", action="store_true")
@@ -349,6 +352,25 @@ def main(argv=None):
                 output = append_record(path, data)
         elif args.command == "finalize":
             output = store.finalize(path, args.receipt_id, args.outcome, args.verification_summary, observed_model=args.observed_model, observed_effort=args.observed_effort, identity_source=args.identity_source, completion_reason=args.completion_reason)
+            # Usage is orthogonal to quality: a failed/partial outcome still costs tokens.
+            # Its failure cannot undo a successful outcome settlement or keep a Worker alive.
+            try:
+                import token_usage as usage
+                upath = usage.default_usage_path(path)
+                if args.usage_agent_id or args.usage_parent_id:
+                    if not (args.usage_agent_id and args.usage_parent_id):
+                        raise AdvisorError("both usage identities are required")
+                    usage.attach(upath, path, args.usage_agent_id, args.usage_parent_id, args.receipt_id)
+                linked = usage.for_receipt(upath, args.receipt_id)
+                if linked:
+                    usage_scope, usage_root = store.resolve_scope(args.project_root, args.global_scope)
+                    if usage.enabled(usage_root) and usage_scope == linked["scope_id"]:
+                        linked = usage.collect(upath, linked["agent_id"], linked["parent_id"], linked["scope_id"],
+                                               transcript=args.usage_transcript, root=usage_root)
+                    output["token_usage"] = linked["snapshot"]
+                    output["token_usage_summary"] = usage.summary(linked["snapshot"])
+            except (ValueError, OSError, TypeError, KeyError):
+                output["token_usage_error"] = "usage unavailable; outcome remains finalized"
         elif args.command == "query":
             output = query_records(path, scope=scope, task_family=args.task_family, axes=_axes_from_args(args))
         elif args.command == "plan":
@@ -356,7 +378,16 @@ def main(argv=None):
             output = plan_work(json.loads(args.request.read_text(encoding="utf-8")), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root)
         else:
             output = stats(path, scope)
+            import token_usage as usage
+            try:
+                output["token_usage"] = usage.statistics(usage.default_usage_path(path), scope=scope)
+            except (ValueError, OSError):
+                output["token_usage"] = {"status": "unavailable"}
             if not args.json:
+                u = output["token_usage"]
+                if "known_usage" in u:
+                    print(usage.summary(dict(status="partial", counts=u["known_usage"]["counts"]), "SubAgent 已知用量（含缓存）"))
+                    print(f"Usage coverage: {u['statuses']} / {u['observed_subagents']} observed SubAgents")
                 print(f"Registry: {output['registry']}\nScope: {output['scope']}\nTotal outcomes: {output['total_outcomes']}")
                 for key in OUTCOMES:
                     print(f"{key}: {output['outcomes'].get(key, 0)}")
