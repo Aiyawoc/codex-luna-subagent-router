@@ -95,6 +95,8 @@ chmod +x \
   "$DEST_SKILL/scripts/token_usage.py" \
   "$DEST_SKILL/scripts/usage_reader.py" \
   "$DEST_SKILL/scripts/configure_token_accounting.py" \
+  "$DEST_SKILL/scripts/turn_usage.py" \
+  "$DEST_SKILL/scripts/inspect_guided_install.py" \
   "$DEST_SKILL/scripts/validate_route_plan.py"
 
 python3 "$DEST_SKILL/scripts/validate_route_plan.py" \
@@ -123,10 +125,26 @@ echo "   - luna_only: maximum economy and cost predictability; automatic Workers
 echo "   - adaptive: deterministic Advisor chooses the cheapest sufficient Luna/Sol/Astra route with capability-gap checks."
 echo "4. Choose the maximum concurrently open SubAgents (excluding the primary): keep current/Codex default, 3 recommended, or another integer >= 1."
 echo "5. For adaptive, choose verified-outcome calibration: conservative (recommended) or off."
-echo "6. Choose independent token accounting: on / off (absent means off). Review supported SubAgent hooks before enabling automatic collection."
+echo "6. Choose independent token accounting: on / off (absent means off). Main and SubAgent hooks share question 6; explicitly review new scope and hook definitions."
 echo "Existing v1 routing tables are backed up during guided migration."
 
 echo "Outcome observability: use route_advisor.py stats; conservative tasks use begin/finalize receipts."
 echo "Multiple tasks: use route_advisor.py plan to compare all bounded siblings before dispatch."
 
 echo "Token statistics: token_usage.py stats shows total/input/cached input/output with k/m/b units. Hooks need explicit setup and trust."
+
+echo "Upgrade inventory: run scripts/inspect_guided_install.py --json; ask every missing applicable option, never silently skip it."
+echo "Main-turn summaries: turn_usage.py stats; review UserPromptSubmit/Stop together with SubagentStart/SubagentStop under token accounting."
+
+echo "Read-only guided setup inventory (pending items require explicit answers):"
+if [[ "$MODE" == "project" ]]; then
+  python3 "$DEST_SKILL/scripts/inspect_guided_install.py" --project-root "$PROJECT" || {
+    echo "Setup inventory failed; do not skip configuration review." >&2
+    exit 2
+  }
+else
+  python3 "$DEST_SKILL/scripts/inspect_guided_install.py" || {
+    echo "Setup inventory failed; do not skip configuration review." >&2
+    exit 2
+  }
+fi

@@ -19,7 +19,7 @@ if SCRIPT_DIR not in sys.path:
 import outcome_store as store
 from usage_reader import FIELDS, empty, read_usage
 
-VERSION = "2.5.2"
+VERSION = "2.5.3"
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 ROW_FIELDS = {"schema_version", "usage_id", "agent_id", "parent_id", "agent_type", "scope_id", "started_at", "updated_at", "receipt_id", "snapshot", "locator"}
 SNAPSHOT_FIELDS = {"status", "source", "counts", "reasons", "usage_events", "last_usage_at", "model", "effort", "terminal_observed", "bytes_read"}
@@ -47,11 +47,78 @@ def compact(value: int | None) -> str:
     raise AssertionError("unreachable")
 
 
-def summary(snapshot, label="子 Agent") -> str:
+WAIT_REASONS = {"terminal_not_observed", "unflushed_tail"}
+REASON_LABELS = {
+    "missing_baseline": "缺少起始基线",
+    "non_usage_counter": "已排除非用量计数",
+    "terminal_not_observed": "未读到结束事件",
+    "unflushed_tail": "日志尾部未写完",
+    "counter_gap": "计数区间有缺口",
+    "counter_reset": "累计计数重置",
+    "multiple_model_routes": "期间存在多个模型/强度",
+    "cache_breakdown_missing": "缓存明细缺失",
+    "reasoning_breakdown_inconsistent": "推理明细不一致",
+    "read_budget_exceeded": "达到读取预算",
+    "stale_previous_snapshot": "保留上次快照，尚未复核",
+    "transcript_unavailable": "日志暂不可读",
+    "no_usage": "未取得用量",
+    "awaiting_usage": "等待用量",
+    "turn_boundary_missing": "缺少本轮边界",
+    "transcript_changed_since_start": "日志在本轮期间被重写",
+    "main_turn_baseline_missing": "未登记本轮开始",
+    "child_baseline_missing": "子线程本轮基线缺失",
+    "aggregate_incomplete": "部分已登记线程尚无完整数据",
+    "child_limit_exceeded": "子线程数量超出本次读取预算",
+    "invalid_counter": "无效计数",
+    "invalid_subset": "明细超出总项",
+    "malformed_record": "日志记录损坏",
+    "non_monotonic_time": "日志时间不连续",
+}
+MODEL_NAMES = {"gpt-5.6-luna": "Luna", "gpt-5.6-sol": "Sol", "gpt-6-astra": "Astra"}
+
+
+def model_label(snapshot, fallback=None):
+    # Runtime observation only: neither role nor natural-language self-report
+    # is model evidence. Never relabel default as Luna by assumption.
+    if "multiple_model_routes" in snapshot.get("reasons", []):
+        return "多模型/强度"
+    model = snapshot.get("model")
+    if model:
+        return f"{MODEL_NAMES.get(model, model)} {snapshot.get('effort') or '强度未知'}"
+    return "模型未核实" + (f" · {fallback}" if fallback else "")
+
+
+def display_status(snapshot):
+    if snapshot["status"] == "complete":
+        return "完整快照"
+    reasons = snapshot.get("reasons", [])
+    prefix = "不可用" if snapshot["status"] == "unavailable" else (
+        "待确认" if reasons and set(reasons) <= WAIT_REASONS else "部分统计")
+    labels = [REASON_LABELS.get(r, r) for r in reasons]
+    return prefix + ("：" + "；".join(labels[:3]) + ("等" if len(labels) > 3 else "") if labels else "")
+
+
+def summary(snapshot, label=None) -> str:
     c = snapshot["counts"]
-    status = {"complete": "完整快照", "partial": "部分", "unavailable": "不可用"}[snapshot["status"]]
+    label = label or model_label(snapshot)
     return (f"{label} | 总量 {compact(c['total_tokens'])} | 输入 {compact(c['input_tokens'])}"
-            f"（缓存命中 {compact(c['cached_input_tokens'])}）| 输出 {compact(c['output_tokens'])} tokens | {status}")
+            f"（缓存命中 {compact(c['cached_input_tokens'])}）| 输出 {compact(c['output_tokens'])} tokens | {display_status(snapshot)}")
+
+
+def aggregate_snapshots(snapshots):
+    """Known totals only. Completeness describes observed rows, never all work."""
+    values, coverage = {}, {}
+    for field in FIELDS:
+        nums = [s["counts"][field] for s in snapshots if s["counts"][field] is not None]
+        values[field] = sum(nums) if nums else None
+        coverage[field] = len(nums)
+    statuses = Counter(s["status"] for s in snapshots)
+    waiting = sum(s["status"] == "partial" and bool(s.get("reasons")) and set(s["reasons"]) <= WAIT_REASONS for s in snapshots)
+    complete = bool(snapshots) and statuses.get("complete", 0) == len(snapshots)
+    status = "complete" if complete else "partial" if any(v is not None for v in values.values()) else "unavailable"
+    return dict(status=status, counts=values, reasons=[] if complete else ["aggregate_incomplete"],
+                field_coverage=coverage, observed=len(snapshots), complete=statuses.get("complete", 0),
+                waiting=waiting, partial=statuses.get("partial", 0)-waiting, unavailable=statuses.get("unavailable", 0))
 
 
 def _id(value):
@@ -276,8 +343,8 @@ def statistics(path=None, *, scope=None, parent_id=None, agent_id=None):
         key = (r["snapshot"]["model"], r["snapshot"]["effort"])
         by_route.setdefault(key, []).append(r)
     return dict(usage_file=str(path), observed_subagents=len(rows), statuses=dict(Counter(r["snapshot"]["status"] for r in rows)),
-                known_usage=_sum(rows), by_model=[dict(model=m, effort=e, workers=len(items), **_sum(items)) for (m, e), items in sorted(by_route.items(), key=lambda x: str(x[0]))],
-                workers=[{**{k: v for k, v in r.items() if k != "locator"}, "summary": summary(r["snapshot"], r["agent_type"] or r["agent_id"]),
+                known_usage=_sum(rows), completeness=aggregate_snapshots([r["snapshot"] for r in rows]), by_model=[dict(model=m, effort=e, workers=len(items), **_sum(items)) for (m, e), items in sorted(by_route.items(), key=lambda x: str(x[0]))],
+                workers=[{**{k: v for k, v in r.items() if k != "locator"}, "summary": summary(r["snapshot"], model_label(r["snapshot"], r["agent_type"])),
                           "display": {k: compact(v) for k, v in r["snapshot"]["counts"].items()}} for r in sorted(rows, key=lambda x: x["started_at"])],
                 **diagnostics, limitation="Known usage only; cache is a subset of input. Not billing, quota, or savings. Coverage excludes unobserved Workers.")
 
@@ -286,9 +353,8 @@ def hook(payload, path=None, project_root=None):
     if not isinstance(payload, dict):
         raise store.StoreError("invalid hook input")
     event = payload.get("hook_event_name")
-    if event not in ("SubagentStart", "SubagentStop"):
+    if event not in ("SubagentStart", "SubagentStop", "UserPromptSubmit", "Stop"):
         return {}
-    agent, parent = _id(payload.get("agent_id")), _id(payload.get("session_id"))
     cwd = Path(payload.get("cwd", "")).expanduser()
     if not cwd.is_absolute() or not cwd.is_dir():
         raise store.StoreError("invalid hook working directory")
@@ -301,13 +367,23 @@ def hook(payload, path=None, project_root=None):
         if not enabled(root):
             return {}
         path = path or default_usage_path()
+        if event in ("UserPromptSubmit", "Stop"):
+            # The expanded scope requires explicit upgrade consent under question 6.
+            if store.effective_config(root).get("token_accounting_scope") != "main_and_subagents":
+                return {}
+            import turn_usage
+            return turn_usage.handle_hook(payload, path, sid, root)
+        agent, parent = _id(payload.get("agent_id")), _id(payload.get("session_id"))
         if event == "SubagentStart":
             register(path, agent, parent, sid, payload.get("agent_type"))
+            if store.effective_config(root).get("token_accounting_scope") == "main_and_subagents":
+                import turn_usage
+                turn_usage.register_child(payload, path, sid, root)
             return {}  # No extra developer context or model call.
         # transcript_path belongs to the PARENT: never use it as a fallback.
         row = collect(path, agent, parent, sid, transcript=payload.get("agent_transcript_path"), root=root, source="rollout",
                       agent_type=payload.get("agent_type"))
-        return {"systemMessage": summary(row["snapshot"], row["agent_type"] or "子 Agent"), "continue": True}
+        return {"systemMessage": summary(row["snapshot"], model_label(row["snapshot"], row["agent_type"])), "continue": True}
     finally:
         os.chdir(old_cwd)
 
@@ -355,8 +431,9 @@ def main(argv=None):
             output = statistics(path, scope=sid, parent_id=args.parent_id, agent_id=args.agent_id)
             if not args.json:
                 print(f"已观察子 Agent：{output['observed_subagents']} | 状态：{json.dumps(output['statuses'], ensure_ascii=False)}")
-                known = dict(status="partial", counts=output["known_usage"]["counts"])
+                known = output["completeness"]
                 print(summary(known, "已知用量合计（含缓存）"))
+                print(f"已观察范围：完整 {known['complete']} / 待确认 {known['waiting']} / 部分 {known['partial']} / 不可用 {known['unavailable']}")
                 for row in output["workers"]:
                     print(row["summary"])
                 print("缓存命中包含于输入；不可用不代表 0。完整快照不代表账单结算。")

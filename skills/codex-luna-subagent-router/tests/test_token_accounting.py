@@ -338,7 +338,7 @@ class InstallerTests(Sandbox):
         text=hpath.read_text()
         config.configure(self.rpath,"on",install_hooks=True,hooks_supported=True)
         self.assertEqual(text,hpath.read_text())
-        data=json.loads(text);self.assertEqual(data["hooks"]["Stop"],original["hooks"]["Stop"])
+        data=json.loads(text);self.assertEqual(data["hooks"]["Stop"][:-1],original["hooks"]["Stop"])
         self.assertEqual(len(data["hooks"]["SubagentStop"]),2)
         self.assertEqual(json.loads(self.rpath.read_text())["evidence_calibration"],"conservative")
 

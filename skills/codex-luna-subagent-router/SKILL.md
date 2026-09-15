@@ -9,7 +9,7 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 ## 入口
 
-安装/升级只读 `references/codex-guided-install.md`，不创建 Worker。普通任务先读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
+安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务先读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
 
 - `luna_only`：自动 Worker 只用 Luna；能力不足由 Lead 接管。
 - `adaptive`：Luna → `gpt-5.6-sol` → GPT-6 Astra；经济、中等、专家三层。Terra 不参与新自动路由。
@@ -47,7 +47,7 @@ Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类
 
 ## Token 统计
 
-`token_accounting` 缺失按 off，独立于路由和校准。开启后按需读 `references/token-accounting.md`；用真实 child/parent ID 关联回执，finalize 核对用量。只展示工具返回的总量、输入、缓存命中输入、输出，使用 k/m/b；缓存是输入子项。不可用不是 0，不让 Worker 自报估算，不为统计阻塞 close。
+`token_accounting` 缺失按 off，独立于路由和校准。开启后按需读 `references/token-accounting.md`；用真实 child/parent ID 关联回执，finalize 核对用量。只展示工具返回的总量、输入、缓存命中输入、输出，使用 k/m/b；缓存是输入子项。不可用不是 0，不让 Worker 自报估算，不为统计阻塞 close。标签按观察模型+强度，不用角色猜模型；主线程本轮摘要由统一统计开关的 UserPromptSubmit/Stop 输出。
 
 ## 执行与边界
 

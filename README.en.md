@@ -2,7 +2,23 @@
 
 [简体中文](README.md) | English
 
-Code version: **2.5.2**. Keep the user's Lead model unchanged and delegate only when a bounded Worker provides meaningful expected-cost or verification value.
+Code version: **2.5.3**. Keep the user's Lead model unchanged and delegate only when a bounded Worker provides meaningful expected-cost or verification value.
+
+## v2.5.3: main-turn summaries and upgrade inventory
+
+Worker labels now prefer observed model and reasoning (for example, Luna high), not the default role. Partial snapshots show concrete reasons; aggregate completeness is calculated instead of hard-coded. Invalid non-usage counters no longer clear a valid baseline; real gaps stay visible and old missing usage is never invented.
+
+The existing **question 6** covers main and child token accounting together: UserPromptSubmit registers the turn boundary, and Stop renders the main turn plus safely associated child increments. Total/input/cached-input/output retain decimal k/m/b formatting, without an extra model response.
+
+On upgrades run `scripts/inspect_guided_install.py --json` and explicitly ask every applicable missing option. An absent default is not an explicit off choice; preserve explicit off. Expanding a legacy child-only on setting to main-thread accounting requires the same sixth question and renewed hook review, not a seventh question.
+
+```bash
+python3 /path/to/skill/scripts/inspect_guided_install.py --json
+python3 /path/to/skill/scripts/token_usage.py stats
+python3 /path/to/skill/scripts/turn_usage.py stats --json
+```
+
+The new usage.turns.jsonl ledger contains IDs, boundaries and numeric snapshots. Existing usage/outcome history is preserved. Missing boundaries/identity, unsupported formats and unflushed data remain explicit. A Stop systemMessage is a hook notice, not a rewrite of the final answer, billing settlement or proof of complete coverage. See references/token-accounting.md and docs/v2.5.3-main-turn-token-summary.md.
 
 ## Two routing strategies
 
@@ -18,9 +34,9 @@ Canonical automatic models are gpt-5.6-luna, gpt-5.6-sol, and gpt-6-astra. Terra
 
 Ordinary implementation and read-heavy work normally use Luna. Ambiguous causal debugging and races require considering Sol; expert architecture review may require Astra. A max-effort Lead moving upward requires at least medium effort on the higher tier. Bundled Sol/Astra profiles start at high.
 
-## 2.5.2: SubAgent token accounting
+## 2.5.3: SubAgent token accounting
 
-Opt in with `token_accounting=on`; absent means off. Independent of routing mode and conservative calibration. Supported, user-trusted SubagentStart/SubagentStop hooks capture local usage without another model call; unsupported clients retain an explicit manual collect fallback.
+Opt in with `token_accounting=on`; absent means off. Independent of routing mode and conservative calibration. Supported, user-trusted UserPromptSubmit/Stop/SubagentStart/SubagentStop hooks capture local usage without another model call; unsupported clients retain an explicit manual collect fallback.
 
 Synthetic display example: `Sol high | total 45k | input 42k (cached 30k) | output 3k tokens`.
 
@@ -32,7 +48,7 @@ python3 /path/to/skill/scripts/token_usage.py stats
 python3 /path/to/skill/scripts/token_usage.py stats --json
 ```
 
-Only pass --hooks-supported after checking the active Codex build supports both events. Review/trust the installed definitions in Codex; this helper never grants trust or changes platform permission/feature policies. Hooks use the child ID and child transcript, not the parent log. Delayed terminal records stay partial until a finalize/collect recheck. Repeated stops update one child snapshot rather than double-counting; retries have separate IDs.
+Only pass --hooks-supported after checking the active Codex build supports all four events. Review/trust the installed definitions in Codex; this helper never grants trust or changes platform permission/feature policies. Hooks use the child ID and child transcript, not the parent log. Delayed terminal records stay partial until a finalize/collect recheck. Repeated stops update one child snapshot rather than double-counting; retries have separate IDs.
 
 Usage is stored separately in usage.jsonl beside the outcome registry, joined by explicit receipt and real agent IDs. Failed or partial quality results still retain their known usage. Summaries show per-field coverage, not a claim that every runtime Worker was observed. No prompt/source/log content is persisted; safe relative locators allow bounded rechecks. No billing, subscription-credit or savings estimates. See references/token-accounting.md for schema assumptions, limits and real-client acceptance.
 
@@ -86,7 +102,7 @@ From a complete version checkout:
 
 Codex skill-installer may install the complete published Skill directory, followed by references/codex-guided-install.md. Never replace only SKILL.md or one script: route_advisor.py now depends on outcome_store.py and plan_work.py. Refresh bundled profiles, preserving user configuration and custom profiles. Historical managed Terra profiles are removed.
 
-The guide has six questions: structured input, standing delegation, routing mode, SubAgent concurrency, conservative/off calibration, and independent token accounting on/off. Preserve existing choices; absent calibration remains off. Do not remove outcome files during upgrade.
+The guide has six questions: structured input, standing delegation, routing mode, SubAgent concurrency, conservative/off calibration, and independent token accounting on/off. Preserve explicit choices; ask about every applicable missing option before applying configuration. An absent runtime default is not a user answer. Do not remove outcome files during upgrade.
 
 ## Stable boundaries and testing
 
@@ -102,6 +118,6 @@ python3 -m unittest discover -s tests -v
 
 CI checks the Manifest. Script tests do not establish real Codex delegation rates or runtime model identity. See references/outcome-collection.md, references/work-planning.md and docs/v2.5.1-outcome-collection-observability.md.
 
-Pinned install source: https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.2/skills/codex-luna-subagent-router
+Pinned install source: https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.3/skills/codex-luna-subagent-router
 
 Replanning accepts `in_progress_task_ids` to avoid recreating running tasks. Retained Lead ownership is checked alongside Worker read/write ownership. Batch only tasks with the same prerequisites; runtime capacity is a ceiling, not a quota.

@@ -17,8 +17,8 @@ import outcome_store as store
 from configure_evidence_calibration import _routing_path, ConfigurationError
 
 OWNER = "codex-luna-subagent-router:token-accounting"
-VERSION = "2.5.2"
-EVENTS = ("SubagentStart", "SubagentStop")
+VERSION = "2.5.3"
+EVENTS = ("UserPromptSubmit", "Stop", "SubagentStart", "SubagentStop")
 
 
 def read_json(path):
@@ -74,7 +74,7 @@ def merge_hooks(existing, handler=None):
             if kept or not group["hooks"]:
                 cleaned.append({**group, "hooks": kept})
         if handler:
-            cleaned.append({"matcher": ".*", "hooks": [copy.deepcopy(handler)]})
+            cleaned.append({**({"matcher": ".*"} if event.startswith("Subagent") else {}), "hooks": [copy.deepcopy(handler)]})
         if cleaned:
             hooks[event] = cleaned
         else:
@@ -105,7 +105,7 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
     if mode not in ("on", "off"):
         raise ConfigurationError("token_accounting must be on or off")
     if install_hooks and (mode != "on" or not hooks_supported):
-        raise ConfigurationError("confirm SubagentStart/SubagentStop support before --install-hooks")
+        raise ConfigurationError("confirm UserPromptSubmit/Stop/SubagentStart/SubagentStop support before --install-hooks")
     routing_path = Path(routing_path)
     hooks_path = routing_path.parent.parent / "hooks.json"
     # Hold one config transaction lock to serialize this helper; never alter trust storage.
@@ -115,7 +115,11 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
             raise ConfigurationError("run guided routing setup first")
         if data.get("token_accounting", "off") not in ("on", "off"):
             raise ConfigurationError("unknown existing token_accounting")
-        proposed = {**data, "token_accounting": mode}
+        # mode=on is an explicit answer to the combined question 6. Old on alone
+        # does not authorize main-thread collection in the runtime handler.
+        proposed = {**data, "token_accounting": mode,
+                    "token_accounting_scope": "main_and_subagents",
+                    "token_accounting_collection": "hooks" if install_hooks else "manual"}
         writes = []
         if proposed != data:
             writes.append((routing_path, proposed))
@@ -128,17 +132,17 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
                     features = config.get("features", {})
                     if not isinstance(features, dict) or features.get("hooks", features.get("codex_hooks", True)) is False or config.get("allow_managed_hooks_only") is True:
                         raise ConfigurationError("platform hooks are disabled or restricted")
-        if install_hooks or mode == "off":
-            existing = read_json(hooks_path)
-            handler = None
-            if install_hooks:
-                target = Path(script or Path(__file__).with_name("token_usage.py")).absolute()
-                if not target.is_file():
-                    raise ConfigurationError("installed token_usage.py is missing")
-                handler = hook_handler(target, project_root=project_root)
-            merged = merge_hooks(existing, handler)
-            if merged != existing:
-                writes.append((hooks_path, merged))
+        # Explicit manual/off also removes obsolete owned handlers, never user hooks.
+        existing = read_json(hooks_path)
+        handler = None
+        if install_hooks:
+            target = Path(script or Path(__file__).with_name("token_usage.py")).absolute()
+            if not target.is_file():
+                raise ConfigurationError("installed token_usage.py is missing")
+            handler = hook_handler(target, project_root=project_root)
+        merged = merge_hooks(existing, handler)
+        if merged != existing:
+            writes.append((hooks_path, merged))
         originals = {p: p.read_bytes() if p.exists() else None for p, _ in writes}
         if not dry_run:
             # A durable first backup prevents accidental loss; later backups are not overwritten.
@@ -160,7 +164,7 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
                         atomic_bytes(path, originals[path])
                 raise
         return dict(action="would_update" if dry_run and writes else "updated" if writes else "unchanged",
-                    mode=mode, routing_config=str(routing_path), hooks_file=str(hooks_path),
+                    mode=mode, accounting_scope="main_and_subagents", events=list(EVENTS) if install_hooks else [], routing_config=str(routing_path), hooks_file=str(hooks_path),
                     hook_support="operator_confirmed" if hooks_supported else "not_checked",
                     trust="review_required" if install_hooks else "unchanged",
                     message="Review hook definitions in Codex; this helper never grants trust or enables disabled platform hooks.")
@@ -176,7 +180,7 @@ def main(argv=None):
     p.add_argument("--project-root")
     p.add_argument("--codex-home", type=Path, default=store.codex_home())
     p.add_argument("--install-hooks", action="store_true")
-    p.add_argument("--hooks-supported", action="store_true", help="Operator confirms the active Codex build lists both SubAgent hook events; not a trust bypass.")
+    p.add_argument("--hooks-supported", action="store_true", help="Operator confirms the active Codex build lists all four main/SubAgent hook events; not a trust bypass.")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
