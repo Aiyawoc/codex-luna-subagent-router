@@ -5,6 +5,7 @@ or ambiguous data is unavailable/partial, never an inferred zero or billing clai
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -69,6 +70,7 @@ class Accumulator:
     """Use deltas only when consistent with the provider's last usage snapshot."""
     def __init__(self, allow_zero_origin=True):
         self.allow_zero_origin = allow_zero_origin
+        self.allow_reset_origin = True
         self.previous = None
         self.values = {key: 0 for key in FIELDS}
         self.events = 0
@@ -83,7 +85,7 @@ class Accumulator:
         if total == previous:
             return  # rate-limit-only/duplicate cumulative update
         self.previous = total
-        if not self.own_seen and previous is not None and total == last and self.allow_zero_origin:
+        if not self.own_seen and previous is not None and total == last and self.allow_zero_origin and self.allow_reset_origin:
             # The child can start counters from zero even with a copied parent prefix.
             previous = None
         self.own_seen = True
@@ -116,7 +118,8 @@ class Accumulator:
 
 def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
                project_root: Path | None = None, source="rollout", max_bytes=MAX_BYTES,
-               max_seconds=MAX_SECONDS) -> dict[str, Any]:
+               max_seconds=MAX_SECONDS, thread_kind="subagent", turn_id=None,
+               cursor=None) -> dict[str, Any]:
     """Read ONLY the explicit file; no glob, parent log, SQLite, or network scan.
 
     complete means a consistent local accounting snapshot with a terminal event,
@@ -126,7 +129,11 @@ def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
     result = empty("no_usage", source_name)
     if source not in ("rollout", "app-server"):
         return empty("unsupported_format", source_name)
-    if agent_id == parent_id:
+    if thread_kind not in ("main", "subagent"):
+        return empty("unsupported_thread_kind", source_name)
+    if thread_kind == "main" and (parent_id is not None or source != "rollout" or not turn_id):
+        return empty("main_turn_identity_required", source_name)
+    if thread_kind == "subagent" and agent_id == parent_id:
         return empty("parent_is_not_child", source_name)
     path = Path(path).expanduser().absolute()
     allowed = [Path(codex_home).expanduser().resolve()]
@@ -140,10 +147,13 @@ def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
     except (OSError, ValueError):
         return empty("transcript_unavailable", source_name)
     acc = Accumulator(allow_zero_origin=source == "rollout")
+    acc.allow_reset_origin = cursor is None and thread_kind == "subagent"
     meta = None
     boundary = None
     ordinal_boundary = None
     active_route = (None, None)
+    active_turn = None
+    target_seen = False
     routes = set()
     used = 0
     terminal = False
@@ -154,7 +164,13 @@ def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
         with os.fdopen(fd, "rb") as handle:
             if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
                 return empty("not_regular_file", source_name)
+            if cursor is not None:
+                try:
+                    validate_cursor(handle, cursor)
+                except ValueError:
+                    return empty("transcript_changed_since_start", source_name)
             while True:
+                line_offset = handle.tell()
                 if used >= max_bytes or time.monotonic() >= deadline:
                     acc.reasons.add("read_budget_exceeded")
                     break
@@ -196,7 +212,9 @@ def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
                             terminal = False
                     except ValueError as exc:
                         acc.reasons.add(str(exc))
-                        acc.previous = None
+                        # A synthetic/invalid update is NOT a new cumulative baseline.
+                        # Keep the last verified baseline; the next delta must still
+                        # agree with last_token_usage or is rejected as a real gap.
                     continue
                 payload = row.get("payload", {})
                 if not isinstance(payload, dict):
@@ -217,7 +235,11 @@ def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
                                 spawn = sub.get("thread_spawn", {})
                                 if isinstance(spawn, dict):
                                     recorded_parent = spawn.get("parent_thread_id")
-                    if recorded_parent is not None and recorded_parent != parent_id:
+                    src = meta.get("source")
+                    is_child = recorded_parent is not None or (isinstance(src, dict) and "subagent" in src) or src == "subagent"
+                    if thread_kind == "main" and is_child:
+                        return empty("child_is_not_main", source_name)
+                    if thread_kind == "subagent" and recorded_parent is not None and recorded_parent != parent_id:
                         return empty("parent_identity_mismatch", source_name)
                     try:
                         boundary = _time(meta.get("timestamp"))
@@ -244,13 +266,21 @@ def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
                 except ValueError as exc:
                     acc.reasons.add(str(exc))
                     continue
-                if own and row.get("type") == "turn_context":
+                if row.get("type") == "turn_context":
+                    active_turn = payload.get("turn_id")
+                    if own and (turn_id is None or active_turn == turn_id):
+                        target_seen = True
                     active_route = (_route_text(payload.get("model")), _route_text(payload.get("effort")))
-                    terminal = False
+                    if own and (turn_id is None or active_turn == turn_id):
+                        terminal = False
+                own = own and (cursor is None or line_offset >= cursor["offset"])
+                own = own and (turn_id is None or active_turn == turn_id)
                 if row.get("type") != "event_msg":
                     continue
                 if own and payload.get("type") in ("task_complete", "turn_complete", "turn_completed", "turn_aborted"):
-                    terminal = True
+                    event_turn = payload.get("turn_id")
+                    if turn_id is None or event_turn in (None, turn_id):
+                        terminal = True
                 if own and payload.get("type") in ("task_started", "turn_started"):
                     terminal = False
                 if payload.get("type") != "token_count" or payload.get("info") is None:
@@ -266,9 +296,13 @@ def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
                         terminal = False
                 except (ValueError, AttributeError) as exc:
                     acc.reasons.add(str(exc) if isinstance(exc, ValueError) else "invalid_counter")
-                    acc.previous = None
+                    # A synthetic/invalid update is NOT a new cumulative baseline.
+                    # Keep the last verified baseline; the next delta must still
+                    # agree with last_token_usage or is rejected as a real gap.
     except (OSError, ValueError):
         acc.reasons.add("transcript_read_failed")
+    if turn_id is not None and not target_seen:
+        return empty("turn_boundary_missing", source_name)
     if not terminal:
         acc.reasons.add("terminal_not_observed")
     if len(routes) > 1:
@@ -281,3 +315,51 @@ def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
                   last_usage_at=last_at, model=route[0], effort=route[1], terminal_observed=terminal,
                   bytes_read=used)
     return result
+
+
+def validate_cursor(handle, cursor):
+    """Verify an append-only boundary without persisting transcript text."""
+    if not isinstance(cursor, dict) or set(cursor) != {"offset", "anchor"}:
+        raise ValueError("invalid cursor")
+    offset = cursor["offset"]
+    if type(offset) is not int or offset < 0 or offset > os.fstat(handle.fileno()).st_size:
+        raise ValueError("invalid cursor offset")
+    handle.seek(max(0, offset - 512))
+    data = handle.read(min(offset, 512))
+    if hashlib.sha256(data).hexdigest() != cursor["anchor"] or (offset and not data.endswith(b"\n")):
+        raise ValueError("changed cursor prefix")
+    handle.seek(0)
+
+
+def checkpoint(path, thread_id, *, codex_home, project_root=None):
+    """Capture last complete line boundary of an explicitly identified rollout.
+
+    Read only the header and a bounded tail. No prompt/response text is returned.
+    A partial tail is left for the stop reader, not skipped as already counted.
+    """
+    path = store.safe_path(Path(path).expanduser().absolute())
+    roots = [Path(codex_home).resolve()]
+    if project_root:
+        roots.append(Path(project_root).resolve() / ".codex")
+    if path.suffix != ".jsonl" or not any(path.resolve().is_relative_to(r) for r in roots):
+        raise ValueError("path_outside_allowed_roots")
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    with os.fdopen(fd, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise ValueError("not_regular_file")
+        line = handle.readline(MAX_LINE + 1)
+        if len(line) > MAX_LINE or not line.endswith(b"\n"):
+            raise ValueError("header_unavailable")
+        header = json.loads(line)
+        if not isinstance(header, dict) or header.get("type") != "session_meta" or header.get("payload", {}).get("id") != thread_id:
+            raise ValueError("thread_identity_mismatch")
+        size = os.fstat(handle.fileno()).st_size
+        start = max(0, size - MAX_LINE)
+        handle.seek(start)
+        tail = handle.read(MAX_LINE)
+        end = tail.rfind(b"\n")
+        if end < 0:
+            raise ValueError("unflushed_tail")
+        offset = start + end + 1
+        handle.seek(max(0, offset - 512))
+        return {"offset": offset, "anchor": hashlib.sha256(handle.read(min(offset, 512))).hexdigest()}

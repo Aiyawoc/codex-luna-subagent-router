@@ -386,7 +386,7 @@ def main(argv=None):
             if not args.json:
                 u = output["token_usage"]
                 if "known_usage" in u:
-                    print(usage.summary(dict(status="partial", counts=u["known_usage"]["counts"]), "SubAgent 已知用量（含缓存）"))
+                    print(usage.summary(u["completeness"], "SubAgent 已知用量（含缓存）"))
                     print(f"Usage coverage: {u['statuses']} / {u['observed_subagents']} observed SubAgents")
                 print(f"Registry: {output['registry']}\nScope: {output['scope']}\nTotal outcomes: {output['total_outcomes']}")
                 for key in OUTCOMES:

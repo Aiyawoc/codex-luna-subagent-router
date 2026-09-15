@@ -1,4 +1,4 @@
-# SubAgent token 统计（v2.5.2）
+# SubAgent token 统计（v2.5.3）
 
 仅 `token_accounting=on` 采集；缺失/off 保持关闭。此选项独立于 luna_only/adaptive 和 evidence_calibration，关闭历史校准也能查看用量。不会切换模型、修改路由成本表、估算账单或绕过 hooks 信任。
 
@@ -20,7 +20,7 @@ Sol high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | 完
 
 ## 启用：安装指引第 6 项
 
-先全量安装，再检查当前 Codex build 是否提供 SubagentStart/SubagentStop，以及 hooks 是否被用户或管理员禁用。`--hooks-supported` 是操作者已确认能力的声明，不是运行时探测结果，也不是信任绕过。
+先全量安装，再检查当前 Codex build 是否提供 UserPromptSubmit/Stop/SubagentStart/SubagentStop，以及 hooks 是否被用户或管理员禁用。`--hooks-supported` 是操作者已确认能力的声明，不是运行时探测结果，也不是信任绕过。
 
 ```bash
 python3 /path/to/skill/scripts/configure_token_accounting.py \
@@ -30,7 +30,7 @@ python3 /path/to/skill/scripts/configure_token_accounting.py \
   --scope user --mode on --install-hooks --hooks-supported
 ```
 
-该 helper 保留 routing.json 其它字段和用户 hooks，只管理 statusMessage 为 `codex-luna-subagent-router:token-accounting` 的两个 handler。写入 hooks.json，不修改 config.toml 的权限/功能开关和信任数据库；首次备份保留在 `.token-accounting.backup`。写入失败尽力回滚已变更文件；回滚失败需从备份恢复。升级会刷新 handler 中的版本号，因此新定义仍需要重新审查信任。
+该 helper 保留 routing.json 其它字段和用户 hooks，只管理 statusMessage 为 `codex-luna-subagent-router:token-accounting` 的四个 handler：UserPromptSubmit、Stop、SubagentStart、SubagentStop。写入 hooks.json，不修改 config.toml 的权限/功能开关和信任数据库；首次备份保留在 `.token-accounting.backup`。写入失败尽力回滚已变更文件；回滚失败需从备份恢复。升级会刷新 handler 中的版本号，因此新定义仍需要重新审查信任。
 
 项目级改用 `--scope project --project-root /repo`。不要在同一工作环境重复安装多个 scope 的同一采集 hook。多个来源都匹配时 Codex 可能执行多次；用量仍按同一 child ID 去重，而非重复加总。
 
@@ -114,4 +114,31 @@ python3 /path/to/skill/scripts/route_advisor.py stats --json
 - https://raw.githubusercontent.com/openai/codex/main/codex-rs/app-server-protocol/schema/typescript/v2/ThreadTokenUsageUpdatedNotification.ts
 - https://raw.githubusercontent.com/openai/codex/main/codex-rs/app-server-protocol/schema/typescript/v2/TokenUsageBreakdown.ts
 
-不运行计费 API，不估算套餐消耗、美元账单或相对 Astra Lead 的节约金额；尚未计入 Lead 的分配、集成和返工成本，不能据 Worker token 数证明净节省。
+不运行计费 API，不估算套餐消耗、美元账单或相对 Astra Lead 的节约金额；子线程生命周期统计不含 Lead 的分配、集成和返工成本；下述本轮摘要单独统计主线程自身用量，仍不能据此证明相对未委派方案的净节省。
+
+
+## v2.5.3 显示与主线程本轮摘要
+
+标签优先使用子线程 `turn_context` 的 model/effort：Luna high、Luna max、Sol high、Astra high。default 只是角色。无观察身份显示“模型未核实”，多路由显示“多模型/强度”，不根据自述或 profile 猜模型。
+
+状态分开显示“待确认：未读到结束事件/日志尾部未写完”和“部分统计：缺少基线/计数缺口/非用量计数”等原因。合计不再写死 partial，而显示已观察范围的完整、待确认、部分、不可用数。字段覆盖不等于完整执行覆盖。
+
+`non_usage_counter` 不再清空上一个有效累计基线；下一条增量仍必须与 last_token_usage 一致。无效事件仍标警告、真正缺口仍拒绝，不能从这项修复推定用户旧的两个 partial 变成完整。历史只读查看会更新标签；要复核旧数字，仍需原始日志 collect。没有原始 rollout 不能补出缺失区间。
+
+主线程同第 6 项显式选择 `token_accounting=on` 与 `token_accounting_scope=main_and_subagents`。UserPromptSubmit 登记明确的 session_id/turn_id 和最后完整日志行的游标（只保存偏移与哈希）；Stop 仅读本轮身份匹配的 token_count，输出 systemMessage，不要求追加模型轮次、不修改已生成的回答正文。
+
+读不到游标时，只允许以已登记的精确 turn_id 和可验证累计边界读取；从未登记 UserPromptSubmit 的 Stop 不使用生命周期累计冒充本轮。读日志上限仍为 64 MiB/短时预算；大日志、不支持格式、重写/计数重置显示不可用或缺口，不无限扫描。
+
+子线程首次 SubagentStart 仅在明确的 parent session/turn 能关联时进入本轮；已经存在的子线程在 UserPromptSubmit 保存自己的游标，本轮只计其新增区间。父子分别读取各自线程局部 token_count，不混入 App Server 聚合/账号用量；不明确的线程不并入合计。新请求封存旧轮次，旧 Stop 不吸收新轮次的 steering。快照晚到时应在下一请求前 collect 复核；封存后的统计保留当时状态，不跨轮猜测更新。
+
+本轮汇总区间是“本轮起点到当前 Stop 快照”，不是整段会话累计，也不是每个并行任务的因果成本测量。显示已登记主/子线程的已知合计，未关联线程数量另提示；不保证所有 Worker/外部调用全覆盖。模型中途改变不能把全部用量标到一个模型。缓存命中包含在输入中，推理输出包含在输出中。
+
+```bash
+python3 /path/to/skill/scripts/inspect_guided_install.py --json
+python3 /path/to/skill/scripts/turn_usage.py stats
+python3 /path/to/skill/scripts/turn_usage.py stats --session-id ACTUAL_PARENT_ID --json
+python3 /path/to/skill/scripts/turn_usage.py collect --session-id ACTUAL_PARENT_ID \
+  --turn-id ACTUAL_TURN_ID --transcript /actual/codex-home/sessions/parent.jsonl
+```
+
+主线程账本默认为 `usage.turns.jsonl`，与 usage.jsonl 同目录；自定义 usage 文件时按相同 stem 派生。旧 usage.jsonl 和 outcomes.jsonl 不迁移、不删除。原开关缺失/关闭时不采集，旧版只有 on 未确认扩展 scope 时忽略主线程 hooks。

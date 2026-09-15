@@ -140,7 +140,7 @@ class ReleaseIntegrationTests(unittest.TestCase):
         installed = skills / 'codex-luna-subagent-router'
         for file in ('route_advisor.py', 'outcome_store.py', 'plan_work.py', 'token_usage.py', 'usage_reader.py', 'configure_token_accounting.py'):
             self.assertEqual((installed / 'scripts' / file).read_bytes(), (ROOT / 'scripts' / file).read_bytes())
-        self.assertEqual((installed / 'VERSION').read_text().strip(), '2.5.2')
+        self.assertEqual((installed / 'VERSION').read_text().strip(), (ROOT / 'VERSION').read_text().strip())
         self.assertEqual((config.read_bytes(), registry.read_bytes(), usage.read_bytes(), hooks.read_bytes()), before)
         self.assertTrue((agents / 'my-custom.toml').exists())
         self.assertFalse((agents / 'terra-medium.toml').exists())

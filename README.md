@@ -2,7 +2,23 @@
 
 简体中文 | [English](README.en.md)
 
-当前代码版本：**2.5.2**。保持用户当前主模型，把有明确净收益的工作交给最低足够的 model + reasoning；不是尽量多创建 Agent。
+当前代码版本：**2.5.3**。保持用户当前主模型，把有明确净收益的工作交给最低足够的 model + reasoning；不是尽量多创建 Agent。
+
+## v2.5.3：主线程摘要与升级盘点
+
+本版子 Agent 用量行优先显示观察到的模型/强度（如 Luna high），不再把角色 default 当名称；“部分”展开为具体原因，合计完整度按已观察记录计算，不再固定 partial。非用量计数不再清空有效基线，真实缺口仍标注，旧历史不会被猜测补成完整。
+
+统一安装问题 **第 6 项** 管理主/子 Agent token 统计：UserPromptSubmit 登记本轮起点，Stop 输出主线程本轮及可可靠关联的子线程新增用量。四项保持总量、输入、缓存命中输入、输出，使用 k/m/b；不触发额外模型回复。
+
+升级必须先运行 `scripts/inspect_guided_install.py --json`，逐项询问适用的缺失选项。缺失不是用户选择 off；已有明确 off 不擅自开启。旧版只有子 Agent 的 on，扩展主线程前也在第 6 项询问并审查新钩子，不增加第 7 项。
+
+```bash
+python3 /path/to/skill/scripts/inspect_guided_install.py --json
+python3 /path/to/skill/scripts/token_usage.py stats
+python3 /path/to/skill/scripts/turn_usage.py stats --json
+```
+
+主线程账本 `usage.turns.jsonl` 保留精确 session/turn 和只含数字的快照；旧 usage/outcomes 保留。没有本轮基线/身份、不支持格式或数据未写完时明确降级。完成提示是钩子 systemMessage，不修改已经生成的正文，不代表后台账单或全覆盖。详见 `references/token-accounting.md` 和 `docs/v2.5.3-main-turn-token-summary.md`。
 
 ## 两种策略
 
@@ -18,9 +34,9 @@
 
 普通局部实现、机械检查、scan/read-heavy 优先 Luna；高歧义调试、跨模块因果与竞态选 Sol；专家级架构反证再评估 Astra。Luna max 不等于 Sol，当前层 max 向上时至少上层 medium；当前 Sol/Astra profiles 从 high 起。
 
-## v2.5.2：SubAgent token 统计
+## v2.5.3：SubAgent token 统计
 
-独立 `token_accounting=on/off`，缺失默认 off。支持 SubagentStart/SubagentStop 的客户端可在用户审查信任后自动采集；不支持时保留手动 collect。不会切换模型或为统计多跑一个 Agent。
+独立 `token_accounting=on/off`，缺失默认 off。支持 UserPromptSubmit/Stop/SubagentStart/SubagentStop 的客户端可在用户审查信任后自动采集；不支持时保留手动 collect。不会切换模型或为统计多跑一个 Agent。
 
 ```text
 Sol high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | 完整快照
@@ -34,7 +50,7 @@ python3 /path/to/skill/scripts/token_usage.py stats
 python3 /path/to/skill/scripts/token_usage.py stats --json
 ```
 
-`--hooks-supported` 仅在已确认当前 build 提供这两个事件后使用；仍须通过 Codex 信任审查，不能静默绕过。自动捕获独立于 conservative；unknown/failed/partial Worker 的用量仍可记录。停止尾部未刷盘时先 partial，finalize 按实际 child ID 关联并复核；重复 hook/steering 不重复加总。
+`--hooks-supported` 仅在已确认当前 build 提供这四个事件后使用；仍须通过 Codex 信任审查，不能静默绕过。自动捕获独立于 conservative；unknown/failed/partial Worker 的用量仍可记录。停止尾部未刷盘时先 partial，finalize 按实际 child ID 关联并复核；重复 hook/steering 不重复加总。
 
 账本默认与 outcome 同目录 `usage.jsonl`，每个子线程取最新快照；支持父会话/子 Agent 筛选和字段覆盖数。不保存日志正文，只保存受控用量元数据与可复核的相对 locator。不从 token 数推导实际账单或净节省。详见 [统计、安装和实机验收](skills/codex-luna-subagent-router/references/token-accounting.md)。
 
@@ -92,12 +108,12 @@ python3 /path/to/skill/scripts/route_advisor.py plan /path/to/work-plan.json \
 
 ```text
 请使用 $skill-installer 全量安装或升级：
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.2/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.3/skills/codex-luna-subagent-router
 刷新所有随包 Agent profiles，并读取 references/codex-guided-install.md。
 保留已有 adaptive/conservative 选择、并发上限和 outcome/receipt 数据。
 ```
 
-**不要只替换 SKILL.md/单个脚本**：本版 route_advisor.py 还依赖 token_usage.py、usage_reader.py；新安装助手是 configure_token_accounting.py。更新全部 bundled profiles；旧托管 Terra profiles 清理，自定义 profiles 保留。
+**不要只替换 SKILL.md/单个脚本**：本版 route_advisor.py 还依赖 token_usage.py、usage_reader.py；主线程新增 turn_usage.py，升级盘点新增 inspect_guided_install.py，安装助手是 configure_token_accounting.py。更新全部 bundled profiles；旧托管 Terra profiles 清理，自定义 profiles 保留。
 
 向导六项：结构化提问开关、全局/项目委派授权、luna_only/adaptive、最大 SubAgent 数、Adaptive 的 conservative/off，以及独立 token 统计 on/off。保留已有用户设置，不因升级重置校准；未知配置不静默覆盖。
 

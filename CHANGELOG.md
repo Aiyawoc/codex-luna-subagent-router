@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.3 — 2026-09-15
+
+- 用量标签优先观察模型/强度，未知或多路由不猜；partial 展示具体原因，修复合计无条件 partial。
+- 非用量计数不清空有效基线，保留缺口检查与旧历史；不从统计摘要伪造缺失用量。
+- 新增 turn_usage.py：UserPromptSubmit/Stop 的精确 session/turn、本轮游标与数字快照；主子线程分别取本轮新增、幂等结算、跨轮封存、缺失降级，不触发额外模型轮次。
+- 第 6 项统一主子统计；旧 on 扩展范围明确询问，不自授 hooks 信任。新增只读 inspect_guided_install.py，适用的缺失选项必须问，保留明确 off。
+- 原 Luna/Sol/Astra 路由与并发规则不变；新增跨轮、基线、标签、安装和隐私回归，更新中英 README、安装指南与完整 Manifest。
+
 ## 2.5.2 — 2026-09-14
 
 - 新增独立 token_accounting on/off，缺失默认 off；两种路由和关闭证据校准的场景都可使用。
