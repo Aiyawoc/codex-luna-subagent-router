@@ -1,129 +1,207 @@
 # Codex Cost-Aware SubAgent Router
 
-简体中文 | [English](README.en.md)
+**简体中文** | [English](README.en.md)
 
-当前代码版本：**2.5.3**。保持用户当前主模型，把有明确净收益的工作交给最低足够的 model + reasoning；不是尽量多创建 Agent。
+**保持主 Agent 不变，把合适的工作交给更便宜的模型。**
 
-## v2.5.3：主线程摘要与升级盘点
+面向 Codex 的成本优先 SubAgent 路由 Skill：按子任务选择 **Luna / Sol / Astra + 推理强度**，可选记录验证结果与主／子 Agent token 用量。目标是降低可靠完成任务的**总成本**，而不是尽可能多创建 Agent。
 
-本版子 Agent 用量行优先显示观察到的模型/强度（如 Luna high），不再把角色 default 当名称；“部分”展开为具体原因，合计完整度按已观察记录计算，不再固定 partial。非用量计数不再清空有效基线，真实缺口仍标注，旧历史不会被猜测补成完整。
+当前稳定版：[**v2.5.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.3) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
-统一安装问题 **第 6 项** 管理主/子 Agent token 统计：UserPromptSubmit 登记本轮起点，Stop 输出主线程本轮及可可靠关联的子线程新增用量。四项保持总量、输入、缓存命中输入、输出，使用 k/m/b；不触发额外模型回复。
+[主要作用](#purpose) · [安装／升级](#install) · [六个询问项](#setup) · [查看数据](#data) · [费用对比占位](#cost) · [更多文档](#docs)
 
-升级必须先运行 `scripts/inspect_guided_install.py --json`，逐项询问适用的缺失选项。缺失不是用户选择 off；已有明确 off 不擅自开启。旧版只有子 Agent 的 on，扩展主线程前也在第 6 项询问并审查新钩子，不增加第 7 项。
+<a id="purpose"></a>
+## 主要作用
 
-```bash
-python3 /path/to/skill/scripts/inspect_guided_install.py --json
-python3 /path/to/skill/scripts/token_usage.py stats
-python3 /path/to/skill/scripts/turn_usage.py stats --json
-```
+| 能力 | 解决什么问题 |
+|---|---|
+| **成本优先路由** | 主 Agent 保持用户指定模型；把局部实现、扫描、整理等工作下放，在复杂因果分析或专家复核时评估更高能力模型。 |
+| **整组任务规划** | 一次比较全部可下放子目标；独立任务可同波执行，共享上下文的小任务可合并，有依赖或读写冲突则分波。 |
+| **验证结果校准** | 可选使用本地、已验证的 outcome 调整后续建议；失败和不完整结果不会被当成成功样本。 |
+| **主／子 Agent 用量统计** | 可选在子 Agent 停止、主 Agent 本轮完成时显示总量、输入、缓存命中输入和输出，保留原始数字与完整度原因。 |
 
-主线程账本 `usage.turns.jsonl` 保留精确 session/turn 和只含数字的快照；旧 usage/outcomes 保留。没有本轮基线/身份、不支持格式或数据未写完时明确降级。完成提示是钩子 systemMessage，不修改已经生成的正文，不代表后台账单或全覆盖。详见 `references/token-accounting.md` 和 `docs/v2.5.3-main-turn-token-summary.md`。
+### 两种策略，三层模型
 
-## 两种策略
-
-| 特点 | luna_only | adaptive |
+| 策略 | 自动子 Agent | 适合谁 |
 |---|---|---|
-| 定位 | 极致经济、自动子模型边界可预测 | 成本优先的综合能力路由 |
-| 自动 Worker | 只用 Luna | Luna → Sol → Astra |
-| 难题 | Luna 不足由当前 Lead 接管 | 必要时局部向上升级 |
-| 普通任务 | Luna 或 Lead | 昂贵 Lead 可以向下使用 Luna |
-| 历史校准 | 不启用 | 可选 conservative，缺失为 off |
+| **`luna_only`：极致经济** | 只使用 Luna；不够可靠的任务交还当前主 Agent。 | 希望子模型成本边界简单、可预测的用户。 |
+| **`adaptive`：自动综合** | 按子任务在 Luna → Sol → Astra 中选择最低足够的模型与强度。 | 希望兼顾成本、复杂任务可靠性与独立复核的用户。 |
 
-三层对应 `gpt-5.6-luna`（经济）、`gpt-5.6-sol`（中等）、`gpt-6-astra`（专家）。Terra 不进入新自动路由，旧 RoutePlan 保留解析兼容。Sol 不使用无后缀 alias。
+**Luna（经济）**承担清晰、局部、可验证的工作；**Sol（中等）**用于高歧义调试、跨模块因果、竞态等；**Astra（专家）**用于专家级架构判断和高失败代价反证。这是本项目的路由策略，不是对每项任务的性能保证。自动路由不再包含 Terra。
 
-普通局部实现、机械检查、scan/read-heavy 优先 Luna；高歧义调试、跨模块因果与竞态选 Sol；专家级架构反证再评估 Astra。Luna max 不等于 Sol，当前层 max 向上时至少上层 medium；当前 Sol/Astra profiles 从 high 起。
+主 Agent 可以向下委派，也可以局部向上求助：例如 Astra high → Luna high，或 Luna max → Sol high。`max` 不等于跨模型能力升级。每个子任务最多两次尝试；每波最多 `min(3, Codex 显式并发上限)`，还需扣除已打开线程。**不强制开满，也不强制混用模型。**
 
-## v2.5.3：SubAgent token 统计
+<a id="install"></a>
+## 安装／升级
 
-独立 `token_accounting=on/off`，缺失默认 off。支持 UserPromptSubmit/Stop/SubagentStart/SubagentStop 的客户端可在用户审查信任后自动采集；不支持时保留手动 collect。不会切换模型或为统计多跑一个 Agent。
+### 推荐：让 Codex 完成安装和引导
 
-```text
-Sol high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | 完整快照
-```
-
-上行为合成示例。总量含缓存，缓存是输入的子项；JSON 还保留输出中的推理 token。小于 1000 为原数，k/m/b 表示千/百万/十亿，最多一位小数，原始整数不截断。不可用不是 0，partial 只表示已知部分。
-
-```bash
-python3 /path/to/skill/scripts/configure_token_accounting.py --scope user --mode on --install-hooks --hooks-supported
-python3 /path/to/skill/scripts/token_usage.py stats
-python3 /path/to/skill/scripts/token_usage.py stats --json
-```
-
-`--hooks-supported` 仅在已确认当前 build 提供这四个事件后使用；仍须通过 Codex 信任审查，不能静默绕过。自动捕获独立于 conservative；unknown/failed/partial Worker 的用量仍可记录。停止尾部未刷盘时先 partial，finalize 按实际 child ID 关联并复核；重复 hook/steering 不重复加总。
-
-账本默认与 outcome 同目录 `usage.jsonl`，每个子线程取最新快照；支持父会话/子 Agent 筛选和字段覆盖数。不保存日志正文，只保存受控用量元数据与可复核的相对 locator。不从 token 数推导实际账单或净节省。详见 [统计、安装和实机验收](skills/codex-luna-subagent-router/references/token-accounting.md)。
-
-## v2.5.1：采集、统计与整组规划
-
-**回执采集**：conservative 下 begin → 实际 Worker → Lead 验收 → finalize → close。派遣前固化 metadata 与 scope，结算幂等，pending 可检查。未知身份、环境阻塞、取消、early stop、Lead 实质返工只能 partial，不捏造 verified_pass。记录失败不能阻塞及时停止线程。
-
-**项目识别**：在项目工作目录调用绝对路径脚本，自动识别 Git 根并保存 hash；非 Git 项目显式 `--project-root`。全局安装不等于全局 evidence。旧 global 记录原样保留，不自动猜测归属。
-
-**统计**：stats 无需六轴，默认所有 scope，可筛项目。显示分布、最后写入、pending、旧/坏/重复记录、稀疏 bucket、可用建议和样本缺口。可用建议不等于已执行覆盖，不声称真实节省金额。
-
-**整组规划**：多个候选先 plan。相似任务统一分类；共享上下文可合并一个 Worker，独立且有净收益可同时派 2～3 个。昂贵 Lead 不为“保持忙碌”而亲自做另一份同类廉价工作；关键路径、不可交接上下文、权限或外部副作用可留在 Lead 并说明理由。依赖或读写冲突分波。不强制开满，也不强制出现 Sol/Astra。
-
-## 查看 outcome
-
-```bash
-python3 /path/to/skill/scripts/route_advisor.py stats
-python3 /path/to/skill/scripts/route_advisor.py stats --json
-python3 /path/to/skill/scripts/route_advisor.py stats --current-scope --json
-python3 /path/to/skill/scripts/route_advisor.py --global-scope stats --json
-```
-
-默认 `${CODEX_HOME:-~/.codex}/state/codex-luna-subagent-router/outcomes.jsonl`；`--registry` 或 `CODEX_LUNA_ROUTER_REGISTRY` 可覆盖。回执是旁边 `outcomes.jsonl.receipts.jsonl`，两者一起备份。
-
-详见 [采集与统计](skills/codex-luna-subagent-router/references/outcome-collection.md)。Outcome 仍需要 begin/finalize；新增 token hooks 不自动替代质量验收。必须通过实机任务检查采集覆盖。
-
-## 证据校准
-
-Advisor 零额外模型/网络调用，根据六个离散分类轴选择候选。`evidence_calibration=conservative` 才使用本地历史；缺失/off 保留静态选择。
-
-A：同项目 scope、family、六轴、policy 和 90 天窗口；便宜组合自己 >=2 次成功可同模型降 effort，安全跨 tier >=3。高失败代价、不可验证和 architecture 禁止历史跨 tier 降档。
-
-B：同 scope/六轴/policy、>=5 个唯一回执、>=2 个 family，安全场景仅同模型下降一个 effort 档；不跨模型。partial 不训练，失败否决，旧无 ID 行不能贡献 B。这些是保守启发式，不是成功率统计保证；不主动凑样本。
-
-## 多任务示例
-
-```bash
-python3 /path/to/skill/scripts/route_advisor.py plan /path/to/work-plan.json \
-  --lead-model gpt-6-astra --lead-effort high --open-workers 0
-```
-
-使用 [输入模板](skills/codex-luna-subagent-router/examples/work-plan.json)。open-workers 需填实际仍打开线程数，不把默认 0 当事实。planner 不创建 Agent，输出 ready 候选后仍需权限、精确模型和空闲容量预检。详见 [任务规划](skills/codex-luna-subagent-router/references/work-planning.md)。
-
-## 安装与全量升级
-
-在已取得完整本版本 checkout 后：
-
-```bash
-./skills/codex-luna-subagent-router/install.sh --global
-# 或：
-./skills/codex-luna-subagent-router/install.sh --project /path/to/repository
-```
-
-推荐交给 Codex 安装：
+在目标项目的 Codex 对话中发送：
 
 ```text
-请使用 $skill-installer 全量安装或升级：
+请使用 $skill-installer 全量安装或升级这个 Skill：
 https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.3/skills/codex-luna-subagent-router
-刷新所有随包 Agent profiles，并读取 references/codex-guided-install.md。
-保留已有 adaptive/conservative 选择、并发上限和 outcome/receipt 数据。
+
+刷新完整 Skill 包和随包 Agent profiles，然后读取 references/codex-guided-install.md。
+先运行 scripts/inspect_guided_install.py --json，逐项询问适用的缺失配置。
+保留我的既有路由、并发、明确 off/false、outcome/usage 数据和其他自定义配置。
+旧版已开启子 Agent 统计时，在第 6 项询问是否升级为主／子 Agent 统一统计；
+不要跳过新选项，也不要未经确认安装、信任或扩大钩子范围。
 ```
 
-**不要只替换 SKILL.md/单个脚本**：本版 route_advisor.py 还依赖 token_usage.py、usage_reader.py；主线程新增 turn_usage.py，升级盘点新增 inspect_guided_install.py，安装助手是 configure_token_accounting.py。更新全部 bundled profiles；旧托管 Terra profiles 清理，自定义 profiles 保留。
+### 手动安装完整包
 
-向导六项：结构化提问开关、全局/项目委派授权、luna_only/adaptive、最大 SubAgent 数、Adaptive 的 conservative/off，以及独立 token 统计 on/off。保留已有用户设置，不因升级重置校准；未知配置不静默覆盖。
+以下命令适用于 macOS／Linux 的 Bash 环境；需要 Git 和 Python。CI 覆盖 Python 3.12／3.13。Windows 用户可交由 Codex 引导，或在合适的 Bash 环境运行安装器；原生 PowerShell 不能直接执行 Bash 脚本。
 
-## 不变的边界
+**新安装**，在尚无同名目录的位置运行：
 
-每子任务最多两次 attempt；明显能力差距不做牺牲性低价试跑；默认单波最多 min(3, Codex 显式上限)。Worker 是叶子，不继续派遣，不越权，不做最终不可逆操作。fresh 上下文、TASK_ACK、人类可读简洁回传、Lead 去重、early stop/close 继续生效。
+```bash
+git clone --branch v2.5.3 --depth 1 \
+  https://github.com/Aiyawoc/codex-luna-subagent-router.git
+cd codex-luna-subagent-router
+bash skills/codex-luna-subagent-router/install.sh --global
+```
 
-RoutePlan 继续 2.1。Luna profiles：low/medium/high/xhigh/max；Sol：high/xhigh；Astra：high/xhigh/max。
+**升级已有源码 checkout**：先保留自己的本地改动，在干净工作区运行；未来升级时将下面的 tag 换成目标 Release。
 
-## 验证
+```bash
+git fetch origin tag v2.5.3
+git switch --detach v2.5.3
+bash skills/codex-luna-subagent-router/install.sh --global
+```
+
+仅对一个项目安装时，将最后一行改为：
+
+```bash
+bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-project
+```
+
+**安装器负责全量复制包、刷新 profiles 和列出配置缺项，不代替你回答引导问题。** 安装后继续让 Codex 按 [安装与升级指南](skills/codex-luna-subagent-router/references/codex-guided-install.md) 完成配置。不要只复制 `SKILL.md`；统计模块依赖多个脚本。升级保留外部账本和用户配置，新增或修改的 hooks 仍需客户端审查信任。
+
+<a id="setup"></a>
+## 安装引导：六个询问项
+
+| # | 询问项 | 功能与选择 |
+|---|---|---|
+| 1 | **Default 模式结构化提问** | `default_mode_request_user_input`：当前客户端支持时，允许在 Default 模式使用结构化提问工具。实验性；未开启仍可普通文字提问。 |
+| 2 | **长期自动委派授权** | 全局／当前项目／不安装。决定主 Agent 是否可在有成本或验证价值时自动委派；不扩张工具权限。 |
+| 3 | **路由策略** | `luna_only` 极致经济，或 `adaptive` 自动综合。主 Agent 本身不会被切换。 |
+| 4 | **最大并发子 Agent 数** | 保持当前／Codex 默认、推荐 3，或自定义正整数。控制容量上限，不是每次必须开满的数量。 |
+| 5 | **验证结果校准** | 仅 `adaptive`：`conservative`／`off`。使用同类已验证历史保守调整建议；缺失时运行默认 off，但升级引导必须询问。 |
+| 6 | **主／子 Agent token 统计与完成摘要** | on／off；开启时选择支持且受信任的自动 hooks，或手动采集。统一涵盖 `UserPromptSubmit`、`Stop`、`SubagentStart`、`SubagentStop`，不再单设第 7 项。 |
+
+**升级规则：缺失不等于拒绝，明确关闭不等于缺失。** 所有适用缺项必须明确询问；已有 off／false 保留。旧版仅开启子 Agent 统计，扩展到主线程前也在第 6 项询问。`--hooks-supported` 是操作者已核实能力的声明，不是自动检测，更不是信任绕过。
+
+<a id="data"></a>
+## 查看数据
+
+先定义已安装 Skill 的路径。下面是默认全局路径；项目安装请使用 `<项目>/.agents/skills/codex-luna-subagent-router`。从**你的工作项目目录**调用脚本，不要为查看数据切换到 Skill 目录。
+
+```bash
+SKILL="${CODEX_SKILLS_DIR:-$HOME/.agents/skills}/codex-luna-subagent-router"
+
+# 1. 验证结果：成功／失败／partial、未结算回执、可用校准建议
+python3 "$SKILL/scripts/route_advisor.py" stats
+
+# 2. 子 Agent：模型／强度与四项 token 用量
+python3 "$SKILL/scripts/token_usage.py" stats
+
+# 3. 主 Agent：各轮主线程及可靠关联子线程的本轮用量
+python3 "$SKILL/scripts/turn_usage.py" stats
+
+# 4. 安装／升级还缺哪些明确选择（只读）
+python3 "$SKILL/scripts/inspect_guided_install.py" --json
+```
+
+每个 `stats` 都可加 `--json` 输出原始整数和明细。常用筛选：
+
+```bash
+# 当前项目的 outcome
+python3 "$SKILL/scripts/route_advisor.py" stats --current-scope --json
+
+# 某个父会话的子 Agent；替换为真实会话 ID
+python3 "$SKILL/scripts/token_usage.py" stats --parent-id ACTUAL_PARENT_ID --json
+
+# 某个主会话的逐轮摘要
+python3 "$SKILL/scripts/turn_usage.py" stats --session-id ACTUAL_PARENT_ID --json
+```
+
+默认数据目录：`${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/`。
+
+| 文件 | 内容 |
+|---|---|
+| `outcomes.jsonl` | Lead 验收后的质量结果；token hooks 不自动替代验收。 |
+| `outcomes.jsonl.receipts.jsonl` | `begin` 登记的任务回执；用于幂等 `finalize` 与 pending 检查。 |
+| `usage.jsonl` | 子线程的用量快照；按每个子线程取最新记录，**不能直接把每行相加**。 |
+| `usage.turns.jsonl` | 主会话每轮起点、主线程自身用量与可靠关联的子线程增量。 |
+
+`CODEX_LUNA_ROUTER_REGISTRY` 可覆盖 outcome 路径；`CODEX_LUNA_ROUTER_USAGE` 可覆盖 usage 路径。数据应一起备份，不因更新 Skill 删除。
+
+示例显示（非实测）：
+
+```text
+Luna high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | 完整快照
+```
+
+`k / m / b` 分别表示千／百万／十亿；缓存是输入子项，推理是输出子项，都不重复加总。**完整快照、待确认、部分统计、不可用是用量完整度，不是任务质量评分。** 缺失值为 null，不是 0。详细诊断看 JSON 的 `snapshot.reasons`。
+
+<a id="cost"></a>
+## Token 与费用对比（案例占位）
+
+> **这是一块待补充正式案例的占位区，不是已证明的产品收益。** 暂用维护者提供的两条真实、但均为 `partial` 的 Luna high 快照演示计算；已移除会话 ID 和个人路径。下面只比较“相同已知 token 按两种单价重算”的估值，不表示 token 数减少，也不表示订阅账单实际节省。
+
+### 已观察到的 token
+
+| 样本 | 观察模型／强度 | 总量 | 输入（含缓存） | 其中缓存命中 | 输出 |
+|---|---|---:|---:|---:|---:|
+| Worker 1 · partial | Luna high | 9,554,053 | 9,522,324 | 8,983,040 | 31,729 |
+| Worker 2 · partial | Luna high | 9,597,268 | 9,552,106 | 9,188,608 | 45,162 |
+| **已知合计** | **2 个 partial** | **19,151,321** | **19,074,430** | **18,171,648** | **76,891** |
+
+### 单价假设与重算
+
+采用官方模型页列出的**标准、短上下文基础文本价格**，核对日期 **2026-09-15**；单位 USD／百万 token。价格会变化，正式案例应重新核对 [Luna 定价](https://developers.openai.com/api/docs/models/gpt-5.6-luna) 和 [Astra 定价](https://developers.openai.com/api/docs/models/gpt-6-astra)。
+
+| 用于本例的单价 | 未缓存输入 | 缓存命中输入 | 输出 |
+|---|---:|---:|---:|
+| Luna | $0.20 | $0.02 | $1.20 |
+| Astra | $10.00 | $1.00 | $50.00 |
+
+```text
+估值 = [(输入 − 缓存命中) × 输入单价
+      + 缓存命中 × 缓存单价
+      + 输出 × 输出单价] / 1,000,000
+估计价差 = 按 Astra 重算的估值 − 按 Luna 重算的估值
+```
+
+| 样本 | 按 Luna 基础价重算 | 同量按 Astra 基础价重算 | 估计价差 |
+|---|---:|---:|---:|
+| Worker 1 | $0.33 | $15.96 | $15.64 |
+| Worker 2 | $0.31 | $15.08 | $14.77 |
+| **已知合计** | **$0.64** | **$31.04** | **$30.41** |
+
+![费用对比占位：相同的已知 token，按 Luna 基础价约 0.64 美元，按 Astra 基础价约 31.04 美元；不是实际账单节省](docs/assets/cost-comparison.svg)
+
+**在本例的同量 token 和基础单价假设下，估计价差约 $30.41（97.95%）。** 使用未舍入值计算后再展示；这不是“已省下 $30.41”的实测结论。Astra 并未实际执行同一任务，可能产生不同 token 数、缓存命中和质量结果；Lead 编排、复核、返工的成本也未扣除。
+
+本例还**排除了缓存写入附加费用、长上下文倍率、Fast／Batch／Flex、地区加价及工具费**。现有汇总缺少这些逐请求计费字段，不能把排除项当成已确认的 0；尤其不能用累计 19.2m 判断每次请求是否进入长上下文价档。模型页说明了这些差异，因此本表只是条件化估值。
+
+原始匿名计数、单价与假设见 [对比数据](docs/examples/cost-comparison.json)；重算方式与正式案例模板见 [费用对比说明](docs/cost-comparison.md)。正式案例补齐前，不把该示例百分比当作产品宣传承诺。
+
+<a id="docs"></a>
+## 更多文档与边界
+
+| 文档 | 内容 |
+|---|---|
+| [安装与升级指南](skills/codex-luna-subagent-router/references/codex-guided-install.md) | 六项问答、缺项盘点、配置与钩子信任。 |
+| [路由策略](skills/codex-luna-subagent-router/references/routing-policy.md) · [任务规划](skills/codex-luna-subagent-router/references/work-planning.md) | 能力差距、精确绑定、整组任务和并发约束。 |
+| [Outcome 采集](skills/codex-luna-subagent-router/references/outcome-collection.md) | begin／finalize、保守历史校准与采样限制。 |
+| [Token 统计](skills/codex-luna-subagent-router/references/token-accounting.md) | hooks、手动采集、统计口径、完整度和本轮归属。 |
+| [更新记录](CHANGELOG.md) · [v2.5.3 设计](docs/v2.5.3-main-turn-token-summary.md) | 版本变化和已知实机边界。 |
+
+Worker 为叶子节点，不再派生下级、不扩张权限；实际模型身份不能用 Worker 自述代替。Prompt 规则与本地校验不是引擎级强制执行。未登记的 Worker、缺失日志或不支持的客户端格式都可能降低覆盖率；本地测试不能证明真实账单、自然委派率或端到端净节省。
+
+开发验证（完整源码目录）：
 
 ```bash
 cd skills/codex-luna-subagent-router
@@ -131,6 +209,4 @@ python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
 python3 -m unittest discover -s tests -v
 ```
 
-CI 校验 Manifest。脚本测试不等于 Codex 实机自然触发率，也不能证明实际 model/effort；metadata 只校验声明的一致性。
-
-研究依据：OpenAI Model Guidance 与 Subagents 官方文档；原 v2.5.0 的同类项目研究。设计见 docs/v2.5.1-outcome-collection-observability.md。
+项目基于 [MIT](LICENSE) 开源；致谢与上游参考见 [NOTICE](NOTICE.md)。
