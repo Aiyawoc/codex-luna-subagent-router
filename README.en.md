@@ -1,114 +1,210 @@
 # Codex Cost-Aware SubAgent Router
 
-[简体中文](README.md) | English
+[简体中文](README.md) | **English**
 
-Code version: **2.5.3**. Keep the user's Lead model unchanged and delegate only when a bounded Worker provides meaningful expected-cost or verification value.
+**Keep your Lead model. Delegate suitable work to cheaper models.**
 
-## v2.5.3: main-turn summaries and upgrade inventory
+A cost-first SubAgent routing Skill for Codex. Select **Luna / Sol / Astra + reasoning effort** for each bounded task, optionally record verified outcomes, and inspect main/child token usage. The goal is the **total cost of reliable completion**, not the largest possible agent team.
 
-Worker labels now prefer observed model and reasoning (for example, Luna high), not the default role. Partial snapshots show concrete reasons; aggregate completeness is calculated instead of hard-coded. Invalid non-usage counters no longer clear a valid baseline; real gaps stay visible and old missing usage is never invented.
+Stable release: [**v2.5.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.3) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-The existing **question 6** covers main and child token accounting together: UserPromptSubmit registers the turn boundary, and Stop renders the main turn plus safely associated child increments. Total/input/cached-input/output retain decimal k/m/b formatting, without an extra model response.
+[What it does](#purpose) · [Install / upgrade](#install) · [Six setup questions](#setup) · [Inspect data](#data) · [Cost comparison placeholder](#cost) · [Documentation](#docs)
 
-On upgrades run `scripts/inspect_guided_install.py --json` and explicitly ask every applicable missing option. An absent default is not an explicit off choice; preserve explicit off. Expanding a legacy child-only on setting to main-thread accounting requires the same sixth question and renewed hook review, not a seventh question.
+<a id="purpose"></a>
+## What it does
 
-```bash
-python3 /path/to/skill/scripts/inspect_guided_install.py --json
-python3 /path/to/skill/scripts/token_usage.py stats
-python3 /path/to/skill/scripts/turn_usage.py stats --json
-```
+| Capability | Purpose |
+|---|---|
+| **Cost-first routing** | Keep the user's Lead model unchanged. Delegate bounded implementation, scanning and organization; consider stronger Workers for difficult causal analysis or expert review. |
+| **Whole-workload planning** | Compare all candidate tasks together. Run worthwhile independent tasks in one wave, batch small shared-context tasks, and serialize dependencies or read/write conflicts. |
+| **Verified-outcome calibration** | Optionally use local, verified history to adjust future recommendations conservatively. Failures and partial work never become invented success samples. |
+| **Main/child token accounting** | Optionally show total, input, cached input and output at child stop and main-turn completion, retaining raw counts and completeness reasons. |
 
-The new usage.turns.jsonl ledger contains IDs, boundaries and numeric snapshots. Existing usage/outcome history is preserved. Missing boundaries/identity, unsupported formats and unflushed data remain explicit. A Stop systemMessage is a hook notice, not a rewrite of the final answer, billing settlement or proof of complete coverage. See references/token-accounting.md and docs/v2.5.3-main-turn-token-summary.md.
+### Two strategies, three model tiers
 
-## Two routing strategies
-
-| Property | luna_only | adaptive |
+| Strategy | Automatic Workers | Intended use |
 |---|---|---|
-| Goal | Maximum economy and predictable automatic Worker tier | Cost-aware capability routing |
-| Workers | Luna only | Luna → Sol → Astra |
-| Difficult work | Lead takes over when Luna is insufficient | Localized upward delegation when needed |
-| Ordinary work | Luna or Lead | Expensive Leads can delegate down to Luna |
-| Calibration | Off | Optional conservative; absent means off |
+| **`luna_only`: maximum economy** | Luna only; return work to the current Lead when Luna is insufficient. | A simple, predictable boundary on automatic Worker models. |
+| **`adaptive`: capability-aware** | Choose the cheapest sufficient model and effort across Luna → Sol → Astra. | Balance cost, difficult-task reliability and independent review. |
 
-Canonical automatic models are gpt-5.6-luna, gpt-5.6-sol, and gpt-6-astra. Terra remains readable in historical plans, not a new automatic candidate. Do not use the unsuffixed Sol alias.
+**Luna (economy)** handles clear, local, verifiable work. **Sol (mid-tier)** handles ambiguous debugging, cross-module causality and races. **Astra (expert)** is considered for expert architecture work and high-consequence adversarial review. These are project routing policies, not performance guarantees for every task. Terra is no longer an automatic candidate.
 
-Ordinary implementation and read-heavy work normally use Luna. Ambiguous causal debugging and races require considering Sol; expert architecture review may require Astra. A max-effort Lead moving upward requires at least medium effort on the higher tier. Bundled Sol/Astra profiles start at high.
+Delegation works both downward and locally upward: Astra high → Luna high, or Luna max → Sol high. `max` effort does not mean a higher model tier. Each subtask has at most two attempts. A wave is capped at `min(3, the explicit Codex concurrency limit)`, minus open threads. **Neither full concurrency nor model diversity is a quota.**
 
-## 2.5.3: SubAgent token accounting
+<a id="install"></a>
+## Install / upgrade
 
-Opt in with `token_accounting=on`; absent means off. Independent of routing mode and conservative calibration. Supported, user-trusted UserPromptSubmit/Stop/SubagentStart/SubagentStop hooks capture local usage without another model call; unsupported clients retain an explicit manual collect fallback.
+### Recommended: let Codex install and guide setup
 
-Synthetic display example: `Sol high | total 45k | input 42k (cached 30k) | output 3k tokens`.
+Send this in a Codex conversation for the target project:
 
-Totals include cached input. Cached input is a subset of input, and reasoning output is a subset of output, never additional totals. Base values below 1000 have no suffix; k/m/b mean thousand/million/billion with at most one decimal. JSON retains exact integers or null; unavailable is not zero. Complete means a consistent terminal local snapshot, not backend billing settlement.
+```text
+Use $skill-installer to install or fully upgrade this Skill:
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.3/skills/codex-luna-subagent-router
 
-```bash
-python3 /path/to/skill/scripts/configure_token_accounting.py --scope user --mode on --install-hooks --hooks-supported
-python3 /path/to/skill/scripts/token_usage.py stats
-python3 /path/to/skill/scripts/token_usage.py stats --json
+Refresh the complete Skill package and every bundled Agent profile, then read
+references/codex-guided-install.md. Run scripts/inspect_guided_install.py --json
+first and explicitly ask about every applicable missing option.
+Preserve my existing routing, concurrency, explicit off/false choices,
+outcome/usage history and other custom settings.
+If child token accounting is already on, use question 6 to ask whether to expand
+to combined main/child accounting. Do not skip new options, install or trust hooks,
+or expand their scope without confirmation.
 ```
 
-Only pass --hooks-supported after checking the active Codex build supports all four events. Review/trust the installed definitions in Codex; this helper never grants trust or changes platform permission/feature policies. Hooks use the child ID and child transcript, not the parent log. Delayed terminal records stay partial until a finalize/collect recheck. Repeated stops update one child snapshot rather than double-counting; retries have separate IDs.
+### Manual full-package installation
 
-Usage is stored separately in usage.jsonl beside the outcome registry, joined by explicit receipt and real agent IDs. Failed or partial quality results still retain their known usage. Summaries show per-field coverage, not a claim that every runtime Worker was observed. No prompt/source/log content is persisted; safe relative locators allow bounded rechecks. No billing, subscription-credit or savings estimates. See references/token-accounting.md for schema assumptions, limits and real-client acceptance.
+These commands target Bash on macOS/Linux and require Git and Python. CI covers Python 3.12/3.13. On Windows, use Codex-guided setup or an appropriate Bash environment; native PowerShell cannot directly execute the Bash installer.
 
-## 2.5.1: collection, observability and whole-workload planning
-
-Receipts: begin before actual spawn, verify, finalize, then close. Receipts freeze scope and route metadata; repeated identical finalization is idempotent. Unknown identity, environmental blocks, cancellation, early stops and material Lead rework are partial, never fabricated verified successes. Storage failure must not delay stopping a Worker.
-
-Scope: invoke the script by absolute path from the project working directory. Git roots are discovered automatically; pass --project-root for non-Git projects. Global installation does not mean global evidence. Old global records are not guessed into projects.
-
-Statistics: stats shows distributions, last recording time, pending receipts, legacy/invalid/duplicate rows, sparse buckets, available recommendations and sample gaps. Recommendations are not observed overrides or measured savings.
-
-Planning: plan all candidate siblings together. Similar tasks use consistent classifications. Shared-context tasks can batch into one Worker; worthwhile independent tasks can use two or three Workers in the same wave. An expensive Lead should not repeat a delegated sibling merely to stay busy. Retained work needs a critical-path, context, permission or side-effect reason. Dependencies and read/write conflicts serialize work. Neither full concurrency nor model diversity is a quota.
-
-## Inspect outcomes
+**New installation**, in a location without an existing directory of the same name:
 
 ```bash
-python3 /path/to/skill/scripts/route_advisor.py stats
-python3 /path/to/skill/scripts/route_advisor.py stats --json
-python3 /path/to/skill/scripts/route_advisor.py stats --current-scope --json
-python3 /path/to/skill/scripts/route_advisor.py --global-scope stats --json
+git clone --branch v2.5.3 --depth 1 \
+  https://github.com/Aiyawoc/codex-luna-subagent-router.git
+cd codex-luna-subagent-router
+bash skills/codex-luna-subagent-router/install.sh --global
 ```
 
-Default: ${CODEX_HOME:-~/.codex}/state/codex-luna-subagent-router/outcomes.jsonl. Override with --registry or CODEX_LUNA_ROUTER_REGISTRY. Back up the adjacent outcomes.jsonl.receipts.jsonl too.
-
-Outcome quality still needs begin/finalize; the optional token hooks do not replace acceptance checks. Runtime collection coverage still needs real-use acceptance.
-
-## Conservative history
-
-Exact-family evidence uses the same scope, six axes, policy and 90-day window. Lower-effort candidates need two verified passes of their own; safe cross-tier candidates need three. High failure cost, unverifiable work and architecture cannot cross-tier downshift.
-
-Related-family evidence requires five distinct receipts from at least two families, the same scope/axes/policy, and safe verifiable work. It can lower effort by only one step on the same model, never cross tiers. Failures veto reuse; partials and unidentified work do not train. Legacy records without receipt IDs cannot contribute to related-family evidence. These are conservative heuristics, not statistical guarantees; do not manufacture sample runs.
-
-## Plan work
+**Upgrade an existing source checkout**: preserve local edits first and use a clean working tree. Replace the tag with the desired Release for future upgrades.
 
 ```bash
-python3 /path/to/skill/scripts/route_advisor.py plan /path/to/work-plan.json \
-  --lead-model gpt-6-astra --lead-effort high --open-workers 0
+git fetch origin tag v2.5.3
+git switch --detach v2.5.3
+bash skills/codex-luna-subagent-router/install.sh --global
 ```
 
-Use examples/work-plan.json. Supply the actual open-thread count, not an assumed zero. The planner does not spawn anything; authorization, exact-route preflight and real free capacity remain required. Future waves are estimates, not completed prerequisites.
-
-## Full installation or upgrade
-
-From a complete version checkout:
+For a project-only installation, replace the final command with:
 
 ```bash
-./skills/codex-luna-subagent-router/install.sh --global
-# Or:
-./skills/codex-luna-subagent-router/install.sh --project /path/to/repository
+bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-project
 ```
 
-Codex skill-installer may install the complete published Skill directory, followed by references/codex-guided-install.md. Never replace only SKILL.md or one script: route_advisor.py now depends on outcome_store.py and plan_work.py. Refresh bundled profiles, preserving user configuration and custom profiles. Historical managed Terra profiles are removed.
+**The installer copies the complete package, refreshes profiles and inventories missing settings; it does not answer setup questions for you.** Continue with Codex using the [installation/upgrade guide](skills/codex-luna-subagent-router/references/codex-guided-install.md). Never replace only `SKILL.md`: accounting depends on multiple scripts. Upgrades preserve external ledgers and user settings; new or changed hooks still require review and trust in the client.
 
-The guide has six questions: structured input, standing delegation, routing mode, SubAgent concurrency, conservative/off calibration, and independent token accounting on/off. Preserve explicit choices; ask about every applicable missing option before applying configuration. An absent runtime default is not a user answer. Do not remove outcome files during upgrade.
+<a id="setup"></a>
+## Six setup questions
 
-## Stable boundaries and testing
+| # | Question | Meaning and choices |
+|---|---|---|
+| 1 | **Structured questions in Default mode** | `default_mode_request_user_input`: enable the structured question tool in Default mode when the client supports it. Experimental; ordinary text questions remain possible without it. |
+| 2 | **Standing delegation permission** | Global / current project / do not install. Authorize automatic delegation when it has cost or verification value, without broadening tool permissions. |
+| 3 | **Routing strategy** | `luna_only` for maximum economy, or `adaptive` for capability-aware routing. The Lead itself is not switched. |
+| 4 | **Maximum concurrent SubAgents** | Keep current/Codex default, use the recommended 3, or another positive integer. A capacity ceiling, not a requirement to fill every slot. |
+| 5 | **Verified-outcome calibration** | `adaptive` only: `conservative` / `off`. Reuse verified history cautiously. Missing defaults to off at runtime, but upgrade setup must still ask. |
+| 6 | **Main/child token accounting and completion summaries** | on / off; choose supported, trusted automatic hooks or manual collection. One question covers `UserPromptSubmit`, `Stop`, `SubagentStart` and `SubagentStop`; there is no separate seventh accounting question. |
 
-Two attempts per subtask; no sacrificial low-tier probes for clear gaps. At most min(3, explicit Codex limit) Workers per wave, reduced by occupied slots. Workers remain leaves and cannot expand authority or perform final irreversible actions. Fresh context, TASK_ACK, concise human-readable results, deduplicated synthesis and early stop/close remain.
+**Upgrade rule: missing is not a refusal; an explicit off choice is not missing.** Ask every applicable missing option and preserve explicit off/false. Expanding legacy child-only accounting to main turns requires question 6 even when accounting is already on. `--hooks-supported` is an operator's capability confirmation, not automatic detection or a trust bypass.
 
-RoutePlan remains 2.1. Luna profiles: low/medium/high/xhigh/max; Sol: high/xhigh; Astra: high/xhigh/max.
+<a id="data"></a>
+## Inspect data
+
+Define the installed Skill path first. This is the global default; for a project installation use `<project>/.agents/skills/codex-luna-subagent-router`. Invoke scripts from **your working project directory**, not by changing into the installed Skill.
+
+```bash
+SKILL="${CODEX_SKILLS_DIR:-$HOME/.agents/skills}/codex-luna-subagent-router"
+
+# 1. Quality outcomes, pending receipts and available calibration recommendations
+python3 "$SKILL/scripts/route_advisor.py" stats
+
+# 2. Child model/effort and the four token metrics
+python3 "$SKILL/scripts/token_usage.py" stats
+
+# 3. Main-turn usage and safely associated child increments
+python3 "$SKILL/scripts/turn_usage.py" stats
+
+# 4. Missing explicit setup choices (read-only)
+python3 "$SKILL/scripts/inspect_guided_install.py" --json
+```
+
+Add `--json` to any `stats` command for exact counts and details. Common filters:
+
+```bash
+# Outcomes for the current project
+python3 "$SKILL/scripts/route_advisor.py" stats --current-scope --json
+
+# Children of a particular parent session; substitute the real ID
+python3 "$SKILL/scripts/token_usage.py" stats --parent-id ACTUAL_PARENT_ID --json
+
+# Per-turn summaries for a main session
+python3 "$SKILL/scripts/turn_usage.py" stats --session-id ACTUAL_PARENT_ID --json
+```
+
+Default data directory: `${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/`.
+
+| File | Contents |
+|---|---|
+| `outcomes.jsonl` | Quality outcomes accepted by the Lead. Token hooks do not replace acceptance checks. |
+| `outcomes.jsonl.receipts.jsonl` | Task receipts registered by `begin`, for idempotent `finalize` and pending checks. |
+| `usage.jsonl` | Child-thread snapshots. Use the latest record for each child; **do not sum every JSONL row**. |
+| `usage.turns.jsonl` | Main-turn boundaries, main-thread own usage and safely associated child increments. |
+
+`CODEX_LUNA_ROUTER_REGISTRY` overrides the outcome path; `CODEX_LUNA_ROUTER_USAGE` overrides usage storage. Back up related ledgers together; updating the Skill must not delete them.
+
+Illustrative display (not a measurement; the current CLI uses Chinese metric labels):
+
+```text
+Luna high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | 完整快照
+```
+
+This means total 45k, input 42k including 30k cached, and output 3k. `k / m / b` mean thousand/million/billion. Cached input is part of input; reasoning output is part of output. Neither is counted twice. **Complete, awaiting confirmation, partial and unavailable describe usage completeness, not task quality.** Missing counts are null, not zero. Inspect `snapshot.reasons` in JSON for diagnostics.
+
+<a id="cost"></a>
+## Token and cost comparison (case-study placeholder)
+
+> **This section is a placeholder for a future validated case study, not a proven product outcome.** It currently reuses two real but `partial` Luna high snapshots supplied by the maintainer; personal paths and session IDs have been removed. It compares the same known tokens at two rate cards. It does not show fewer tokens or an actual reduction in a subscription bill.
+
+### Observed tokens
+
+| Sample | Observed model/effort | Total | Input incl. cache | Of which cached | Output |
+|---|---|---:|---:|---:|---:|
+| Worker 1 · partial | Luna high | 9,554,053 | 9,522,324 | 8,983,040 | 31,729 |
+| Worker 2 · partial | Luna high | 9,597,268 | 9,552,106 | 9,188,608 | 45,162 |
+| **Known total** | **2 partial snapshots** | **19,151,321** | **19,074,430** | **18,171,648** | **76,891** |
+
+### Rates and repricing assumptions
+
+Use the official model pages' **Standard, short-context base text rates**, checked **2026-09-15**, in USD per million tokens. Recheck [Luna pricing](https://developers.openai.com/api/docs/models/gpt-5.6-luna) and [Astra pricing](https://developers.openai.com/api/docs/models/gpt-6-astra) before publishing a final case study.
+
+| Rates used here | Uncached input | Cached input | Output |
+|---|---:|---:|---:|
+| Luna | $0.20 | $0.02 | $1.20 |
+| Astra | $10.00 | $1.00 | $50.00 |
+
+```text
+Estimate = [(input - cached_input) * input_rate
+          + cached_input * cached_rate
+          + output * output_rate] / 1,000,000
+Estimated difference = estimate at Astra rates - estimate at Luna rates
+```
+
+| Sample | Repriced at Luna base rates | Same tokens at Astra base rates | Estimated difference |
+|---|---:|---:|---:|
+| Worker 1 | $0.33 | $15.96 | $15.64 |
+| Worker 2 | $0.31 | $15.08 | $14.77 |
+| **Known total** | **$0.64** | **$31.04** | **$30.41** |
+
+![Placeholder cost comparison: the same observed tokens cost approximately $0.64 at Luna base rates or $31.04 at Astra base rates; not measured billing savings](docs/assets/cost-comparison.svg)
+
+**Under these same-token, base-rate assumptions, the estimated difference is $30.41 (97.95%).** Calculations use raw values before display rounding. This is not a claim that $30.41 was actually saved. Astra did not run these tasks and could consume different tokens, achieve different cache hits and produce different quality. Lead orchestration, review and rework costs are not deducted.
+
+The illustration also **excludes cache-write surcharges, long-context multipliers, Fast/Batch/Flex, regional premiums and tool fees**. Those per-request fields are absent from the supplied aggregate data; excluded does not mean verified zero. In particular, a 19.2m lifetime total cannot determine a per-request long-context price tier. The linked model pages describe these distinctions, making this a conditional estimate only.
+
+The [comparison data](docs/examples/cost-comparison.json) contains anonymous counts, rates and assumptions. See the [calculation notes and case-study template](docs/cost-comparison.md) for reproduction. Do not market the example percentage as a proven product saving before completing a proper comparison.
+
+<a id="docs"></a>
+## Documentation and boundaries
+
+| Document | Contents |
+|---|---|
+| [Installation and upgrade](skills/codex-luna-subagent-router/references/codex-guided-install.md) | Six questions, missing-option inventory, settings and hook trust. |
+| [Routing policy](skills/codex-luna-subagent-router/references/routing-policy.md) · [Work planning](skills/codex-luna-subagent-router/references/work-planning.md) | Capability gaps, exact binding, whole-workload planning and concurrency. |
+| [Outcome collection](skills/codex-luna-subagent-router/references/outcome-collection.md) | begin/finalize, conservative evidence calibration and collection limits. |
+| [Token accounting](skills/codex-luna-subagent-router/references/token-accounting.md) | Hooks, manual collection, accounting semantics, completeness and turn attribution. |
+| [Changelog](CHANGELOG.md) · [v2.5.3 design](docs/v2.5.3-main-turn-token-summary.md) | Version history and remaining real-client acceptance boundaries. |
+
+Workers are leaves: no further delegation or expanded authority. A Worker's self-description is not runtime model evidence. Prompts and local validators are not engine-level enforcement. Unregistered Workers, missing logs and unsupported client formats can reduce coverage. Local tests cannot establish actual bills, natural delegation rates or end-to-end savings.
+
+Development checks from a complete source checkout:
 
 ```bash
 cd skills/codex-luna-subagent-router
@@ -116,8 +212,4 @@ python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
 python3 -m unittest discover -s tests -v
 ```
 
-CI checks the Manifest. Script tests do not establish real Codex delegation rates or runtime model identity. See references/outcome-collection.md, references/work-planning.md and docs/v2.5.1-outcome-collection-observability.md.
-
-Pinned install source: https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.3/skills/codex-luna-subagent-router
-
-Replanning accepts `in_progress_task_ids` to avoid recreating running tasks. Retained Lead ownership is checked alongside Worker read/write ownership. Batch only tasks with the same prerequisites; runtime capacity is a ceiling, not a quota.
+Open source under [MIT](LICENSE). See [NOTICE](NOTICE.md) for acknowledgments and upstream references.

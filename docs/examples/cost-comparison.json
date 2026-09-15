@@ -1,0 +1,53 @@
+{
+  "purpose": "README placeholder: same observed token counts repriced at two model rate cards; not measured end-to-end savings.",
+  "snapshot_date": "2026-09-15",
+  "source": "Two user-provided partial token_usage.py stats snapshots. Personal paths, thread IDs, scope IDs and timestamps removed.",
+  "currency": "USD",
+  "rate_basis": "Standard short-context text rates per 1,000,000 tokens; checked 2026-09-15.",
+  "assumptions": [
+    "Same input/cache/output counts for both models; Astra was not run on these tasks.",
+    "All calls use base short-context rates; per-request context lengths were not supplied.",
+    "Cache-write surcharges, tool fees, regional/tier premiums, Lead overhead and rework are excluded.",
+    "Partial snapshots are not complete cost measurements or billing records."
+  ],
+  "rates": {
+    "Luna": {
+      "model": "gpt-5.6-luna",
+      "uncached_input": "0.20",
+      "cached_input": "0.02",
+      "output": "1.20",
+      "source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+    },
+    "Astra": {
+      "model": "gpt-6-astra",
+      "uncached_input": "10.00",
+      "cached_input": "1.00",
+      "output": "50.00",
+      "source": "https://developers.openai.com/api/docs/models/gpt-6-astra"
+    }
+  },
+  "workers": [
+    {
+      "label": "Worker 1",
+      "observed_model": "gpt-5.6-luna",
+      "effort": "high",
+      "status": "partial",
+      "total_tokens": 9554053,
+      "input_tokens": 9522324,
+      "cached_input_tokens": 8983040,
+      "output_tokens": 31729,
+      "reasoning_output_tokens": 11080
+    },
+    {
+      "label": "Worker 2",
+      "observed_model": "gpt-5.6-luna",
+      "effort": "high",
+      "status": "partial",
+      "total_tokens": 9597268,
+      "input_tokens": 9552106,
+      "cached_input_tokens": 9188608,
+      "output_tokens": 45162,
+      "reasoning_output_tokens": 22386
+    }
+  ]
+}
