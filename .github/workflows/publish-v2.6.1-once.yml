@@ -1,0 +1,130 @@
+name: Publish v2.6.1 Once
+
+on:
+  push:
+    branches: ["release/v2.6.1-publish"]
+
+permissions:
+  contents: read
+
+env:
+  TARGET_SHA: c0eaf6bb0997ba0e71de9385fbd0b9736a1db361
+  RELEASE_VERSION: 2.6.1
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm main still points to the reviewed target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          MAIN_SHA="$(gh api repos/${GITHUB_REPOSITORY}/git/ref/heads/main --jq .object.sha)"
+          test "$MAIN_SHA" = "$TARGET_SHA"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${RELEASE_VERSION} already exists; refusing duplicate publication." >&2
+            exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "Release v${RELEASE_VERSION} already exists; refusing duplicate publication." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          persist-credentials: false
+      - name: Confirm version and source integrity
+        run: |
+          set -euo pipefail
+          test "$(tr -d '[:space:]' < skills/codex-luna-subagent-router/VERSION)" = "$RELEASE_VERSION"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify manifest and full regression suite
+        run: |
+          python tools/verify_manifest.py
+          python -m unittest discover -s skills/codex-luna-subagent-router/tests -v
+
+  packages:
+    needs: authorize
+    uses: ./.github/workflows/portable-runtime.yml
+    with:
+      ref: c0eaf6bb0997ba0e71de9385fbd0b9736a1db361
+    permissions:
+      contents: read
+
+  publish:
+    needs: [authorize, packages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: portable-*
+          path: packages
+          merge-multiple: true
+      - name: Verify all four complete platform archives
+        shell: python
+        run: |
+          import hashlib
+          import os
+          from pathlib import Path
+          version = os.environ['RELEASE_VERSION']
+          root = Path('packages')
+          names = [
+              f'router-{version}-windows-x64.zip',
+              f'router-{version}-windows-arm64.zip',
+              f'router-{version}-macos-x64.tar.gz',
+              f'router-{version}-macos-arm64.tar.gz',
+          ]
+          expected = set(names + [name + '.sha256' for name in names])
+          actual = {p.name for p in root.iterdir()}
+          assert actual == expected, (actual, expected)
+          lines = []
+          for name in names:
+              digest, recorded = (root / (name + '.sha256')).read_text(encoding='utf-8').strip().split('  ', 1)
+              assert recorded == name
+              assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest
+              lines.append(f'{digest}  {name}')
+          (root / 'SHA256SUMS').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+      - name: Publish v2.6.1 stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > RELEASE_NOTES.md <<'EOF'
+          ## v2.6.1
+
+          当前稳定版。该版本包含 v2.6.0 的便携 Python 运行环境，以及 v2.6.1 的 token 用量恢复与诊断修复。
+
+          ### 便携运行环境
+          - 四个平台完整包内置固定 CPython 3.13.15，不依赖系统 Python、PATH、pip 或 uv。
+          - Windows x64 / ARM64 使用官方 CPython embeddable；macOS Intel / Apple Silicon 使用固定 python-build-standalone 精简构建。
+          - `bin/router`、`router.cmd`、`router.ps1` 统一启动；安装、路由、统计和经确认的 hooks 使用同一私有解释器。
+          - 安装前完整校验，支持安全升级与失败回滚；不修改系统 Python、PATH 或客户端信任库。
+
+          ### 用量统计恢复（步骤 2–5）
+          - 主线程长日志支持有界续读并保留真实诊断，不再把读取预算耗尽简单误报成缺少本轮边界。
+          - 对身份与继承边界一致的重复 `session_meta` 进行安全兼容；冲突身份仍拒绝推断。
+          - 新增受控历史 `refresh`，刷新已登记区间而非累计叠加，避免把后续复用 token 串入旧轮次。
+          - `stats` 增强 scope、phase、时间、reader 版本等诊断；`preview --json` 返回更精确的失败代码。
+          - 缺失日志、无法证明的历史边界或身份冲突仍保持 partial/unavailable，不伪造 0 或完整状态。
+
+          ### 验证
+          - 324 项回归测试通过。
+          - Linux/macOS/Windows 常规 CI 通过。
+          - Windows x64、Windows ARM64、macOS Intel、macOS Apple Silicon 四个平台完整包均使用包内 Python 完成构建后 smoke / 安装升级 / hooks / unittest 验收。
+          - Release 附带四个平台完整包、逐包 `.sha256` 和汇总 `SHA256SUMS`。
+
+          > GitHub 自动生成的 “Source code” ZIP/TAR 不包含 Python 运行时；需要免系统 Python 安装时，请下载下方对应平台的 `router-2.6.1-*` 完整包。
+          EOF
+          TAG="v${RELEASE_VERSION}"
+          gh release create "$TAG" --target "$TARGET_SHA" --title "$TAG" --draft --notes-file RELEASE_NOTES.md
+          gh release upload "$TAG" packages/*
+          gh release edit "$TAG" --draft=false --prerelease=false
