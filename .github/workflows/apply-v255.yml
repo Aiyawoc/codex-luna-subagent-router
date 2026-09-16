@@ -1,0 +1,37 @@
+name: apply v2.5.5 patch
+on:
+  push:
+    branches: [v2.5.5-host-first-concurrency]
+    paths: [.github/workflows/apply-v255.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v2.5.5-host-first-concurrency
+      - name: Reassemble and apply verified patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/v255.patch.gz
+          for f in .github/v255.chunk*.b64; do
+            base64 -d "$f" >> /tmp/v255.patch.gz
+          done
+          gzip -dc /tmp/v255.patch.gz > /tmp/v255.patch
+          echo 'a3a471019266346b28b046afa195fa12219545df90f7e98b09eacb7737e67d4d  /tmp/v255.patch' | sha256sum -c -
+          git apply --check /tmp/v255.patch
+          git apply /tmp/v255.patch
+          rm -f .github/v255.chunk*.b64 .github/workflows/apply-v255.yml
+          git diff --check
+      - name: Commit functional changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Ethen Lee"
+          git config user.email "soldiers@vip.qq.com"
+          git add -A
+          git commit -m "feat: v2.5.5 Host-first 并发兼容与 CLI 解耦"
+          git push origin HEAD:v2.5.5-host-first-concurrency
