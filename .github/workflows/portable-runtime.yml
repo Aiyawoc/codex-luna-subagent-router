@@ -4,6 +4,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -14,17 +19,47 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Archive exact source for verification
         run: git archive --format=tar HEAD > router-source.tar
-      - name: Inspect pinned upstream runtime metadata
-        run: python3 tools/runtime_sources.py > runtime-sources.json
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: router-source
-          path: |
-            router-source.tar
-            runtime-sources.json
+          path: router-source.tar
           retention-days: 7
+  package:
+    name: Package and verify (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x64
+            os: windows-2025
+          - target: windows-arm64
+            os: windows-11-arm
+          - target: macos-x64
+            os: macos-15-intel
+          - target: macos-arm64
+            os: macos-15
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build complete bundle from pinned and verified upstream
+        run: python tools/build_portable.py --target ${{ matrix.target }}
+      - name: Execute shipped Python, offline launchers, install, upgrade, hooks and full tests
+        env:
+          PYTHONUTF8: '1'
+        run: python tools/smoke_portable.py --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
