@@ -113,7 +113,7 @@ Router 运行时依赖 **Codex Host/Core** 暴露的 SubAgent、hooks 与 rollou
 先定义已安装 Skill 的路径。下面是默认全局路径；项目安装请使用 `<项目>/.agents/skills/codex-luna-subagent-router`。从**你的工作项目目录**调用脚本，不要为查看数据切换到 Skill 目录。
 
 ```bash
-SKILL="${CODEX_SKILLS_DIR:-$HOME/.agents/skills}/codex-luna-subagent-router"
+SKILL="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}/codex-luna-subagent-router"
 
 # 1. 验证结果：成功／失败／partial、未结算回执、可用校准建议
 python3 "$SKILL/scripts/route_advisor.py" stats
