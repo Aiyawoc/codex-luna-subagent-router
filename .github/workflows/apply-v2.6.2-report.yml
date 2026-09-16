@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+      # New v2.6.2 files are pre-created because a plain git diff does not include staged/untracked additions.
       - name: Verify and apply tested patch
         shell: python
         run: |
