@@ -6,12 +6,12 @@
 
 A cost-first SubAgent routing Skill for Codex. It selects **Luna / Sol / Astra + reasoning effort** per subtask, supports whole-workload planning and concurrent Worker lifecycle management, and can optionally record verified outcomes plus main/child token usage.
 
-Current stable release: [**v2.6.1**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.1) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+Current stable release: [**v2.6.1**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.1) · `main` development: **v2.6.2** · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
 > **Important: the Git source tree intentionally does not store Python runtime binaries.**  
 > GitHub's automatic `Source code.zip/.tar.gz` archives also **do not include** the private Python runtime. End users should download the `router-2.6.1-<platform>` **complete package** for their OS/CPU from the v2.6.1 Release. Those packages contain pinned CPython 3.13.15, launchers, licenses and the complete Skill.
 
-[Capabilities](#capabilities) · [What's new in v2.6.1](#whats-new-in-v261) · [Install and upgrade](#install-and-upgrade) · [Six setup questions](#six-setup-questions) · [Daily use](#daily-use) · [Usage accounting and recovery](#usage-accounting-and-recovery) · [Boundaries and security](#boundaries-and-security) · [Documentation](#documentation)
+[Capabilities](#capabilities) · [v2.6.2 in development](#v262-in-development-one-command-data-brief) · [What's new in v2.6.1](#whats-new-in-v261) · [Install and upgrade](#install-and-upgrade) · [Six setup questions](#six-setup-questions) · [Daily use](#daily-use) · [Usage accounting and recovery](#usage-accounting-and-recovery) · [Boundaries and security](#boundaries-and-security) · [Documentation](#documentation)
 
 ## Capabilities
 
@@ -24,6 +24,7 @@ Current stable release: [**v2.6.1**](https://github.com/Aiyawoc/codex-luna-subag
 | **Verified-outcome calibration** | Optionally use local verified outcomes to adjust later recommendations conservatively; failed/partial work is never invented as success. |
 | **Main/child token accounting** | Optionally record total, input, cached input, output and completeness; missing values stay unknown rather than becoming zero. |
 | **Historical usage recovery** | v2.6.1 adds bounded long-log continuation, safe repeated-session-header handling, explicit `refresh`, and more precise diagnostics. |
+| **One-command data brief** | v2.6.2 adds `router report` to format existing statistics and export Markdown, full-fidelity JSON, and flat CSV. |
 | **Private portable Python** | Complete platform packages carry pinned CPython 3.13.15 and do not depend on system Python, pip, uv or PATH. |
 
 ### Two strategies, three model tiers
@@ -42,6 +43,40 @@ Project routing policy:
 These are routing policies, not per-task performance guarantees. Terra is no longer an automatic route.
 
 Delegation can go downward or locally upward, for example Astra high → Luna high or Luna max → Sol high. `max` is an effort level within a model; it does not imply a model-tier upgrade.
+
+## v2.6.2 in development: one-command data brief
+
+v2.6.2 **adds exactly one user-facing command: `router report`**. Routing, hooks, token collection, refresh semantics, and outcome accounting remain unchanged.
+
+```bash
+# Default: current working project/global scope
+"$ROUTER" report
+
+# Explicit project
+"$ROUTER" report --project-root /path/to/project
+
+# Aggregate every saved scope
+"$ROUTER" report --all-scopes
+
+# Choose an export root and return only generation metadata on stdout
+"$ROUTER" report --output-dir /path/to/export --json
+```
+
+The command read-only reuses the existing `route_advisor stats`, `token_usage stats`, and `turn_usage stats` logic. It **does not run `refresh`, discover unregistered rollouts, or mutate any ledger**. Each run creates a separate directory under the default location:
+
+```text
+${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/reports/
+```
+
+It writes three files:
+
+- `brief.md`: the same fixed panel printed to chat stdout, always ordered as core metrics → token completeness → known usage → model usage → acceptance results → attention items.
+- `data.json`: canonical nested export with exact token integers; local ledger absolute paths are removed.
+- `data.csv`: UTF-8 BOM flat export with `outcome_summary / outcome_route / recommendation / subagent / turn_main / turn_child` records for Excel, Numbers, or scripts.
+
+By default, `router report` prints the fixed panel to stdout first so the Skill can present it directly in chat, then writes the three files. The Skill should surface that panel as the main reply instead of only reporting file paths. CSV/JSON retain session / turn / agent IDs for troubleshooting, but contain no prompts, response bodies, source code, or raw rollout lines. `partial/unavailable` stays unknown/incomplete and is never rewritten as zero or complete.
+
+See [v2.6.2 report command](docs/v2.6.2-report.md).
 
 ## What's new in v2.6.1
 
@@ -243,6 +278,7 @@ ROUTER="/actual/install/path/codex-luna-subagent-router/bin/router"
 "$ROUTER" route_advisor stats
 "$ROUTER" token_usage stats
 "$ROUTER" turn_usage stats
+"$ROUTER" report
 ```
 
 Windows:
@@ -255,6 +291,7 @@ $Router = "C:\actual\install\path\codex-luna-subagent-router\bin\router.cmd"
 & $Router route_advisor stats
 & $Router token_usage stats
 & $Router turn_usage stats
+& $Router report
 ```
 
 Run the Router from the **actual working project directory** so project scope is correct. Do not change into the Skill directory merely to execute helpers.
@@ -331,6 +368,7 @@ ${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/
 | `usage.jsonl` | Child-thread snapshots; use the latest row per thread rather than summing all JSONL rows. |
 | `usage.turns.jsonl` | Main-turn boundaries, main-thread usage and safely associated child increments. |
 | `*.read-cache/` | v2.6.1 long-log parser state; not a separate ledger and does not contain prompt/response bodies. |
+| `reports/` | v2.6.2 `router report` Markdown / JSON / CSV exports; not an accounting ledger. |
 
 `CODEX_LUNA_ROUTER_REGISTRY` and `CODEX_LUNA_ROUTER_USAGE` can override default ledger paths. Skill upgrades must not delete these ledgers.
 
@@ -417,6 +455,7 @@ It is not proof of billing savings, and lifetime token totals cannot establish a
 | [Worker lifecycle](skills/codex-luna-subagent-router/references/lifecycle-and-context.md) | Completed reuse, context, thread status and error classification. |
 | [Token accounting](skills/codex-luna-subagent-router/references/token-accounting.md) | Main/child usage, snapshot semantics, hooks and privacy. |
 | [v2.6.1 usage recovery design](docs/v2.6.1-usage-recovery.md) | Long logs, repeated headers, refresh, preview and local acceptance. |
+| [v2.6.2 report command](docs/v2.6.2-report.md) | `router report`, export formats, scope selection, and data-safety boundaries. |
 | [Outcome collection](skills/codex-luna-subagent-router/references/outcome-collection.md) | begin/finalize, receipts and calibration evidence. |
 | [Task packet](skills/codex-luna-subagent-router/references/task-packet.md) | Self-contained Worker input format. |
 | [Validation cases](skills/codex-luna-subagent-router/references/validation-cases.md) | Routing boundaries and validation scenarios. |

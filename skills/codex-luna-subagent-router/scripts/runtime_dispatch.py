@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 COMMANDS = {
-    'route_advisor', 'token_usage', 'turn_usage', 'inspect_guided_install',
+    'route_advisor', 'token_usage', 'turn_usage', 'report', 'inspect_guided_install',
     'configure_guided_install', 'configure_subagent_limit', 'configure_evidence_calibration',
     'configure_token_accounting', 'validate_route_plan',
 }

@@ -9,7 +9,7 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 ## 入口
 
-辅助脚本统一用 `bin/router <脚本名>`（Windows `bin/router.cmd`），不用系统 Python；见 `references/portable-runtime.md`。
+辅助脚本用 `bin/router <脚本名>`（Windows `bin/router.cmd`），不用系统 Python。
 
 安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
 
@@ -31,11 +31,11 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 存在多个可下放子目标时，先用 `route_advisor.py plan` 一次评估整组任务，而不是只挑第一个。输入见 `examples/work-plan.json`，策略见 `references/work-planning.md`。
 
-同类任务统一分类并说明差异。共享上下文的小任务可合并给一个 Worker；独立且有净收益的任务应在有效容量内同波创建，再 wait。不要把“默认一个高级 Worker”误解成“最多一个 Luna Worker”。
+共享上下文的小任务可合并给一个 Worker；独立且有净收益的任务应在有效容量内同波创建，再 wait。不要把“默认一个高级 Worker”误解成“最多一个 Luna Worker”。
 
 Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类工作；它负责统筹、关键判断、集成和验收。确有关键路径、上下文无法交接、权限或外部副作用原因时可保留，说明原因。已派遣目标不要重复实现。
 
-不强制开满或混用模型；复杂任务不能一律 Luna。规划不证明 spawn。
+不强制开满或混用模型；规划不证明 spawn。
 
 ## 采集闭环
 
@@ -52,6 +52,8 @@ Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类
 `token_accounting` 缺失按 off。开启后按需读 `references/token-accounting.md`；只用观察到的线程数据，缓存是输入子项，不让 Worker 自报。UserPromptSubmit/Stop 记录主线程本轮；父 transcript 的 Started/Interacted activity 关联真实子线程，不能假定父子 turn_id 相同。
 
 `main_and_subagents` 下准备最终回复前运行 `turn_usage.py preview`；成功时把“截至最终回复前”的简报附到正文末尾，失败/歧义则省略。Stop 仍保存更晚快照；不要为补 token 再触发模型轮次。
+
+用户要求汇总时运行 `bin/router report`：只读 stats、不 refresh；正文展示固定面板，并保留 JSON/CSV。
 
 ## 执行与边界
 
