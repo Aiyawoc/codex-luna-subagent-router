@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
-"""Main-turn usage snapshots. Explicit IDs, append-only cursors, no model calls.
+"""Main-turn usage snapshots and pre-final previews without model calls.
 
-UserPromptSubmit records a byte boundary; Stop reads only that main turn and
-registered child intervals. A new prompt seals the previous snapshot so later
-steering can never inflate a previous turn. The ledger contains no chat text.
+UserPromptSubmit records a byte boundary. Parent transcript activity associates
+spawned/reused children with the root turn; child turn IDs are never assumed to
+equal the parent turn ID. Stop records the final hook snapshot. `preview` reads
+the current turn before the Lead sends its final answer, so that answer may show
+an explicitly pre-final usage summary without requesting another model turn.
 """
 from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
+import os
+import stat
 import sys
 import time
 from pathlib import Path
 
 import outcome_store as store
 import token_usage as usage
-from usage_reader import checkpoint, empty, read_usage
+from usage_reader import MAX_LINE, checkpoint, empty, read_usage, validate_cursor
 
 ROW_KEYS = {"schema_version", "session_id", "turn_id", "scope_id", "started_at", "updated_at",
             "phase", "locator", "cursor", "members", "main_snapshot", "child_snapshots", "excluded_children"}
 MAX_MEMBERS = 16
+MAX_ACTIVITY_BYTES = 16 * 1024 * 1024
 
 
 def ledger_path(usage_path):
@@ -37,7 +41,6 @@ def _cursor(value):
 
 
 def _snapshot(value):
-    # Reuse the strict usage schema without weakening historical ledger reads.
     fake = usage._new("validation-child", "validation-parent", "global")
     fake["snapshot"] = value
     usage.validate_row(fake)
@@ -115,6 +118,65 @@ def _boundary(path, identity, root):
         return None
 
 
+def _walk_activity(value, found):
+    if isinstance(value, dict):
+        agent = value.get("agent_thread_id")
+        kind = value.get("kind")
+        if isinstance(agent, str) and isinstance(kind, str) and kind.lower() in {"started", "interacted"}:
+            try:
+                found.add(usage._id(agent))
+            except ValueError:
+                pass
+        for item in value.values():
+            _walk_activity(item, found)
+    elif isinstance(value, list):
+        for item in value:
+            _walk_activity(item, found)
+
+
+def discover_turn_children(path, session_id, cursor, root):
+    """Return child IDs explicitly referenced by parent-turn agent activity after the turn cursor.
+
+    Completion-only activity is intentionally ignored because an old Worker may finish during a
+    later user turn. Started/Interacted activity is causal evidence that this turn used the child.
+    """
+    if path is None or cursor is None:
+        return set()
+    target = Path(path).expanduser().absolute()
+    try:
+        usage.locator_for(target, store.codex_home(), root)  # allowed-root + symlink validation
+        fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except (OSError, ValueError):
+        return set()
+    found, used = set(), 0
+    deadline = time.monotonic() + 1.0
+    try:
+        with os.fdopen(fd, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                return set()
+            try:
+                validate_cursor(handle, cursor)
+            except ValueError:
+                return set()
+            handle.seek(cursor["offset"])
+            while used < MAX_ACTIVITY_BYTES and time.monotonic() < deadline:
+                line = handle.readline(min(MAX_LINE + 1, MAX_ACTIVITY_BYTES - used + 1))
+                if not line:
+                    break
+                used += len(line)
+                if len(line) > MAX_LINE or not line.endswith(b"\n"):
+                    break
+                try:
+                    row = json.loads(line)
+                except (ValueError, UnicodeError):
+                    continue
+                _walk_activity(row, found)
+    except OSError:
+        return set()
+    found.discard(session_id)
+    return found
+
+
 def begin(payload, upath, sid, root):
     session, turn = usage._id(payload.get("session_id")), usage._id(payload.get("turn_id"))
     path = ledger_path(upath)
@@ -124,7 +186,7 @@ def begin(payload, upath, sid, root):
     with store.locked(path, timeout=0.4):
         latest = load(path)
         if (session, turn) in latest:
-            return latest[(session, turn)]  # duplicate prompt hook is not a new turn
+            return latest[(session, turn)]
         for old in latest.values():
             if old["session_id"] == session and old["phase"] != "sealed":
                 save(path, dict(old, phase="sealed"), old)
@@ -132,44 +194,59 @@ def begin(payload, upath, sid, root):
         row = dict(schema_version="1.0", session_id=session, turn_id=turn, scope_id=sid,
                    started_at=now, updated_at=now, phase="started", locator=locator,
                    cursor=cursor, members={}, main_snapshot=empty("awaiting_usage"), child_snapshots={}, excluded_children=0)
+        # Existing Workers get a per-turn baseline. This does not make them active.
         children, _ = usage.load_latest(upath)
         for child in children.values():
             if child["parent_id"] != session or child["scope_id"] != sid or len(row["members"]) >= MAX_MEMBERS:
                 continue
-            target = usage.locator_path(child, store.codex_home(), root)
-            row["members"][child["agent_id"]] = dict(cursor=_boundary(target, child["agent_id"], root),
+            child_target = usage.locator_path(child, store.codex_home(), root)
+            row["members"][child["agent_id"]] = dict(cursor=_boundary(child_target, child["agent_id"], root),
                 locator=child["locator"], fresh=False, active=False)
         return save(path, row)
 
 
 def register_child(payload, upath, sid, root):
-    """Associate only an exact parent-session / turn pair. Never guess by time."""
+    """Register a child to the one active parent turn; child and parent turn IDs differ in Codex."""
     session = usage._id(payload.get("session_id"))
     agent = usage._id(payload.get("agent_id"))
-    turn = payload.get("turn_id")
-    if not isinstance(turn, str):
-        return
     path = ledger_path(upath)
     with store.locked(path, timeout=0.4):
         latest = load(path)
-        old = latest.get((session, turn))
-        if old is None or old["scope_id"] != sid or old["phase"] == "sealed":
+        candidates = [r for r in latest.values() if r["session_id"] == session and r["scope_id"] == sid and r["phase"] == "started"]
+        if len(candidates) != 1:
             return
+        old = candidates[0]
         row = copy.deepcopy(old)
         if agent not in row["members"]:
             if len(row["members"]) >= MAX_MEMBERS:
+                row["excluded_children"] += 1
+                save(path, row, old)
                 return
-            # Existing lifetime data is NOT a zero baseline for a new turn.
             children, _ = usage.load_latest(upath)
             child = children.get(usage.usage_id(agent, session))
-            is_new = child is not None and child["snapshot"]["usage_events"] == 0 and child["locator"] is None
-            row["members"][agent] = dict(cursor=None, locator=None, fresh=is_new, active=True)
+            is_new = child is not None and store.parse_time(child["started_at"]) >= store.parse_time(row["started_at"])
+            row["members"][agent] = dict(cursor=None, locator=child["locator"] if child else None, fresh=is_new, active=True)
         else:
             row["members"][agent]["active"] = True
         save(path, row, old)
 
 
-def finish(payload, upath, sid, root):
+def _activate_discovered(row, children, discovered, session):
+    missing = 0
+    for agent in discovered:
+        if agent in row["members"]:
+            row["members"][agent]["active"] = True
+            continue
+        child = children.get(usage.usage_id(agent, session))
+        if child is None or len(row["members"]) >= MAX_MEMBERS:
+            missing += 1
+            continue
+        fresh = store.parse_time(child["started_at"]) >= store.parse_time(row["started_at"])
+        row["members"][agent] = dict(cursor=None, locator=child["locator"], fresh=fresh, active=True)
+    row["excluded_children"] = missing
+
+
+def finish(payload, upath, sid, root, *, mark_stopped=True):
     session, turn = usage._id(payload.get("session_id")), usage._id(payload.get("turn_id"))
     path = ledger_path(upath)
     deadline = time.monotonic() + 3.0
@@ -177,7 +254,7 @@ def finish(payload, upath, sid, root):
         latest = load(path)
         old = latest.get((session, turn))
         if old is None:
-            return None  # no blind subtraction, and never report lifetime as current turn
+            return None
         if old["scope_id"] != sid:
             raise store.StoreError("turn scope changed")
         if old["phase"] == "sealed":
@@ -190,31 +267,24 @@ def finish(payload, upath, sid, root):
         else:
             row["main_snapshot"] = empty("main_turn_baseline_missing")
         children, _ = usage.load_latest(upath)
+        discovered = discover_turn_children(target, session, row["cursor"], root) if target else set()
+        _activate_discovered(row, children, discovered, session)
         row["child_snapshots"] = {}
         for agent, member in row["members"].items():
             child = children.get(usage.usage_id(agent, session))
-            target = usage.locator_path(child, store.codex_home(), root) if child and child["scope_id"] == sid else None
+            child_target = usage.locator_path(child, store.codex_home(), root) if child and child["scope_id"] == sid else None
             if not member["active"]:
-                current = _boundary(target, agent, root)
-                if current is not None and current == member["cursor"]:
-                    continue  # old closed worker did no new work
-                if current is None and child and child["snapshot"]["last_usage_at"] is not None:
-                    # Cannot prove no activity: include as unavailable, not zero.
-                    pass
-                elif current is None:
-                    continue
+                continue  # Historical Workers are not charged to this turn without causal activity.
             if time.monotonic() >= deadline:
                 snap = empty("read_budget_exceeded")
             elif member["cursor"] is None and not member["fresh"]:
                 snap = empty("child_baseline_missing")
-            elif target:
-                snap = read_usage(target, agent, session, codex_home=store.codex_home(), project_root=root,
+            elif child_target:
+                snap = read_usage(child_target, agent, session, codex_home=store.codex_home(), project_root=root,
                     cursor=member["cursor"], max_seconds=max(0.01, deadline-time.monotonic()))
             else:
                 snap = empty("transcript_unavailable")
             row["child_snapshots"][agent] = snap
-        row["excluded_children"] = sum(c["parent_id"] == session and c["scope_id"] == sid and c["agent_id"] not in row["members"] for c in children.values())
-        # A transient re-read failure must not erase already observed consumption.
         def preserve(previous, current):
             if previous["status"] != "unavailable" and (current["status"] == "unavailable" or current["counts"]["total_tokens"] < previous["counts"]["total_tokens"]):
                 return dict(previous, status="partial", terminal_observed=False,
@@ -223,30 +293,43 @@ def finish(payload, upath, sid, root):
         row["main_snapshot"] = preserve(old["main_snapshot"], row["main_snapshot"])
         for agent, previous in old["child_snapshots"].items():
             row["child_snapshots"][agent] = preserve(previous, row["child_snapshots"].get(agent, empty("transcript_unavailable")))
-        row["phase"] = "stopped"
+        if mark_stopped:
+            row["phase"] = "stopped"
         return save(path, row, old)
 
 
-def report(row):
+def report(row, heading="本轮 token 用量（已登记线程，本轮起点至当前快照）"):
     snapshots = [row["main_snapshot"], *row["child_snapshots"].values()]
     aggregate = usage.aggregate_snapshots(snapshots)
-    # Only the validated local rollout adapter's thread-local intervals are added.
-    # Never mix App Server account/session aggregate exports or lifetime ledgers.
-    lines = ["本轮 token 用量（已登记线程，本轮起点至当前快照）",
-             usage.summary(row["main_snapshot"], "主 Agent · " + usage.model_label(row["main_snapshot"]))]
+    lines = [heading, usage.summary(row["main_snapshot"], "主 Agent · " + usage.model_label(row["main_snapshot"]))]
     for agent, snap in row["child_snapshots"].items():
         lines.append(usage.summary(snap, "子 Agent · " + usage.model_label(snap) + " · " + agent[-6:]))
     lines.append(usage.summary(aggregate, "本轮已知合计（含缓存）"))
     lines.append(f"已登记范围：完整 {aggregate['complete']} / 待确认 {aggregate['waiting']} / 部分 {aggregate['partial']} / 不可用 {aggregate['unavailable']}；不含未关联线程，不是账单。")
     if row["excluded_children"]:
-        lines.append(f"此父会话另有 {row['excluded_children']} 个已观察子线程未关联本轮，未计入。")
+        lines.append(f"本轮另有 {row['excluded_children']} 个已触发子线程无法安全关联，未计入。")
     return "\n".join(lines)
+
+
+def preview(upath, sid, root, *, session=None, turn=None):
+    latest = load(ledger_path(upath))
+    candidates = [r for r in latest.values() if r["scope_id"] == sid and r["phase"] == "started"
+                  and (session is None or r["session_id"] == session) and (turn is None or r["turn_id"] == turn)]
+    if len(candidates) != 1:
+        raise store.StoreError("current turn is missing or ambiguous")
+    row = candidates[0]
+    target = _path(row["locator"], sid, root)
+    refreshed = finish(dict(session_id=row["session_id"], turn_id=row["turn_id"],
+                            transcript_path=str(target) if target else None), upath, sid, root, mark_stopped=False)
+    if refreshed is None:
+        raise store.StoreError("current turn baseline is unavailable")
+    return refreshed
 
 
 def handle_hook(payload, upath, sid, root):
     if payload["hook_event_name"] == "UserPromptSubmit":
         begin(payload, upath, sid, root)
-        return {}  # do not inject the user's prompt or accounting context into the model
+        return {}
     row = finish(payload, upath, sid, root)
     if row and "child_is_not_main" in row["main_snapshot"]["reasons"]:
         return {}
@@ -257,7 +340,6 @@ def handle_hook(payload, upath, sid, root):
 def statistics(upath, session=None, turn=None):
     rows = [r for r in load(ledger_path(upath)).values()
             if (session is None or r["session_id"] == session) and (turn is None or r["turn_id"] == turn)]
-    # Hide storage locators/cursors. Raw integers retained; no full transcript paths.
     return [{k: v for k, v in r.items() if k not in ("locator", "cursor", "members")} |
             {"summary": report(r), "registered_children": len(r["members"])} for r in rows]
 
@@ -275,11 +357,22 @@ def main(argv=None):
     s.add_argument("--turn-id", required=True)
     s.add_argument("--transcript", type=Path)
     s.add_argument("--project-root")
+    s = sub.add_parser("preview")
+    s.add_argument("--session-id")
+    s.add_argument("--turn-id")
+    s.add_argument("--project-root")
+    s.add_argument("--global-scope", action="store_true")
     args = p.parse_args(argv)
     try:
         if args.command == "stats":
             rows = statistics(args.usage_file, args.session_id, args.turn_id)
             print(json.dumps(rows, ensure_ascii=False, indent=2) if args.json else "\n\n".join(r["summary"] for r in rows) or "暂无主 Agent 本轮统计。")
+        elif args.command == "preview":
+            sid, root = store.resolve_scope(args.project_root, args.global_scope)
+            if not usage.enabled(root) or store.effective_config(root).get("token_accounting_scope") != "main_and_subagents":
+                raise store.StoreError("main token accounting requires explicit opt-in")
+            row = preview(args.usage_file, sid, root, session=args.session_id, turn=args.turn_id)
+            print(report(row, "Token 用量（截至最终回复前；最终正文会产生少量额外输出）"))
         else:
             sid, root = store.resolve_scope(args.project_root)
             if not usage.enabled(root) or store.effective_config(root).get("token_accounting_scope") != "main_and_subagents":

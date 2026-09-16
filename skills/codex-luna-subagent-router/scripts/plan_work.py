@@ -68,7 +68,7 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
     if routing_mode not in ("adaptive", "luna_only"):
         raise advisor.AdvisorError("invalid routing_mode")
     if not isinstance(open_workers, int) or isinstance(open_workers, bool) or open_workers < 0:
-        raise advisor.AdvisorError("open-workers must be a non-negative integer")
+        raise advisor.AdvisorError("open-workers must be the current PendingInit/Running Worker count")
     limit = session_limit(max_workers, project_root)
     by_id, decisions, groups = {}, [], []
     allowed = {"task_id", "task_family", "axes", "depends_on", "write_paths", "read_paths", "batch_key", "retain_reason", "independent_review"}
@@ -195,7 +195,7 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
             remaining.remove(g)
     now_ids = waves[0][:max(0, limit - open_workers)] if waves else []
     return dict(version=1, routing_mode=routing_mode, lead_model=lead_model, lead_effort=lead_effort,
-                effective_wave_limit=limit, open_workers=open_workers, decisions=decisions, workers=groups,
+                effective_wave_limit=limit, open_workers=open_workers, open_workers_semantics="pending_or_running_only", decisions=decisions, workers=groups,
                 planned_waves=waves, ready_worker_ids=now_ids,
                 blocked_worker_ids=[g["worker_id"] for g in remaining],
-                instruction="Preflight exact routes, authority and real free slots. Spawn all ready independent Workers before waiting. Future waves are estimates; recheck prerequisites. Lead integrates rather than redoing delegated siblings. No spawn is performed by this planner.")
+                instruction="Preflight exact routes, authority and runtime status. open_workers counts PendingInit/Running only, never historical Completed agents. Spawn all ready independent Workers before waiting. If runtime returns an agent thread limit, refresh statuses before fallback; do not relabel it model overload. No spawn is performed by this planner.")

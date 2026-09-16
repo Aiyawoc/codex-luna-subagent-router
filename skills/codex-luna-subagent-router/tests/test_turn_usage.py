@@ -36,6 +36,11 @@ def terminal(turn=TURN, stamp=T3):
     return r
 
 
+def activity(agent=AGENT, kind="started", stamp=T2):
+    return dict(timestamp=stamp, type="response_item", payload=dict(
+        type="sub_agent_activity", kind=kind, agent_thread_id=agent, agent_path="/root/worker"))
+
+
 class DisplayTests(unittest.TestCase):
     def test_observed_luna_replaces_default(self):
         s=dict(model="gpt-5.6-luna",effort="high",status="complete",counts=counter(),reasons=[])
@@ -64,6 +69,12 @@ class DisplayTests(unittest.TestCase):
         s=dict(status="partial",reasons=["terminal_not_observed"])
         self.assertTrue(usage.display_status(s).startswith("待确认"))
 
+    def test_filtered_non_usage_is_informational(self):
+        s=dict(status="complete",reasons=["non_usage_counter"])
+        self.assertTrue(usage.display_status(s).startswith("完整快照"))
+        s=dict(status="partial",reasons=["non_usage_counter","terminal_not_observed"])
+        self.assertTrue(usage.display_status(s).startswith("待确认"))
+
     def test_aggregate_not_hardcoded_partial(self):
         s=dict(status="complete",counts=counter(),reasons=[])
         a=usage.aggregate_snapshots([s,s]);self.assertEqual(a["status"],"complete")
@@ -84,7 +95,7 @@ class ReaderRegressionTests(Sandbox):
         s=self.read();self.assertEqual(s['counts'],total)
         self.assertIn('non_usage_counter',s['reasons'])
         self.assertNotIn('missing_baseline',s['reasons'])
-        self.assertEqual(s['status'],'partial')
+        self.assertEqual(s['status'],'complete')
 
     def test_initial_baseline_missing_stays_missing_not_invented(self):
         total={k:v*2 for k,v in counter().items()}
@@ -203,19 +214,25 @@ class MainTurnTests(Sandbox):
         text=turns.ledger_path(self.upath).read_text()
         self.assertNotIn('PRIVATE',text);self.assertNotIn(str(self.home),text);self.assertNotIn(str(self.project),text)
 
-    def test_child_and_main_are_added_once(self):
+    def test_child_turn_id_need_not_equal_parent_turn_id(self):
         self.hook()
-        start=self.hook_payload('SubagentStart');start['turn_id']=TURN
+        start=self.hook_payload('SubagentStart');start['turn_id']='child-turn-999'
         usage.hook(start,self.upath)
-        self.transcript();stop=self.hook_payload();stop['turn_id']=TURN;usage.hook(stop,self.upath)
-        self.add([ctx(),event(),terminal()]);out=self.hook('Stop')
+        self.transcript();stop=self.hook_payload();stop['turn_id']='child-turn-999';usage.hook(stop,self.upath)
+        self.add([ctx(),activity(),event(),terminal()]);out=self.hook('Stop')
         self.assertIn('本轮已知合计（含缓存） | 总量 90k',out['systemMessage'])
         self.assertEqual(len(self.row()['child_snapshots']),1)
 
-    def test_unknown_child_turn_not_guessed(self):
-        self.hook();start=self.hook_payload('SubagentStart');start['turn_id']='different-turn'
-        usage.hook(start,self.upath);self.transcript();usage.hook(self.hook_payload(),self.upath)
-        self.add([ctx(),event(),terminal()]);self.hook('Stop')
+    def test_parent_activity_can_recover_child_association(self):
+        self.hook()
+        usage.register(self.upath, AGENT, PARENT, 'global', 'default')
+        self.transcript();self.collect()
+        self.add([ctx(),activity(),event(),terminal()]);self.hook('Stop')
+        self.assertIn(AGENT, self.row()['child_snapshots'])
+
+    def test_completion_only_activity_does_not_charge_old_child(self):
+        self.transcript();self.collect();self.hook()
+        self.add([ctx(),activity(kind='completed'),event(),terminal()]);self.hook('Stop')
         self.assertEqual(self.row()['child_snapshots'],{})
 
     def test_previous_child_lifetime_not_readded_next_turn(self):
@@ -227,8 +244,16 @@ class MainTurnTests(Sandbox):
         self.transcript();self.collect();self.hook()
         total={k:v*2 for k,v in counter().items()}
         self.add([context(T3),event(total,counter(),T3),end(T4)],self.path);self.collect()
-        self.add([ctx(),event(),terminal()]);self.hook('Stop')
+        self.add([ctx(),activity(kind='interacted'),event(),terminal()]);self.hook('Stop')
         self.assertEqual(self.row()['child_snapshots'][AGENT]['counts'],counter())
+
+    def test_preview_does_not_stop_turn_and_is_labeled_prefinal(self):
+        self.hook();self.add([ctx(),event()])
+        row=turns.preview(self.upath,'global',self.project)
+        self.assertEqual(row['phase'],'started')
+        text=turns.report(row,'Token 用量（截至最终回复前；最终正文会产生少量额外输出）')
+        self.assertIn('截至最终回复前',text)
+        self.assertIn('主 Agent · Astra high',text)
 
     def test_sealed_old_stop_cannot_absorb_later_child_steering(self):
         self.hook();self.add([ctx(),event(),terminal()]);self.hook('Stop');self.hook(turn=TURN2)

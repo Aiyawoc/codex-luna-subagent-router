@@ -19,7 +19,7 @@ if SCRIPT_DIR not in sys.path:
 import outcome_store as store
 from usage_reader import FIELDS, empty, read_usage
 
-VERSION = "2.5.3"
+VERSION = "2.5.4"
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 ROW_FIELDS = {"schema_version", "usage_id", "agent_id", "parent_id", "agent_type", "scope_id", "started_at", "updated_at", "receipt_id", "snapshot", "locator"}
 SNAPSHOT_FIELDS = {"status", "source", "counts", "reasons", "usage_events", "last_usage_at", "model", "effort", "terminal_observed", "bytes_read"}
@@ -48,6 +48,7 @@ def compact(value: int | None) -> str:
 
 
 WAIT_REASONS = {"terminal_not_observed", "unflushed_tail"}
+INFO_REASONS = {"non_usage_counter"}
 REASON_LABELS = {
     "missing_baseline": "缺少起始基线",
     "non_usage_counter": "已排除非用量计数",
@@ -89,12 +90,13 @@ def model_label(snapshot, fallback=None):
 
 
 def display_status(snapshot):
-    if snapshot["status"] == "complete":
-        return "完整快照"
     reasons = snapshot.get("reasons", [])
-    prefix = "不可用" if snapshot["status"] == "unavailable" else (
-        "待确认" if reasons and set(reasons) <= WAIT_REASONS else "部分统计")
     labels = [REASON_LABELS.get(r, r) for r in reasons]
+    if snapshot["status"] == "complete":
+        return "完整快照" + ("：" + "；".join(labels[:3]) + ("等" if len(labels) > 3 else "") if labels else "")
+    substantive = set(reasons) - INFO_REASONS
+    prefix = "不可用" if snapshot["status"] == "unavailable" else (
+        "待确认" if substantive and substantive <= WAIT_REASONS else "部分统计")
     return prefix + ("：" + "；".join(labels[:3]) + ("等" if len(labels) > 3 else "") if labels else "")
 
 
@@ -113,7 +115,8 @@ def aggregate_snapshots(snapshots):
         values[field] = sum(nums) if nums else None
         coverage[field] = len(nums)
     statuses = Counter(s["status"] for s in snapshots)
-    waiting = sum(s["status"] == "partial" and bool(s.get("reasons")) and set(s["reasons"]) <= WAIT_REASONS for s in snapshots)
+    waiting = sum(s["status"] == "partial" and bool(set(s.get("reasons", [])) - INFO_REASONS)
+                  and (set(s.get("reasons", [])) - INFO_REASONS) <= WAIT_REASONS for s in snapshots)
     complete = bool(snapshots) and statuses.get("complete", 0) == len(snapshots)
     status = "complete" if complete else "partial" if any(v is not None for v in values.values()) else "unavailable"
     return dict(status=status, counts=values, reasons=[] if complete else ["aggregate_incomplete"],

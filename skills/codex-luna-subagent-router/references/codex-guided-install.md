@@ -1,6 +1,6 @@
 # Codex v2 引导安装与升级
 
-安装、升级是线性任务，不创建 Worker。正式版本 v2.5.3。
+安装、升级是线性任务，不创建 Worker。正式版本 v2.5.4。
 
 ## 必须全量更新
 
@@ -109,3 +109,12 @@ python3 -m unittest discover -s tests -v
 用量查看：`python3 /path/to/skill/scripts/token_usage.py stats`；加 `--json` 保留原始整数和字段覆盖。hooks 测试通过不等于桌面端已授权/已自然触发。
 
 主线程本轮历史查看：`python3 /path/to/skill/scripts/turn_usage.py stats --json`。关闭统计保留所有历史账本。升级旧 on 不等于同意扩大范围；第 6 项确认并审查四钩子后，在新一轮用户请求中验收 UserPromptSubmit 和 Stop，旧轮次不能事后猜测补基线。
+
+
+## v2.5.4 运行时生命周期补充
+
+- 并发上限是同时活跃 Worker 上限，不是对话累计创建数。支持 `list_agents` 时，只把 PendingInit/Running 作为 `--open-workers`；Completed 历史不能把 3 个槽位永久占满。
+- spawn 失败必须保留原始分类：`agent thread limit reached` 与 `server overloaded` 不得都写成“模型满载”。
+- 同工作流、模型/强度已知且满足最低能力、无需独立复核时，可复用 Completed Worker；否则 fresh。复用不改变模型/effort，并只统计本轮新增 token。
+- 主/子 token 关联不再假设父子 turn_id 相同；父 transcript 的 Started/Interacted activity 用于绑定本轮真实 child。
+- 开启 main_and_subagents 时，Lead 在最终回复前运行 `turn_usage.py preview`；成功则正文末尾附“截至最终回复前”摘要，Stop 仍保存更晚快照。

@@ -6,7 +6,10 @@
 
 面向 Codex 的成本优先 SubAgent 路由 Skill：按子任务选择 **Luna / Sol / Astra + 推理强度**，可选记录验证结果与主／子 Agent token 用量。目标是降低可靠完成任务的**总成本**，而不是尽可能多创建 Agent。
 
-当前稳定版：[**v2.5.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.3) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
+当前稳定版：[**v2.5.4**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.4) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
+
+
+> **v2.5.4**：并发上限按当前 PendingInit/Running Worker 计算，不是历史 Agent 总数；支持条件复用 Completed Worker。主/子 token 通过父线程 Started/Interacted activity 关联，并可在最终正文前输出“截至最终回复前”摘要。
 
 [主要作用](#purpose) · [安装／升级](#install) · [六个询问项](#setup) · [查看数据](#data) · [费用对比占位](#cost) · [更多文档](#docs)
 
@@ -29,7 +32,7 @@
 
 **Luna（经济）**承担清晰、局部、可验证的工作；**Sol（中等）**用于高歧义调试、跨模块因果、竞态等；**Astra（专家）**用于专家级架构判断和高失败代价反证。这是本项目的路由策略，不是对每项任务的性能保证。自动路由不再包含 Terra。
 
-主 Agent 可以向下委派，也可以局部向上求助：例如 Astra high → Luna high，或 Luna max → Sol high。`max` 不等于跨模型能力升级。每个子任务最多两次尝试；每波最多 `min(3, Codex 显式并发上限)`，还需扣除已打开线程。**不强制开满，也不强制混用模型。**
+主 Agent 可以向下委派，也可以局部向上求助：例如 Astra high → Luna high，或 Luna max → Sol high。`max` 不等于跨模型能力升级。每个子任务最多两次尝试；每波最多 `min(3, Codex 显式并发上限)`，只扣除当前 PendingInit／Running Worker；历史 Completed 不作为累计总数占槽。**不强制开满，也不强制混用模型。**
 
 <a id="install"></a>
 ## 安装／升级
@@ -40,7 +43,7 @@
 
 ```text
 请使用 $skill-installer 全量安装或升级这个 Skill：
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.3/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.4/skills/codex-luna-subagent-router
 
 刷新完整 Skill 包和随包 Agent profiles，然后读取 references/codex-guided-install.md。
 先运行 scripts/inspect_guided_install.py --json，逐项询问适用的缺失配置。
@@ -56,7 +59,7 @@ https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.3/skills/codex-l
 **新安装**，在尚无同名目录的位置运行：
 
 ```bash
-git clone --branch v2.5.3 --depth 1 \
+git clone --branch v2.5.4 --depth 1 \
   https://github.com/Aiyawoc/codex-luna-subagent-router.git
 cd codex-luna-subagent-router
 bash skills/codex-luna-subagent-router/install.sh --global
@@ -65,8 +68,8 @@ bash skills/codex-luna-subagent-router/install.sh --global
 **升级已有源码 checkout**：先保留自己的本地改动，在干净工作区运行；未来升级时将下面的 tag 换成目标 Release。
 
 ```bash
-git fetch origin tag v2.5.3
-git switch --detach v2.5.3
+git fetch origin tag v2.5.4
+git switch --detach v2.5.4
 bash skills/codex-luna-subagent-router/install.sh --global
 ```
 
@@ -92,6 +95,12 @@ bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-projec
 
 **升级规则：缺失不等于拒绝，明确关闭不等于缺失。** 所有适用缺项必须明确询问；已有 off／false 保留。旧版仅开启子 Agent 统计，扩展到主线程前也在第 6 项询问。`--hooks-supported` 是操作者已核实能力的声明，不是自动检测，更不是信任绕过。
 
+### v2.5.4：并发恢复与 Worker 复用
+
+“最大并发 3”不是“一个对话只能创建 3 个”。支持 `list_agents` 时，规划只统计 PendingInit／Running；Completed／Errored／Interrupted／Shutdown 属于历史或可回收状态。创建失败必须区分 `agent thread limit reached` 和真正的 `server overloaded`，不能统称“模型满载”。
+
+同一工作流继续处理、实际模型／强度已知且满足要求、无需独立复核时，可以复用 Completed Worker；否则仍使用 fresh Worker。复用不改变模型／强度，token 只计算本轮新增区间。
+
 <a id="data"></a>
 ## 查看数据
 
@@ -108,6 +117,9 @@ python3 "$SKILL/scripts/token_usage.py" stats
 
 # 3. 主 Agent：各轮主线程及可靠关联子线程的本轮用量
 python3 "$SKILL/scripts/turn_usage.py" stats
+
+# 准备最终回复时的正文前快照（仅当前 scope 恰有一个 active turn 时成功）
+python3 "$SKILL/scripts/turn_usage.py" preview
 
 # 4. 安装／升级还缺哪些明确选择（只读）
 python3 "$SKILL/scripts/inspect_guided_install.py" --json
@@ -197,7 +209,7 @@ Luna high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | �
 | [路由策略](skills/codex-luna-subagent-router/references/routing-policy.md) · [任务规划](skills/codex-luna-subagent-router/references/work-planning.md) | 能力差距、精确绑定、整组任务和并发约束。 |
 | [Outcome 采集](skills/codex-luna-subagent-router/references/outcome-collection.md) | begin／finalize、保守历史校准与采样限制。 |
 | [Token 统计](skills/codex-luna-subagent-router/references/token-accounting.md) | hooks、手动采集、统计口径、完整度和本轮归属。 |
-| [更新记录](CHANGELOG.md) · [v2.5.3 设计](docs/v2.5.3-main-turn-token-summary.md) | 版本变化和已知实机边界。 |
+| [更新记录](CHANGELOG.md) · [v2.5.4 设计](docs/v2.5.4-runtime-lifecycle-accounting.md) | 版本变化和已知实机边界。 |
 
 Worker 为叶子节点，不再派生下级、不扩张权限；实际模型身份不能用 Worker 自述代替。Prompt 规则与本地校验不是引擎级强制执行。未登记的 Worker、缺失日志或不支持的客户端格式都可能降低覆盖率；本地测试不能证明真实账单、自然委派率或端到端净节省。
 

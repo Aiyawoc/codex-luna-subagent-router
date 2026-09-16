@@ -8,7 +8,7 @@
 
 ```bash
 python3 /path/to/skill/scripts/route_advisor.py plan /path/to/work-plan.json \
-  --lead-model gpt-6-astra --lead-effort high
+  --lead-model gpt-6-astra --lead-effort high --open-workers ACTUAL_ACTIVE_COUNT
 ```
 
 在项目工作目录运行，配置自动读取。`--project-root /repo` 是全局参数，置于 `plan` 之前。输入模板 `examples/work-plan.json` 不含任务正文，真正的目标和验收稍后放进 Worker packet。路径只用于当前规划，不写进 outcome。
@@ -25,7 +25,9 @@ python3 /path/to/skill/scripts/route_advisor.py plan /path/to/work-plan.json \
 
 ## 容量
 
-有效容量取 Skill 3、`--max-workers`、有效 routing.json 的 max_concurrent_workers、用户级/项目级 Codex 配置上限的最小值。`--open-workers N` 必须填当前仍打开的 Worker 数，包含已完成但尚未关闭的线程；运行时容量变化时重算，不能把 planner 默认 0 当作事实。
+有效容量取 Skill 3、`--max-workers`、有效 routing.json 的 max_concurrent_workers、用户级/项目级 Codex 配置上限的最小值。`--open-workers N` 现在必须显式提供，并且只填运行时 `PendingInit` / `Running` 的 Worker 数；历史 `Completed` / `Errored` / `Interrupted` / `Shutdown` 不作为累计总数扣槽位。支持 `list_agents` 时先读取真实状态，不能数 UI 历史卡片。
+
+若 spawn 返回 `agent thread limit reached`，先刷新状态并按 lifecycle-and-context.md 做容量恢复/条件复用；不要把线程上限改写成“模型满载”。真正的 `server overloaded` 才按模型/服务端过载处理。
 
 “一个高级 Worker”保护的是向上升级，不限制 Astra 向下派多个 Luna/Sol。不能为了缩短 elapsed time 就机械开满，也不强制出现某一模型。
 
@@ -41,3 +43,7 @@ OpenAI Model Guidance 建议针对工作流明确何时、多少工作委派，A
 - https://learn.chatgpt.com/docs/agent-configuration/subagents
 
 单元测试验证本地规划规则；真实模型是否完整识别候选、执行 plan 和正确分类，仍需真实任务验收。
+
+## 已完成 Worker 的条件复用
+
+Completed Worker 不是默认垃圾，也不是永久占位。若同一工作流/模块继续小范围工作、实际模型/强度已知且满足最低能力、无需独立复核，可通过运行时 follow-up 入口复用；新的 task_id 和验收仍必须明确。不同模型、无关任务、真正独立复核或身份未知时使用 fresh Worker。复用仅统计本轮增量，不重新计入旧生命周期 token。

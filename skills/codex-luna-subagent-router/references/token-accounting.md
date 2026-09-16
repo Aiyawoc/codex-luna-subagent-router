@@ -1,4 +1,4 @@
-# SubAgent token 统计（v2.5.3）
+# SubAgent token 统计（v2.5.4）
 
 仅 `token_accounting=on` 采集；缺失/off 保持关闭。此选项独立于 luna_only/adaptive 和 evidence_calibration，关闭历史校准也能查看用量。不会切换模型、修改路由成本表、估算账单或绕过 hooks 信任。
 
@@ -142,3 +142,18 @@ python3 /path/to/skill/scripts/turn_usage.py collect --session-id ACTUAL_PARENT_
 ```
 
 主线程账本默认为 `usage.turns.jsonl`，与 usage.jsonl 同目录；自定义 usage 文件时按相同 stem 派生。旧 usage.jsonl 和 outcomes.jsonl 不迁移、不删除。原开关缺失/关闭时不采集，旧版只有 on 未确认扩展 scope 时忽略主线程 hooks。
+
+
+## v2.5.4：父子轮次关联与最终回复前预览
+
+Codex 的 SubagentStart/SubagentStop `turn_id` 是子线程自己的 turn，不要求等于父线程 turn。v2.5.4 不再用两者相等作为归属条件：父线程从 UserPromptSubmit 保存的 cursor 之后读取结构化 SubAgent activity，只把 `Started` / `Interacted` 的真实 child ID 归入本轮。仅出现旧 Worker 的 `Completed` activity 不会被误计入新一轮。
+
+已有 Completed Worker 若在新一轮被 runtime follow-up 复用，UserPromptSubmit 已保存其 child cursor；本轮只读取该 cursor 之后的增量，旧生命周期 token 不重复加总。新 spawn 的 child 以本轮创建时间作为 fresh 起点。无法安全建立起点则显示 unavailable/partial，不拿 lifetime 总量代替。
+
+最终回答正文不是 Stop hook 的可修改区域。开启 `main_and_subagents` 时，Lead 可在发送最终回答前运行：
+
+```bash
+python3 /path/to/skill/scripts/turn_usage.py preview
+```
+
+仅当当前 scope 恰有一个 active turn 时返回摘要；多会话歧义时失败而不猜。正文必须标注“截至最终回复前”，因为 preview 之后的命令结果处理和最终正文自身仍会产生少量额外 token。Stop hook 继续记录更晚快照。不得为了得到“最终最终”数字触发第二个模型回合。
