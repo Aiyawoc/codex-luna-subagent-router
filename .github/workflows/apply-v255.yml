@@ -18,12 +18,20 @@ jobs:
           set -euo pipefail
           cat <<'SUMS' | sha256sum -c -
           29780fcc85cd156c7f50a76c86cffeda9ef912694d0241413165940f756c48b3  .github/v255.chunk00.b64
-          66de5541689f8d42452a848a017bcbc5380703c88b3466e44be26ef89b79c7cd  .github/v255.chunk01.b64
+          39c249336d015bcecffbc1c59164153762034c52124b3f0d8bb05518f927e6a8  .github/v255.chunk01a.b64
+          7a28922a12fdbe0f407e6fac073aff154d9e9a3498b7880b737595c4c6e82147  .github/v255.chunk01b.b64
+          a58aef53024c6cc974db82204f0f1ea356d9a34aa6228a034b3e5882df85ce9f  .github/v255.chunk01c.b64
           bb94a98d3b368f677fcf182d2c726ee4ddf7e057b4a842b4e78eced3dd344287  .github/v255.chunk02.b64
           2e6d3649080bb8ec9193aa63cce04f3e785984b3723a7708075d1125e5223629  .github/v255.chunk03.b64
           SUMS
           : > /tmp/v255.patch.gz
-          for f in .github/v255.chunk*.b64; do
+          for f in \
+            .github/v255.chunk00.b64 \
+            .github/v255.chunk01a.b64 \
+            .github/v255.chunk01b.b64 \
+            .github/v255.chunk01c.b64 \
+            .github/v255.chunk02.b64 \
+            .github/v255.chunk03.b64; do
             base64 -d "$f" >> /tmp/v255.patch.gz
           done
           gzip -dc /tmp/v255.patch.gz > /tmp/v255.patch
