@@ -1,0 +1,31 @@
+name: Apply Portable Patch
+on:
+  push:
+    branches: [feat/bundled-python-runtime]
+    paths: [.github/workflows/apply-portable-patch.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.repository == 'Aiyawoc/codex-luna-subagent-router' && github.actor == 'Aiyawoc'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify and apply exact tested source patch
+        shell: python
+        run: |
+          import base64, hashlib, lzma, pathlib, subprocess
+          parts = [pathlib.Path(f'.github/portable-patch.{i}.b64') for i in range(4)]
+          raw = lzma.decompress(base64.b64decode(''.join(p.read_text().strip() for p in parts), validate=True))
+          assert hashlib.sha256(raw).hexdigest() == '35fd996a70c77fc4f38a695cf9cd7df242e312f33a612afd2f3b74fa60908077', 'patch checksum mismatch'
+          subprocess.run(['git', 'apply', '--index', '-'], input=raw, check=True)
+          subprocess.run(['git', 'rm', '--', *map(str, parts)], check=True)
+          subprocess.run(['git', 'diff', '--cached', '--check'], check=True)
+      - name: Commit only to feature branch without force
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: 内置私有 Python 启动、事务安装与固定运行时打包'
+          git push origin HEAD:feat/bundled-python-runtime
