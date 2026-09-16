@@ -17,8 +17,9 @@ from pathlib import Path
 def execute(args, cwd, env, stdin=None):
     p=subprocess.run(args,cwd=cwd,env=env,input=stdin,capture_output=True,text=True,encoding='utf-8',timeout=180)
     print(p.stdout,end='')
+    if p.stderr:
+        print(p.stderr,file=sys.stderr,end='')
     if p.returncode:
-        print(p.stderr,file=sys.stderr)
         raise RuntimeError(f'smoke command failed ({p.returncode}): {args}')
     return p.stdout
 
@@ -40,6 +41,11 @@ def main():
             with tarfile.open(archives[0]) as t:
                 t.extractall(base,filter='data')
         root=base/'codex-luna-subagent-router'
+        if args.target.startswith('macos-'):
+            notices=root/'runtime/licenses/python-build-standalone'
+            assert (notices/'LICENSE.openssl-3.txt').is_file()
+            assert (notices/'LICENSE.libffi.txt').is_file()
+            assert len(json.loads((notices/'PROVENANCE.json').read_text())['files'])==20
         project=base/'工作 项目';project.mkdir()
         home=base/'home';home.mkdir()
         env=dict(os.environ,PATH='',PYTHONHOME='/does-not-exist',PYTHONPATH='/untrusted',

@@ -20,6 +20,7 @@ REPO = Path(__file__).resolve().parents[1]
 SKILL = REPO / 'skills/codex-luna-subagent-router'
 sys.path.insert(0, str(SKILL / 'scripts'))
 from runtime_support import package_inventory, file_digest
+from bundle_notices import bundle_notices
 MAX_DOWNLOAD = 160 * 1024 * 1024
 MAX_EXPANDED = 800 * 1024 * 1024
 
@@ -130,6 +131,8 @@ def build(target, output, cache):
         if (runtime / 'python').exists():
             raise ValueError('build from a clean source tree without an existing runtime')
         unpack(runtime_archive, spec['archive'], runtime)
+        if target.startswith('macos-'):
+            bundle_notices(runtime, spec, cache)
         licenses = [p.relative_to(runtime).as_posix() for p in runtime.rglob('*') if p.is_file()
                     and any(s in p.name.lower() for s in ('license','copying','copyright'))]
         if not licenses:
@@ -139,7 +142,7 @@ def build(target, output, cache):
             '# Bundled CPython and third-party notices\n\n'
             + 'Runtime: ' + lock['python_version'] + '\n\nSource: ' + spec['url']
             + '\n\nSHA256: ' + spec['sha256'] + '\n\n'
-            + 'All upstream files, including dependency notices, remain in runtime/python. '
+            + 'The original runtime files are retained in runtime/python. On macOS, the matched PBS source notices are additionally preserved in runtime/licenses/python-build-standalone, with provenance and hashes. '
             + 'See runtime.json for the license-file index. This package is not relicensed solely under the Router MIT license.\n', encoding='utf-8')
         meta = {'schema_version':1, 'target':target, 'python_version':[int(i) for i in lock['python_version'].split('.')],
                 'upstream':spec, 'license_files':sorted(licenses), 'network_install':False}

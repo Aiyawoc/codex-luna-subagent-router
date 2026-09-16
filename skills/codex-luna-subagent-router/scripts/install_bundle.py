@@ -60,11 +60,12 @@ def install(source, destination, agents):
         lock.mkdir()
     except FileExistsError as exc:
         raise ValueError('another install is active; inspect the install-lock before retrying') from exc
-    stage = Path(tempfile.mkdtemp(prefix='.' + NAME + '.staging-', dir=destination.parent))
+    stage = None
     backup = destination.with_name('.' + NAME + '.previous-' + uuid.uuid4().hex[:12])
     previous_profiles = {}
     moved_old = moved_new = False
     try:
+        stage = Path(tempfile.mkdtemp(prefix='.' + NAME + '.staging-', dir=destination.parent))
         shutil.copytree(source, stage, dirs_exist_ok=True, symlinks=True,
                         ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.git', 'dist'))
         if bundled:
@@ -114,7 +115,7 @@ def install(source, destination, agents):
                 path.write_bytes(content)
         raise
     finally:
-        if stage.exists():
+        if stage is not None and stage.exists():
             shutil.rmtree(stage)
         lock.rmdir()
 

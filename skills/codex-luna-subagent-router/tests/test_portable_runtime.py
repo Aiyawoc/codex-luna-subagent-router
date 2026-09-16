@@ -91,6 +91,15 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual((agents/'luna-high.toml').read_text(),'old profile')
             self.assertFalse(dest.with_name('.'+installer.NAME+'.install-lock').exists())
 
+    def test_staging_creation_failure_releases_install_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp);src=base/'source';src.mkdir()
+            dest=base/'skills'/installer.NAME
+            with patch.dict(os.environ,{'CODEX_ROUTER_PYTHON':sys.executable}), patch.object(installer,'validate_runtime'), patch.object(installer.tempfile,'mkdtemp',side_effect=OSError('disk full')):
+                with self.assertRaisesRegex(OSError,'disk full'):
+                    installer.install(src,dest,base/'agents')
+            self.assertFalse(dest.with_name('.'+installer.NAME+'.install-lock').exists())
+
     def test_nested_destination_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
