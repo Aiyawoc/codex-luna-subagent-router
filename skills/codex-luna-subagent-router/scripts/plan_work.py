@@ -7,6 +7,7 @@ from pathlib import Path
 
 import route_advisor as advisor
 import outcome_store as store
+import configure_subagent_limit as concurrency
 
 RETAIN_REASONS = {"critical_path", "context_not_transferable", "permission_boundary", "external_side_effect", "already_completed"}
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$")
@@ -27,15 +28,12 @@ def session_limit(requested, project_root=None):
             data = tomllib.loads(config.read_text(encoding="utf-8"))
         except (ImportError, ValueError) as exc:
             raise advisor.AdvisorError("cannot safely read Codex concurrency config") from exc
-        agents = data.get("agents", {})
-        if not isinstance(agents, dict):
-            raise advisor.AdvisorError("agents must be a config table")
-        for key in ("max_concurrent_threads_per_session", "max_threads"):
-            value = agents.get(key)
-            if value is not None:
-                if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-                    raise advisor.AdvisorError("invalid Codex concurrency cap")
-                limit = min(limit, value)
+        try:
+            value = concurrency.effective_subagent_limit(data)
+        except concurrency.ConfigurationError as exc:
+            raise advisor.AdvisorError("invalid or conflicting Codex concurrency cap") from exc
+        if value is not None:
+            limit = min(limit, value)
     return limit
 
 

@@ -6,10 +6,10 @@
 
 面向 Codex 的成本优先 SubAgent 路由 Skill：按子任务选择 **Luna / Sol / Astra + 推理强度**，可选记录验证结果与主／子 Agent token 用量。目标是降低可靠完成任务的**总成本**，而不是尽可能多创建 Agent。
 
-当前稳定版：[**v2.5.4**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.4) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
+当前稳定版：[**v2.5.5**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.5) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
 
-> **v2.5.4**：并发上限按当前 PendingInit/Running Worker 计算，不是历史 Agent 总数；支持条件复用 Completed Worker。主/子 token 通过父线程 Started/Interacted activity 关联，并可在最终正文前输出“截至最终回复前”摘要。
+> **v2.5.5**：Q4 改为 Host-first / schema-aware。Codex Desktop/Core 是运行时权威，外部 `codex` CLI 仅作可选诊断；新版 canonical 和旧 V2/portable 并发表示都会归一为“同时 SubAgent 数，不含主 Agent”。
 
 [主要作用](#purpose) · [安装／升级](#install) · [六个询问项](#setup) · [查看数据](#data) · [费用对比占位](#cost) · [更多文档](#docs)
 
@@ -43,7 +43,7 @@
 
 ```text
 请使用 $skill-installer 全量安装或升级这个 Skill：
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.4/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.5/skills/codex-luna-subagent-router
 
 刷新完整 Skill 包和随包 Agent profiles，然后读取 references/codex-guided-install.md。
 先运行 scripts/inspect_guided_install.py --json，逐项询问适用的缺失配置。
@@ -59,7 +59,7 @@ https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.4/skills/codex-l
 **新安装**，在尚无同名目录的位置运行：
 
 ```bash
-git clone --branch v2.5.4 --depth 1 \
+git clone --branch v2.5.5 --depth 1 \
   https://github.com/Aiyawoc/codex-luna-subagent-router.git
 cd codex-luna-subagent-router
 bash skills/codex-luna-subagent-router/install.sh --global
@@ -68,8 +68,8 @@ bash skills/codex-luna-subagent-router/install.sh --global
 **升级已有源码 checkout**：先保留自己的本地改动，在干净工作区运行；未来升级时将下面的 tag 换成目标 Release。
 
 ```bash
-git fetch origin tag v2.5.4
-git switch --detach v2.5.4
+git fetch origin tag v2.5.5
+git switch --detach v2.5.5
 bash skills/codex-luna-subagent-router/install.sh --global
 ```
 
@@ -89,7 +89,7 @@ bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-projec
 | 1 | **Default 模式结构化提问** | `default_mode_request_user_input`：当前客户端支持时，允许在 Default 模式使用结构化提问工具。实验性；未开启仍可普通文字提问。 |
 | 2 | **长期自动委派授权** | 全局／当前项目／不安装。决定主 Agent 是否可在有成本或验证价值时自动委派；不扩张工具权限。 |
 | 3 | **路由策略** | `luna_only` 极致经济，或 `adaptive` 自动综合。主 Agent 本身不会被切换。 |
-| 4 | **最大并发子 Agent 数** | 保持当前／Codex 默认、推荐 3，或自定义正整数。控制容量上限，不是每次必须开满的数量。 |
+| 4 | **最大并发子 Agent 数** | 保持当前／Codex 默认、推荐 3，或自定义正整数。以当前 Codex Host/Core 为权威；CLI 非必需。canonical/legacy V2/portable 都归一为“不含主 Agent的同时 SubAgent 数”。 |
 | 5 | **验证结果校准** | 仅 `adaptive`：`conservative`／`off`。使用同类已验证历史保守调整建议；缺失时运行默认 off，但升级引导必须询问。 |
 | 6 | **主／子 Agent token 统计与完成摘要** | on／off；开启时选择支持且受信任的自动 hooks，或手动采集。统一涵盖 `UserPromptSubmit`、`Stop`、`SubagentStart`、`SubagentStop`，不再单设第 7 项。 |
 
@@ -100,6 +100,12 @@ bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-projec
 “最大并发 3”不是“一个对话只能创建 3 个”。支持 `list_agents` 时，规划只统计 PendingInit／Running；Completed／Errored／Interrupted／Shutdown 属于历史或可回收状态。创建失败必须区分 `agent thread limit reached` 和真正的 `server overloaded`，不能统称“模型满载”。
 
 同一工作流继续处理、实际模型／强度已知且满足要求、无需独立复核时，可以复用 Completed Worker；否则仍使用 fresh Worker。复用不改变模型／强度，token 只计算本轮新增区间。
+
+### v2.5.5：Host-first 并发兼容
+
+Router 运行时依赖 **Codex Host/Core** 暴露的 SubAgent、hooks 与 rollout 能力，不依赖 PATH 中的 `codex` CLI。Codex Desktop 与 CLI 可能是不同 build，因此安装引导不再把 CLI 版本当作 Desktop schema 的唯一依据。
+
+`configure_subagent_limit.py --schema auto`：已有 canonical 配置时保持 `[agents].max_concurrent_threads_per_session = N`；Host schema 无法确认的新配置则写 portable 兼容表示（旧 `agents.max_threads = N` + 旧 V2 internal `max_concurrent_threads_per_session = N+1`）。`inspect_guided_install.py` 会识别这些等价表示并发现冲突。Codex CLI 0.154.0 已支持 canonical 字段，但 CLI 只作为可选诊断器。
 
 <a id="data"></a>
 ## 查看数据
