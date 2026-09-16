@@ -4,7 +4,7 @@
 
 ## 运行时容量：并发不是累计总数
 
-`agents.max_concurrent_threads_per_session = 3` 表示同时占用的 spawned-agent 上限，不是整个对话最多创建 3 个。派遣前在支持 `list_agents` 的 Surface 读取真实状态：`PendingInit` / `Running` 才计入 `open_workers`；`Completed` / `Errored` / `Interrupted` / `Shutdown` 是历史或可回收状态，不能因为列表里仍显示就按总数扣槽位。
+`有效 SubAgent 上限 = 3` 表示同时占用的 spawned-agent 上限，不是整个对话最多创建 3 个；canonical `[agents]` 直接写 3，旧 V2 internal 表示则含 primary、对应写 4。派遣前在支持 `list_agents` 的 Surface 读取真实状态：`PendingInit` / `Running` 才计入 `open_workers`；`Completed` / `Errored` / `Interrupted` / `Shutdown` 是历史或可回收状态，不能因为列表里仍显示就按总数扣槽位。
 
 不要把任何创建失败都写成“模型满载”。至少区分：
 

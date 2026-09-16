@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.5 — 2026-09-16
+
+- Q4 改为 Host-first / schema-aware：Router 运行时依赖当前 Codex Host/Core，不把 PATH 中的 `codex` CLI 当必需组件或 Desktop schema 的唯一权威。
+- `configure_subagent_limit.py` 新增 `--schema auto|canonical|portable`；0.154.0 canonical 使用 `[agents].max_concurrent_threads_per_session = N`，Host schema 未知时用 CLI-independent portable 表示兼容已验证的 0.142.1 / 0.154.0 V1/V2 语义。
+- portable 配置统一把用户选择解释为“不含主 Agent 的同时 SubAgent 数”：`agents.max_threads = N` + 旧 V2 internal `features.multi_agent_v2.max_concurrent_threads_per_session = N+1`。
+- `inspect_guided_install.py` 与 planner 共用有效并发语义，识别 canonical / portable / 显式 legacy V2；旧单后端且 Host 不明时保持 Q4 pending，冲突配置拒绝猜测。
+- CLI 降级为可选诊断器；安装/升级、路由、native SubAgent、hooks、rollout 与本地统计不要求外部 `codex` 进程。
+
 ## 2.5.4 — 2026-09-16
 
 - 修复主/子 token 本轮关联：不再假设父子 turn_id 相同，改用父 transcript 中 Started/Interacted activity 的真实 child ID；旧 Completed activity 不误计新轮次。

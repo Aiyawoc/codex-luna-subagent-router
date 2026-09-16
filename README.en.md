@@ -6,10 +6,10 @@
 
 A cost-first SubAgent routing Skill for Codex. Select **Luna / Sol / Astra + reasoning effort** for each bounded task, optionally record verified outcomes, and inspect main/child token usage. The goal is the **total cost of reliable completion**, not the largest possible agent team.
 
-Stable release: [**v2.5.4**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.4) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+Stable release: [**v2.5.5**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.5) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
 
-> **v2.5.4**: concurrency counts current PendingInit/Running Workers, not historical agent totals; compatible Completed Workers may be reused. Parent Started/Interacted activity links child usage to the correct turn, and the Lead can append a pre-final token summary.
+> **v2.5.5**: Q4 is Host-first and schema-aware. Codex Desktop/Core is the runtime authority; an external `codex` CLI is optional diagnostics only. Canonical and legacy V2/portable caps are normalized to concurrent SubAgents excluding the primary.
 
 [What it does](#purpose) · [Install / upgrade](#install) · [Six setup questions](#setup) · [Inspect data](#data) · [Cost comparison placeholder](#cost) · [Documentation](#docs)
 
@@ -43,7 +43,7 @@ Send this in a Codex conversation for the target project:
 
 ```text
 Use $skill-installer to install or fully upgrade this Skill:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.4/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.5/skills/codex-luna-subagent-router
 
 Refresh the complete Skill package and every bundled Agent profile, then read
 references/codex-guided-install.md. Run scripts/inspect_guided_install.py --json
@@ -62,7 +62,7 @@ These commands target Bash on macOS/Linux and require Git and Python. CI covers 
 **New installation**, in a location without an existing directory of the same name:
 
 ```bash
-git clone --branch v2.5.4 --depth 1 \
+git clone --branch v2.5.5 --depth 1 \
   https://github.com/Aiyawoc/codex-luna-subagent-router.git
 cd codex-luna-subagent-router
 bash skills/codex-luna-subagent-router/install.sh --global
@@ -71,8 +71,8 @@ bash skills/codex-luna-subagent-router/install.sh --global
 **Upgrade an existing source checkout**: preserve local edits first and use a clean working tree. Replace the tag with the desired Release for future upgrades.
 
 ```bash
-git fetch origin tag v2.5.4
-git switch --detach v2.5.4
+git fetch origin tag v2.5.5
+git switch --detach v2.5.5
 bash skills/codex-luna-subagent-router/install.sh --global
 ```
 
@@ -92,7 +92,7 @@ bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-projec
 | 1 | **Structured questions in Default mode** | `default_mode_request_user_input`: enable the structured question tool in Default mode when the client supports it. Experimental; ordinary text questions remain possible without it. |
 | 2 | **Standing delegation permission** | Global / current project / do not install. Authorize automatic delegation when it has cost or verification value, without broadening tool permissions. |
 | 3 | **Routing strategy** | `luna_only` for maximum economy, or `adaptive` for capability-aware routing. The Lead itself is not switched. |
-| 4 | **Maximum concurrent SubAgents** | Keep current/Codex default, use the recommended 3, or another positive integer. A capacity ceiling, not a requirement to fill every slot. |
+| 4 | **Maximum concurrent SubAgents** | Keep current/Codex default, use the recommended 3, or another positive integer. The current Codex Host/Core is authoritative; CLI is optional. Canonical/legacy V2/portable forms normalize to concurrent SubAgents excluding the primary. |
 | 5 | **Verified-outcome calibration** | `adaptive` only: `conservative` / `off`. Reuse verified history cautiously. Missing defaults to off at runtime, but upgrade setup must still ask. |
 | 6 | **Main/child token accounting and completion summaries** | on / off; choose supported, trusted automatic hooks or manual collection. One question covers `UserPromptSubmit`, `Stop`, `SubagentStart` and `SubagentStop`; there is no separate seventh accounting question. |
 
@@ -103,6 +103,12 @@ bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-projec
 A maximum concurrency of 3 is not a lifetime limit of three agents. Where `list_agents` is available, planning counts only PendingInit/Running Workers; Completed/Errored/Interrupted/Shutdown entries are historical or recyclable state. Preserve the real error: `agent thread limit reached` is not the same as `server overloaded`.
 
 A Completed Worker may be reused for the same workstream when its observed model/effort still satisfies the task and independent review is not required. Otherwise use a fresh Worker. Reuse never changes model/effort and only the new token interval belongs to the current turn.
+
+### v2.5.5: Host-first concurrency compatibility
+
+The Router depends on the **Codex Host/Core** capabilities exposed by the active client, not on a `codex` executable in `PATH`. Desktop and CLI may be different builds, so the CLI version is not the sole authority for Desktop schema support.
+
+`configure_subagent_limit.py --schema auto` preserves an existing canonical `[agents].max_concurrent_threads_per_session = N`; when Host schema support is unknown, a new setting uses a portable representation (legacy `agents.max_threads = N` plus old V2 internal `max_concurrent_threads_per_session = N+1`). `inspect_guided_install.py` recognizes equivalent forms and rejects conflicts. Codex CLI 0.154.0 supports the canonical field, but remains optional diagnostics.
 
 <a id="data"></a>
 ## Inspect data

@@ -34,8 +34,8 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertIn("turn_usage.py preview", text)
         self.assertIn("Started/Interacted", text)
 
-    def test_version_is_254(self):
-        self.assertEqual((ROOT / "VERSION").read_text().strip(), "2.5.4")
+    def test_v254_contract_survives_v255(self):
+        self.assertEqual((ROOT / "VERSION").read_text().strip(), "2.5.5")
 
 
 if __name__ == "__main__":

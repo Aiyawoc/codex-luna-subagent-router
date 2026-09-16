@@ -10,6 +10,7 @@ from pathlib import Path
 
 import outcome_store as store
 import configure_token_accounting as tokens
+import configure_subagent_limit as concurrency
 from configure_guided_install import START_MARKER, END_MARKER
 
 
@@ -48,10 +49,26 @@ def inspect(codex_home, project_root=None):
     add(2, "delegation", scopes or None, not scopes, "未发现托管长期授权：全局、项目或不安装？")
     mode = routing.get("routing_mode")
     add(3, "routing_mode", mode, mode not in ("adaptive", "luna_only"), "路由策略：luna_only（极致经济）还是 adaptive（自动能力路由）？")
-    caps = [c.get("agents", {}).get("max_concurrent_threads_per_session", c.get("agents", {}).get("max_threads")) for c in (config, local)]
-    caps = [c for c in caps if type(c) is int and c >= 1]
-    add(4, "max_subagents", min(caps) if caps else None, not caps,
-        "未明确配置并发数量：保持 Codex 默认、3 或自定义？")
+    cap_layers = []
+    for layer_name, layer in (("user", config), ("project", local)):
+        info = concurrency.analyze_config(layer)
+        if info["effective_subagent_limit"] is not None:
+            cap_layers.append({"layer": layer_name, **info})
+    safe_caps = [
+        item["effective_subagent_limit"]
+        for item in cap_layers
+        if item["backend_safe_without_host_probe"]
+    ]
+    all_caps = [item["effective_subagent_limit"] for item in cap_layers]
+    q4_current = {
+        "effective_subagent_limit": min(all_caps) if all_caps else None,
+        "safe_effective_subagent_limit": min(safe_caps) if safe_caps else None,
+        "layers": cap_layers,
+        "cli_required": False,
+    }
+    q4_missing = not cap_layers or any(not item["backend_safe_without_host_probe"] for item in cap_layers)
+    add(4, "max_subagents", q4_current, q4_missing,
+        "并发设置缺失或仅对单一旧后端明确：保持 Codex 默认、3 或自定义？优先按当前 Host/Core 能力；未知 Host 时使用 portable 配置，不要求安装 codex-cli。")
     calibration = routing.get("evidence_calibration")
     add(5, "evidence_calibration", calibration, calibration not in ("off", "conservative"),
         "未设置结果校准：是否开启 conservative？", applicable=mode != "luna_only")

@@ -1,6 +1,6 @@
 # Codex v2 引导安装与升级
 
-安装、升级是线性任务，不创建 Worker。正式版本 v2.5.4。
+安装、升级是线性任务，不创建 Worker。正式版本 v2.5.5。
 
 ## 必须全量更新
 
@@ -36,13 +36,27 @@ adaptive：Luna → Sol → Astra。普通实现/扫描优先 Luna，高歧义�
 
 ### 4. 最大并发 SubAgent 数量
 
-保持当前/Codex 默认、3（推荐）、自定义 >=1。用户确认后：
+保持当前/Codex 默认、3（推荐）、自定义 >=1。这里的数字始终表示**同时打开的 SubAgent 数，不含主 Agent**。
+
+本项目以当前 Codex Host/Core 为运行时权威，不要求安装外部 `codex` CLI。先看 `inspect_guided_install.py --json` 的 Q4 结果：
+
+- 当前 Host/Core 已明确支持新版公开 schema 时，可写 canonical：`[agents].max_concurrent_threads_per_session = N`。Codex 0.154.0 已支持该字段。
+- 当前 Host schema 无法从运行环境可靠确认时，不要仅凭 PATH 里的 CLI 版本替 Desktop 做决定；直接使用 `--schema auto`。新配置会采用 portable 兼容表示：`agents.max_threads = N` + `features.multi_agent_v2.max_concurrent_threads_per_session = N+1`，从而在已验证的 0.142.1 / 0.154.0 V1/V2 语义下都保持同一个有效 SubAgent 上限。
+- 已有 canonical 配置时 `auto` 保持 canonical；已有旧单后端配置但无法证明当前 backend 时，Q4 会继续提示迁移，而不是把“可能有效”误报成已完成。
+
+默认安全命令：
 
 ```bash
-python3 scripts/configure_subagent_limit.py --max-subagents 3
+python3 scripts/configure_subagent_limit.py --max-subagents 3 --schema auto --json
 ```
 
-配置 [agents].max_concurrent_threads_per_session，Skill 单波仍最多 min(3, 该值)。并发上限不是开满配额；本版不擅自改已有上限。
+只有**当前 Host/Core 本身**已确认支持 canonical 时才显式使用：
+
+```bash
+python3 scripts/configure_subagent_limit.py --max-subagents 3 --schema canonical --json
+```
+
+helper 直接安全合并 `config.toml`、重新解析 TOML 并验证有效 SubAgent 语义；不 shell out 到 `codex`，因此 CLI 只是可选诊断器，不是 Router 的运行时依赖。Skill 单波仍最多 `min(3, 有效 Codex 上限)`，并发上限不是开满配额。
 
 ### 5. 是否启用 Verified Outcome Calibration
 
@@ -67,7 +81,7 @@ python3 scripts/configure_token_accounting.py --scope user --mode on \
   --install-hooks --hooks-supported
 ```
 
---hooks-supported 是操作者确认，不是绕过权限。通过客户端 hooks 审查入口信任新定义，CLI 可用 /hooks；桌面端支持以实际 build 为准。不写信任数据库，不擅自启用 features.hooks，不覆盖管理员策略。只做手动 fallback 时去掉 --install-hooks --hooks-supported。新配置不会自己获得信任；所有新增/改变的定义仍需审查。
+--hooks-supported 是操作者确认，不是绕过权限。通过客户端 hooks 审查入口信任新定义，CLI 若已安装可额外用 `/hooks` 诊断；桌面端以当前 Host/Core 实际能力为准。不写信任数据库，不擅自启用 features.hooks，不覆盖管理员策略。只做手动 fallback 时去掉 --install-hooks --hooks-supported。新配置不会自己获得信任；所有新增/改变的定义仍需审查。
 
 更新会保留 usage.jsonl；启用后至少用一个真实 Worker 验证。停止时未刷盘可先 partial；finalize 再核对。完整用法和允许路径见 token-accounting.md。
 
@@ -118,3 +132,11 @@ python3 -m unittest discover -s tests -v
 - 同工作流、模型/强度已知且满足最低能力、无需独立复核时，可复用 Completed Worker；否则 fresh。复用不改变模型/effort，并只统计本轮新增 token。
 - 主/子 token 关联不再假设父子 turn_id 相同；父 transcript 的 Started/Interacted activity 用于绑定本轮真实 child。
 - 开启 main_and_subagents 时，Lead 在最终回复前运行 `turn_usage.py preview`；成功则正文末尾附“截至最终回复前”摘要，Stop 仍保存更晚快照。
+
+## v2.5.5 Host-first 并发兼容
+
+- Router 的运行时依赖是当前 Codex Host/Core 暴露的 native SubAgent、hooks 与 rollout 能力；外部 `codex` CLI 不再被视作必需组件。
+- Codex Desktop 与 CLI 可以是不同 build。CLI 0.154.0 支持 `[agents].max_concurrent_threads_per_session`，但不能单凭 CLI 版本推断 Desktop 内核；Host/Core 证据优先。
+- Q4 inventory 识别 canonical、portable、显式 legacy V2 与 backend-ambiguous legacy 配置；只有语义可靠时才结束 pending。
+- planner 与 Q4 使用同一有效值解释：新版 `[agents] = N` 直接表示 N 个 SubAgent；旧 V2 internal value = N+1（包含 primary）。冲突配置直接报错，不取任意一边。
+- `configure_subagent_limit.py --schema auto` 对已有 canonical 保持原样；未知 Host 的新配置使用 portable fallback，不调用外部 CLI。
