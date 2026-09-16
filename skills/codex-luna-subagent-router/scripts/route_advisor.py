@@ -312,7 +312,7 @@ def _parser():
     sub.add_argument("--lead-effort", choices=LEAD_EFFORTS, required=True)
     sub.add_argument("--calibration", choices=CALIBRATION_MODES)
     sub.add_argument("--max-workers", type=int, default=3)
-    sub.add_argument("--open-workers", type=int, default=0)
+    sub.add_argument("--open-workers", type=int, required=True, help="Current PendingInit/Running Worker count only; completed historical agents do not count.")
     return p
 
 

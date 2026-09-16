@@ -309,7 +309,8 @@ def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
         acc.reasons.add("multiple_model_routes")
     route = next(iter(routes)) if len(routes) == 1 else (None, None)
     reasons = sorted(acc.reasons)
-    result.update(status=("partial" if reasons else "complete") if acc.events else "unavailable",
+    integrity_reasons = set(reasons) - {"non_usage_counter"}
+    result.update(status=("partial" if integrity_reasons else "complete") if acc.events else "unavailable",
                   counts=acc.values if acc.events else {k: None for k in FIELDS},
                   reasons=reasons or ([] if acc.events else ["no_usage"]), usage_events=acc.events,
                   last_usage_at=last_at, model=route[0], effort=route[1], terminal_observed=terminal,

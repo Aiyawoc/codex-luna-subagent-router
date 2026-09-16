@@ -6,7 +6,10 @@
 
 A cost-first SubAgent routing Skill for Codex. Select **Luna / Sol / Astra + reasoning effort** for each bounded task, optionally record verified outcomes, and inspect main/child token usage. The goal is the **total cost of reliable completion**, not the largest possible agent team.
 
-Stable release: [**v2.5.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.3) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+Stable release: [**v2.5.4**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.5.4) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+
+
+> **v2.5.4**: concurrency counts current PendingInit/Running Workers, not historical agent totals; compatible Completed Workers may be reused. Parent Started/Interacted activity links child usage to the correct turn, and the Lead can append a pre-final token summary.
 
 [What it does](#purpose) · [Install / upgrade](#install) · [Six setup questions](#setup) · [Inspect data](#data) · [Cost comparison placeholder](#cost) · [Documentation](#docs)
 
@@ -29,7 +32,7 @@ Stable release: [**v2.5.3**](https://github.com/Aiyawoc/codex-luna-subagent-rout
 
 **Luna (economy)** handles clear, local, verifiable work. **Sol (mid-tier)** handles ambiguous debugging, cross-module causality and races. **Astra (expert)** is considered for expert architecture work and high-consequence adversarial review. These are project routing policies, not performance guarantees for every task. Terra is no longer an automatic candidate.
 
-Delegation works both downward and locally upward: Astra high → Luna high, or Luna max → Sol high. `max` effort does not mean a higher model tier. Each subtask has at most two attempts. A wave is capped at `min(3, the explicit Codex concurrency limit)`, minus open threads. **Neither full concurrency nor model diversity is a quota.**
+Delegation works both downward and locally upward: Astra high → Luna high, or Luna max → Sol high. `max` effort does not mean a higher model tier. Each subtask has at most two attempts. A wave is capped at `min(3, the explicit Codex concurrency limit)`, minus current PendingInit/Running Workers only; historical Completed agents are not a cumulative quota. **Neither full concurrency nor model diversity is a quota.**
 
 <a id="install"></a>
 ## Install / upgrade
@@ -40,7 +43,7 @@ Send this in a Codex conversation for the target project:
 
 ```text
 Use $skill-installer to install or fully upgrade this Skill:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.3/skills/codex-luna-subagent-router
+https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.4/skills/codex-luna-subagent-router
 
 Refresh the complete Skill package and every bundled Agent profile, then read
 references/codex-guided-install.md. Run scripts/inspect_guided_install.py --json
@@ -59,7 +62,7 @@ These commands target Bash on macOS/Linux and require Git and Python. CI covers 
 **New installation**, in a location without an existing directory of the same name:
 
 ```bash
-git clone --branch v2.5.3 --depth 1 \
+git clone --branch v2.5.4 --depth 1 \
   https://github.com/Aiyawoc/codex-luna-subagent-router.git
 cd codex-luna-subagent-router
 bash skills/codex-luna-subagent-router/install.sh --global
@@ -68,8 +71,8 @@ bash skills/codex-luna-subagent-router/install.sh --global
 **Upgrade an existing source checkout**: preserve local edits first and use a clean working tree. Replace the tag with the desired Release for future upgrades.
 
 ```bash
-git fetch origin tag v2.5.3
-git switch --detach v2.5.3
+git fetch origin tag v2.5.4
+git switch --detach v2.5.4
 bash skills/codex-luna-subagent-router/install.sh --global
 ```
 
@@ -94,6 +97,12 @@ bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-projec
 | 6 | **Main/child token accounting and completion summaries** | on / off; choose supported, trusted automatic hooks or manual collection. One question covers `UserPromptSubmit`, `Stop`, `SubagentStart` and `SubagentStop`; there is no separate seventh accounting question. |
 
 **Upgrade rule: missing is not a refusal; an explicit off choice is not missing.** Ask every applicable missing option and preserve explicit off/false. Expanding legacy child-only accounting to main turns requires question 6 even when accounting is already on. `--hooks-supported` is an operator's capability confirmation, not automatic detection or a trust bypass.
+
+### v2.5.4: concurrency recovery and Worker reuse
+
+A maximum concurrency of 3 is not a lifetime limit of three agents. Where `list_agents` is available, planning counts only PendingInit/Running Workers; Completed/Errored/Interrupted/Shutdown entries are historical or recyclable state. Preserve the real error: `agent thread limit reached` is not the same as `server overloaded`.
+
+A Completed Worker may be reused for the same workstream when its observed model/effort still satisfies the task and independent review is not required. Otherwise use a fresh Worker. Reuse never changes model/effort and only the new token interval belongs to the current turn.
 
 <a id="data"></a>
 ## Inspect data
@@ -200,7 +209,7 @@ The [comparison data](docs/examples/cost-comparison.json) contains anonymous cou
 | [Routing policy](skills/codex-luna-subagent-router/references/routing-policy.md) · [Work planning](skills/codex-luna-subagent-router/references/work-planning.md) | Capability gaps, exact binding, whole-workload planning and concurrency. |
 | [Outcome collection](skills/codex-luna-subagent-router/references/outcome-collection.md) | begin/finalize, conservative evidence calibration and collection limits. |
 | [Token accounting](skills/codex-luna-subagent-router/references/token-accounting.md) | Hooks, manual collection, accounting semantics, completeness and turn attribution. |
-| [Changelog](CHANGELOG.md) · [v2.5.3 design](docs/v2.5.3-main-turn-token-summary.md) | Version history and remaining real-client acceptance boundaries. |
+| [Changelog](CHANGELOG.md) · [v2.5.4 design](docs/v2.5.4-runtime-lifecycle-accounting.md) | Version history and remaining real-client acceptance boundaries. |
 
 Workers are leaves: no further delegation or expanded authority. A Worker's self-description is not runtime model evidence. Prompts and local validators are not engine-level enforcement. Unregistered Workers, missing logs and unsupported client formats can reduce coverage. Local tests cannot establish actual bills, natural delegation rates or end-to-end savings.
 

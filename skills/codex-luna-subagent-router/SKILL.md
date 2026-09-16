@@ -5,11 +5,11 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 # Cost-Aware SubAgent Router
 
-在可靠完成任务的前提下最小化预期总成本。主 Agent 保持用户选择的模型和 reasoning。用户本轮明确要求优先；权限、精确绑定与不可逆操作边界仍生效。
+在可靠完成任务的前提下最小化预期总成本。主 Agent 保持用户选择的模型和 reasoning。用户本轮要求优先；权限、精确绑定和不可逆边界仍生效。
 
 ## 入口
 
-安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务先读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
+安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
 
 - `luna_only`：自动 Worker 只用 Luna；能力不足由 Lead 接管。
 - `adaptive`：Luna → `gpt-5.6-sol` → GPT-6 Astra；经济、中等、专家三层。Terra 不参与新自动路由。
@@ -23,7 +23,7 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 清晰局部实现、机械检查、普通 scan/read-heavy 用 Luna；高歧义多步 debug、跨模块因果、race / concurrency / lifecycle / ordering、困难 invariant 用 Sol；架构级高歧义与高失败代价再评估 Astra。不要把复杂因果任务标成简单 leaf/scan 以保留低价路由。
 
-文件数量不代表能力差距。`Luna max` 仍是 Luna；当前层 max 向上时目标 effort 至少 medium。明显 gap 不先浪费一次低阶 attempt。Advisor 输入失效先修正；工具不可用则读 `references/routing-policy.md` 静态回退，不因脚本故障购买更贵模型。
+文件数不代表能力差距。`Luna max` 仍是 Luna；当前层 max 向上时目标 effort 至少 medium。明显 gap 不先浪费一次低阶 attempt。Advisor 输入失效先修正；工具不可用则读 `references/routing-policy.md` 静态回退，不因脚本故障购买更贵模型。
 
 ## 整组任务规划
 
@@ -33,7 +33,7 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类工作；它负责统筹、关键判断、集成和验收。确有关键路径、上下文无法交接、权限或外部副作用原因时可保留，说明原因。已派遣目标不要重复实现。
 
-不要强制开满 3 个或强制混用模型；多个 Luna 可以正确，复杂任务也不能为省单价一律 Luna。规划只是建议，不是 spawn 或实际运行证明。
+不强制开满或混用模型；多个 Luna 可以正确，复杂任务也不能一律 Luna。规划不是实际 spawn 证明。
 
 ## 采集闭环
 
@@ -43,20 +43,22 @@ Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类
 
 同回执重复 finalize 幂等，冲突报错；retry 用新 task ID 和回执。记录失败应披露，但不能为日志阻塞 stop/close。任务结束用 `stats` 检查 pending，不猜测补写。Outcome 验收仍无引擎 hook；完全跳过 begin 不会自动获得质量回执。
 
-只保存受控 metadata；不得记录 prompt、正文、源码、完整日志、账号或密钥。简短 verification summary 也需人工/Lead 去敏；字段白名单不是秘密检测器。详见 `references/outcome-collection.md`。
+只存受控 metadata；不得记录 prompt、正文、源码、完整日志、账号/密钥。summary 也需去敏。详见 `references/outcome-collection.md`。
 
 ## Token 统计
 
-`token_accounting` 缺失按 off，独立于路由和校准。开启后按需读 `references/token-accounting.md`；用真实 child/parent ID 关联回执，finalize 核对用量。只展示工具返回的总量、输入、缓存命中输入、输出，使用 k/m/b；缓存是输入子项。不可用不是 0，不让 Worker 自报估算，不为统计阻塞 close。标签按观察模型+强度，不用角色猜模型；主线程本轮摘要由统一统计开关的 UserPromptSubmit/Stop 输出。
+`token_accounting` 缺失按 off。开启后按需读 `references/token-accounting.md`；只用观察到的线程数据，缓存是输入子项，不让 Worker 自报。UserPromptSubmit/Stop 记录主线程本轮；父 transcript 的 Started/Interacted activity 关联真实子线程，不能假定父子 turn_id 相同。
+
+`main_and_subagents` 下准备最终回复前运行 `turn_usage.py preview`；成功时把“截至最终回复前”的简报附到正文末尾，失败/歧义则省略。Stop 仍保存更晚快照；不要为补 token 再触发模型轮次。
 
 ## 执行与边界
 
 1. 推断目标与验收；仅实质歧义提问。必须有本轮或适用 AGENTS 长期委派授权。
-2. 路由后预检 exact model+effort、写入范围和实际空闲容量，再生成 RoutePlan 2.1。
-3. 确定要派遣后，按需读 `task-packet.md` 与 `lifecycle-and-context.md`。fresh thread、最小充分上下文；Worker 只做本轮子目标，不创建下级、不执行最终不可逆动作。
+2. 路由后预检 exact model+effort、写入范围与真实容量，再生成 RoutePlan 2.1；支持 `list_agents` 时只把 PendingInit/Running 计入并发，Completed 历史不是累计总数。创建失败按原始错误区分 thread limit / server overload / unknown。
+3. 确定要派遣后读 `task-packet.md` 与 `lifecycle-and-context.md`。同工作流、模型强度已知且无需独立性的 Completed Worker 可条件复用；否则 fresh。Worker 不创建下级、不做最终不可逆动作。
 4. Worker 以 `TASK_ACK <task_id>` 回传人类可读的有效信息。Lead 去重综合 Worker 证据，不原样转贴 Worker 回复或日志。
-5. 同波等待仍必要 Worker；失去信息价值时 early stop。验收/记录后 close；retry 前 stop/close 旧线程。
+5. 同波等待仍必要 Worker；失去价值时 early stop。验收/记录后允许 runtime 回收；retry 前处理旧执行。
 
-每子任务最多 2 attempt；capability-gap 默认 1 个窄而高价值的高级 Worker。每波最多 `min(3, Codex显式上限)`，还要扣除已打开 Worker；同波禁止重叠写入及未解决的读写依赖。
+每子任务最多 2 attempt；capability-gap 默认 1 个窄而高价值高级 Worker。每波最多 `min(3, Codex显式上限)`，扣除当前 PendingInit/Running，不扣历史 Completed；同波禁止重叠写入/未解决依赖。
 
 当前 Lead 是 GPT-6 Astra，或准备创建 Astra Worker 时才额外加载 `references/astra-guidance.md`；其他模型不要加载。单个微任务不预读全部文档，不为形式创建 Worker。

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.4 — 2026-09-16
+
+- 修复主/子 token 本轮关联：不再假设父子 turn_id 相同，改用父 transcript 中 Started/Interacted activity 的真实 child ID；旧 Completed activity 不误计新轮次。
+- 新增 `turn_usage.py preview`，允许 Lead 在最终正文前附“截至最终回复前”主/子 token 摘要；Stop 仍保存更晚快照，不触发额外模型轮次。
+- `non_usage_counter` 在计数连续时仅作为已排除信息，不再单独把终止快照降为 partial；真实缺口/基线/未终止状态继续保留。
+- 明确并发 3 是 PendingInit/Running 的同时上限，不是累计创建总数；planner CLI 强制显式传 `--open-workers`，Completed 历史不扣并发槽位。
+- 新增运行时错误分类和条件复用规则：thread limit 与 server overload 分开；同工作流且模型/强度满足要求的 Completed Worker 可 follow-up 复用，只统计新增区间。
+
 ## 2.5.3 — 2026-09-15
 
 - 用量标签优先观察模型/强度，未知或多路由不猜；partial 展示具体原因，修复合计无条件 partial。
