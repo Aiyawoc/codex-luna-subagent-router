@@ -1,0 +1,24 @@
+name: Portable Runtime
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Archive exact source for verification
+        run: git archive --format=tar HEAD > router-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: router-source
+          path: router-source.tar
+          retention-days: 7
