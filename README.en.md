@@ -116,7 +116,7 @@ The Router depends on the **Codex Host/Core** capabilities exposed by the active
 Define the installed Skill path first. This is the global default; for a project installation use `<project>/.agents/skills/codex-luna-subagent-router`. Invoke scripts from **your working project directory**, not by changing into the installed Skill.
 
 ```bash
-SKILL="${CODEX_SKILLS_DIR:-$HOME/.agents/skills}/codex-luna-subagent-router"
+SKILL="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}/codex-luna-subagent-router"
 
 # 1. Quality outcomes, pending receipts and available calibration recommendations
 python3 "$SKILL/scripts/route_advisor.py" stats
