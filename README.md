@@ -6,12 +6,12 @@
 
 面向 Codex 的成本优先 SubAgent 路由 Skill。它按子任务在 **Luna / Sol / Astra + 推理强度**之间选择，支持整组任务规划、并发 Worker 生命周期、验证结果校准，以及可选的主／子 Agent token 用量统计。
 
-当前稳定版：[**v2.6.1**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.1) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
+当前稳定版：[**v2.6.1**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.1) · `main` 开发版：**v2.6.2** · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
 > **重要：GitHub 仓库源码不直接存放 Python 二进制。**  
 > GitHub 自动生成的 `Source code.zip/.tar.gz` 也**不包含**私有 Python。普通用户应下载 v2.6.1 Release 中与系统/CPU 对应的 `router-2.6.1-<平台>` **完整包**；完整包才内置固定 CPython 3.13.15、启动器、许可证和全部 Skill 文件。
 
-[主要能力](#主要能力) · [v2.6.1 新变化](#v261-新变化) · [安装与升级](#安装与升级) · [六项安装引导](#六项安装引导) · [日常使用](#日常使用) · [用量统计与恢复](#用量统计与恢复) · [边界与安全](#边界与安全) · [文档](#文档)
+[主要能力](#主要能力) · [v2.6.2 开发中](#v262-开发中一键数据简报) · [v2.6.1 新变化](#v261-新变化) · [安装与升级](#安装与升级) · [六项安装引导](#六项安装引导) · [日常使用](#日常使用) · [用量统计与恢复](#用量统计与恢复) · [边界与安全](#边界与安全) · [文档](#文档)
 
 ## 主要能力
 
@@ -24,6 +24,7 @@
 | **验证结果校准** | 可选使用本地、已验证 outcome 保守调整后续建议；失败/partial 不会被伪造成成功样本。 |
 | **主／子 Agent token 统计** | 可选记录总量、输入、缓存命中输入、输出及完整度；缺失保持未知，不补 0。 |
 | **历史用量恢复** | v2.6.1 支持长日志有界续读、重复会话头安全兼容、显式 `refresh` 与更细诊断。 |
+| **一键数据简报** | v2.6.2 新增 `router report`，汇总既有统计并生成 Markdown 简报、完整 JSON 和扁平 CSV。 |
 | **私有便携 Python** | 正式平台包内置固定 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。 |
 
 ### 两种策略，三层模型
@@ -42,6 +43,40 @@
 这是一套路由策略，不是对具体任务性能的保证。Terra 已退出自动路由。
 
 主 Agent 既可以向下委派，也可以局部向上求助，例如 Astra high → Luna high，或 Luna max → Sol high。`max` 只是同一模型内的推理强度，不等于自动跨模型升级。
+
+## v2.6.2 开发中：一键数据简报
+
+v2.6.2 **只新增一个用户命令：`router report`**，不改变路由、hooks、token 采集、refresh 或 outcome 口径。
+
+```bash
+# 默认：当前工作项目/global scope
+"$ROUTER" report
+
+# 明确项目
+"$ROUTER" report --project-root /path/to/project
+
+# 汇总全部已保存 scope
+"$ROUTER" report --all-scopes
+
+# 自定义导出目录，并让 stdout 只返回生成结果 JSON
+"$ROUTER" report --output-dir /path/to/export --json
+```
+
+该命令只读复用现有 `route_advisor stats`、`token_usage stats`、`turn_usage stats` 的统计逻辑，**不会自动执行 `refresh`、不会扫描未登记日志、不会修改账本**。每次运行创建一个独立目录，默认位于：
+
+```text
+${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/reports/
+```
+
+输出三份文件：
+
+- `brief.md`：格式化简报，汇总 outcome、SubAgent 覆盖率/用量、主轮次覆盖率和主要诊断。
+- `data.json`：权威机器可读快照，保留嵌套结构和 token 原始整数；去除本机 ledger 绝对路径。
+- `data.csv`：UTF-8 BOM 扁平表，按 `outcome_summary / outcome_route / recommendation / subagent / turn_main / turn_child` 行导出，适合 Excel、Numbers 和脚本分析。
+
+CSV/JSON 会保留 session / turn / agent ID 以便排障，但不写入 prompt、回复正文、源码或原始 rollout 行。`partial/unavailable` 仍表示未知/不完整，绝不会在报告中改写为 0 或 complete。
+
+详细说明见 [v2.6.2 数据简报命令](docs/v2.6.2-report.md)。
 
 ## v2.6.1 新变化
 
@@ -243,6 +278,7 @@ ROUTER="/实际安装目录/codex-luna-subagent-router/bin/router"
 "$ROUTER" route_advisor stats
 "$ROUTER" token_usage stats
 "$ROUTER" turn_usage stats
+"$ROUTER" report
 ```
 
 Windows：
@@ -255,6 +291,7 @@ $Router = "C:\实际安装目录\codex-luna-subagent-router\bin\router.cmd"
 & $Router route_advisor stats
 & $Router token_usage stats
 & $Router turn_usage stats
+& $Router report
 ```
 
 应从**实际工作项目目录**运行 Router，这样 project scope 才正确；不要为了运行辅助脚本切换到 Skill 目录。
@@ -328,6 +365,7 @@ ${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/
 | `usage.jsonl` | 子线程用量快照；按线程取最新记录，不能把每行直接相加。 |
 | `usage.turns.jsonl` | 主会话每轮边界、主线程用量和安全关联的子线程增量。 |
 | `*.read-cache/` | v2.6.1 长日志解析状态缓存；不是独立账本，不保存 prompt/回复正文。 |
+| `reports/` | v2.6.2 `router report` 的 Markdown / JSON / CSV 导出；不属于统计账本。 |
 
 `CODEX_LUNA_ROUTER_REGISTRY` 和 `CODEX_LUNA_ROUTER_USAGE` 可覆盖默认账本路径。升级 Skill 不应删除这些数据。
 
@@ -412,6 +450,7 @@ v2.6.1 发布前已完成：
 | [Worker 生命周期](skills/codex-luna-subagent-router/references/lifecycle-and-context.md) | Completed 复用、上下文、线程状态与错误分类。 |
 | [Token accounting](skills/codex-luna-subagent-router/references/token-accounting.md) | 主/子用量、快照语义、hooks 与隐私。 |
 | [v2.6.1 用量恢复设计](docs/v2.6.1-usage-recovery.md) | 长日志、重复头、refresh、preview 与本机验收。 |
+| [v2.6.2 数据简报命令](docs/v2.6.2-report.md) | `router report`、输出格式、scope 与数据安全边界。 |
 | [Outcome collection](skills/codex-luna-subagent-router/references/outcome-collection.md) | begin/finalize、receipt、校准证据。 |
 | [Task packet](skills/codex-luna-subagent-router/references/task-packet.md) | 自包含 Worker 输入格式。 |
 | [Validation cases](skills/codex-luna-subagent-router/references/validation-cases.md) | 路由边界和验证场景。 |

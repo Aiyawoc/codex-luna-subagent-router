@@ -1,6 +1,14 @@
 # Changelog
 
-## 2.6.1 — 用量恢复与诊断（未发布）
+## 2.6.2 — 一键数据简报（未发布）
+
+- 仅新增一个用户命令 `bin/router report`；不改变路由、hooks、token 采集、refresh、outcome 或账本格式。
+- 只读复用 `route_advisor stats`、`token_usage stats`、`turn_usage stats` 的现有统计逻辑，一次生成格式化 Markdown 简报。
+- 同时导出保留原始整数/嵌套结构的 `data.json` 和适合 Excel/Numbers/脚本的 UTF-8 BOM `data.csv`；JSON 去除本机 ledger 绝对路径。
+- 默认输出到 `${CODEX_HOME}/state/codex-luna-subagent-router/reports/`，支持当前项目、明确项目、global 或 all-scopes；每次生成独立目录，不覆盖旧报告。
+- 报告不会自动 refresh、不会扫描未登记 rollout、不会把 partial/unavailable 补成 0，也不导出 prompt/回复/源码/原始日志行。
+
+## 2.6.1 — 用量恢复与诊断（2026-09-16）
 
 - 保留未刷盘日志 locator，精确区分路径/轮次/预算错误；数字解析缓存支持有界续读，不保存正文，不把预算耗尽伪装成边界不存在。
 - 同身份同继承边界的重复 session_meta 仅作信息；冲突头、计数缺口与身份不明仍拒绝猜测。

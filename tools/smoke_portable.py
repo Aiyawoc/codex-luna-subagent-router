@@ -80,6 +80,9 @@ def main():
         assert rpath.read_bytes()==saved and ledger.read_text()=='historical-data-must-not-change\n'
         assert (home/'hooks.json').read_text()=='{"hooks":{}}'
         execute([*launcher(installed),'doctor','--verify'],project,env)
+        report_root=base/'reports'
+        generated=json.loads(execute([*launcher(installed),'report','--project-root',str(project),'--output-dir',str(report_root),'--json'],project,env))
+        assert Path(generated['brief']).is_file() and Path(generated['json']).is_file() and Path(generated['csv']).is_file()
         # Explicit opt-in only inside this disposable synthetic home.
         execute([*launcher(installed),'configure_token_accounting','--scope','user','--mode','on','--install-hooks','--hooks-supported'],project,env)
         definitions=json.loads((home/'hooks.json').read_text())['hooks']
@@ -97,7 +100,7 @@ def main():
         test_env.pop('PYTHONHOME',None);test_env.pop('PYTHONPATH',None)
         execute([str(python),'-I','-S','-B','-X','utf8','-m','unittest','discover','-s','tests','-v'],installed,test_env)
         print(json.dumps({'target':args.target,'status':'passed','no_python_on_path':True,'unicode_space_path':True,
-                          'install_upgrade':True,'hook_dispatch':True,'real_bundled_python_tests':True},indent=2))
+                          'install_upgrade':True,'report_export':True,'hook_dispatch':True,'real_bundled_python_tests':True},indent=2))
 
 
 if __name__=='__main__':
