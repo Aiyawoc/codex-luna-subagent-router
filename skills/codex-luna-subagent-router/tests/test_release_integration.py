@@ -128,7 +128,7 @@ class ReleaseIntegrationTests(unittest.TestCase):
         registry = home / 'state/codex-luna-subagent-router/outcomes.jsonl'
         registry.parent.mkdir(parents=True)
         registry.write_text('{"synthetic":"untouched"}\n')
-        env = dict(os.environ, CODEX_SKILLS_DIR=str(skills), CODEX_AGENTS_DIR=str(agents))
+        env = dict(os.environ, CODEX_SKILLS_DIR=str(skills), CODEX_AGENTS_DIR=str(agents), CODEX_ROUTER_PYTHON=sys.executable)
         usage = registry.with_name('usage.jsonl')
         usage.write_text('{"synthetic_usage":"untouched"}\n')
         hooks = home / 'hooks.json'

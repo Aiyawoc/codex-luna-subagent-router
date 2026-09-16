@@ -19,7 +19,7 @@ if SCRIPT_DIR not in sys.path:
 import outcome_store as store
 from usage_reader import FIELDS, empty, read_usage
 
-VERSION = "2.5.4"
+VERSION = "2.6.0"
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 ROW_FIELDS = {"schema_version", "usage_id", "agent_id", "parent_id", "agent_type", "scope_id", "started_at", "updated_at", "receipt_id", "snapshot", "locator"}
 SNAPSHOT_FIELDS = {"status", "source", "counts", "reasons", "usage_events", "last_usage_at", "model", "effort", "terminal_observed", "bytes_read"}

@@ -1,20 +1,22 @@
 # Codex v2 引导安装与升级
 
-安装、升级是线性任务，不创建 Worker。正式版本 v2.5.5。
+安装、升级是线性任务，不创建 Worker。v2.6.0 交付开发版（正式 Release 发布前仅使用明确选择的 PR 产物）。
 
 ## 必须全量更新
 
-用 skill-installer 或 install.sh 更新完整包：SKILL.md、VERSION、agents、assets、references、scripts、examples、evals 和所有 bundled profiles。不要只换根 Skill；保留 outcome_store.py、plan_work.py，并全量安装 token_usage.py、usage_reader.py、configure_token_accounting.py、turn_usage.py 和 inspect_guided_install.py。
+先按 [便携运行环境](portable-runtime.md) 取得并校验当前平台完整包；macOS install.sh / Windows install.ps1 或 bin/router.cmd 安装。源码 ZIP 不含 Python。更新完整包：SKILL.md、VERSION、agents、assets、references、scripts、examples、evals 和所有 bundled profiles。不要只换根 Skill；保留 outcome_store.py、plan_work.py，并全量安装 token_usage.py、usage_reader.py、configure_token_accounting.py、turn_usage.py 和 inspect_guided_install.py。
 
 新版仍清理本 Skill 历史托管 terra-medium.toml/terra-high.toml，其它自定义 profiles 保留。config.toml、非托管 AGENTS.md、routing.json 的选择单独保留/迁移。outcomes.jsonl 与同目录回执文件不在 Skill 包内，不能因升级删除；旧 global 数据不自动重分项目。
 
 ## 升级前只读盘点（不可跳过缺失项）
 
-在问问题前运行 `python3 /path/to/skill/scripts/inspect_guided_install.py --json`，有项目时传 `--project-root /repo`。读取 `pending_questions`，对每个适用的缺失选项明确提问，并等待回答后应用配置。**运行时缺失默认 off 不等于用户选择了 off**。不能因为是升级、未安装某功能或第 6 项以前不存在而跳过。
+在问问题前运行 `/path/to/skill/bin/router inspect_guided_install --json`，有项目时传 `--project-root /repo`。读取 `pending_questions`，对每个适用的缺失选项明确提问，并等待回答后应用配置。**运行时缺失默认 off 不等于用户选择了 off**。不能因为是升级、未安装某功能或第 6 项以前不存在而跳过。
 
 明确已有的 off/false 保留，不擅自开启；已有并发/路由/授权选择保留。保持 Codex 默认或不安装授权但未留下配置时，下次仍可能列为缺失，重新问而非推定授权。损坏配置先报告修复，不能当作没有配置。项目路由覆盖用户路由时，按盘点的有效来源操作。
 
 第 6 项旧版只有子 Agent：即使 `token_accounting=on`，缺少 `token_accounting_scope=main_and_subagents` 或新的完整钩子，也必须在**同一个第 6 项**明确询问升级范围。不开第 7 个统计问题。明确同意后 helper 写入 scope 和 collection（hooks/manual），四个钩子统一管理；用户仅同意手动采集时不安装钩子。已有 off 不自动改 on。
+
+v2.6.0 的私有 Python / hook 命令变化也纳入第 6 项审查。所有脚本统一通过 bin/router（Windows bin/router.cmd）调用；仅下载/复制源码的 skill-installer 不能替代平台完整包。
 
 ## 问题顺序
 
@@ -47,13 +49,13 @@ adaptive：Luna → Sol → Astra。普通实现/扫描优先 Luna，高歧义�
 默认安全命令：
 
 ```bash
-python3 scripts/configure_subagent_limit.py --max-subagents 3 --schema auto --json
+./bin/router configure_subagent_limit --max-subagents 3 --schema auto --json
 ```
 
 只有**当前 Host/Core 本身**已确认支持 canonical 时才显式使用：
 
 ```bash
-python3 scripts/configure_subagent_limit.py --max-subagents 3 --schema canonical --json
+./bin/router configure_subagent_limit --max-subagents 3 --schema canonical --json
 ```
 
 helper 直接安全合并 `config.toml`、重新解析 TOML 并验证有效 SubAgent 语义；不 shell out 到 `codex`，因此 CLI 只是可选诊断器，不是 Router 的运行时依赖。Skill 单波仍最多 `min(3, 有效 Codex 上限)`，并发上限不是开满配额。
@@ -63,7 +65,7 @@ helper 直接安全合并 `config.toml`、重新解析 TOML 并验证有效 SubA
 仅 adaptive 提供 **`conservative`（推荐）** / off。运行时缺失按 `off`；升级引导必须询问是否开启，不得直接跳过。luna_only 时本项不适用。保留已有设置，不因升级重新置 off。
 
 ```bash
-python3 scripts/configure_evidence_calibration.py --scope user --mode conservative
+./bin/router configure_evidence_calibration.py --scope user --mode conservative
 ```
 
 项目级使用 --scope project --project-root /repo。先 --dry-run --json 检查，helper 只合并字段、不覆盖其它配置。
@@ -77,7 +79,7 @@ on / off（缺失需明确询问；未选择前运行时 off），保留已有�
 自动采集前检查当前客户端确有 UserPromptSubmit/Stop/SubagentStart/SubagentStop，并且未禁用 hooks；没有证据时仅配置手动采集。确认支持后使用以下命令，先加 --dry-run 查看差异：
 
 ```bash
-python3 scripts/configure_token_accounting.py --scope user --mode on \
+./bin/router configure_token_accounting --scope user --mode on \
   --install-hooks --hooks-supported
 ```
 
@@ -88,10 +90,10 @@ python3 scripts/configure_token_accounting.py --scope user --mode on \
 ## 应用配置
 
 ```bash
-python3 scripts/configure_guided_install.py \
+./bin/router configure_guided_install \
   --request-user-input none --delegation global \
   --routing-scope user --routing-mode adaptive
-python3 scripts/configure_evidence_calibration.py --scope user --mode conservative
+./bin/router configure_evidence_calibration.py --scope user --mode conservative
 ```
 
 既有 routing.json 不同内容未经确认不覆盖。已知 v1 additional_responsibilities 先备份 routing.v1.backup.json，默认推荐 luna_only；用户选择 adaptive 才多模型。
@@ -101,10 +103,10 @@ python3 scripts/configure_evidence_calibration.py --scope user --mode conservati
 从项目工作目录调用实际 Skill 的绝对路径，避免 cd 到 Skill 导致 evidence scope 错认。非 Git 项目显式传 --project-root（子命令之前）。
 
 ```bash
-python3 /path/to/skill/scripts/route_advisor.py stats
-python3 /path/to/skill/scripts/route_advisor.py stats --json
-python3 /path/to/skill/scripts/route_advisor.py stats --current-scope --json
-python3 /path/to/skill/scripts/route_advisor.py plan /path/to/work-plan.json \
+/path/to/skill/bin/router route_advisor stats
+/path/to/skill/bin/router route_advisor stats --json
+/path/to/skill/bin/router route_advisor stats --current-scope --json
+/path/to/skill/bin/router route_advisor plan /path/to/work-plan.json \
   --lead-model gpt-6-astra --lead-effort high
 ```
 
@@ -114,15 +116,15 @@ stats 默认全部 scope；query 保留精确 family/六轴查询。详情：out
 
 ```bash
 cat VERSION
-python3 scripts/validate_route_plan.py examples/route-plan.valid.json --notice
-python3 -m unittest discover -s tests -v
+./bin/router validate_route_plan examples/route-plan.valid.json --notice
+"$CODEX_ROUTER_PYTHON" -m unittest discover -s tests -v  # 仅源码开发；完整包在 CI 使用随包解释器测试
 ```
 
 实机至少：conservative 下 begin/finalize 后统计增加；unknown identity 为 partial；项目子目录 scope 一致；旧三条 global 仍可查看；两个独立有价值任务先创建两个再 wait，共享小任务可合并；有依赖/权限原因不强制并行；深度因果问题仍可选 Sol；记录失败仍关闭线程。
 
-用量查看：`python3 /path/to/skill/scripts/token_usage.py stats`；加 `--json` 保留原始整数和字段覆盖。hooks 测试通过不等于桌面端已授权/已自然触发。
+用量查看：`/path/to/skill/bin/router token_usage stats`；加 `--json` 保留原始整数和字段覆盖。hooks 测试通过不等于桌面端已授权/已自然触发。
 
-主线程本轮历史查看：`python3 /path/to/skill/scripts/turn_usage.py stats --json`。关闭统计保留所有历史账本。升级旧 on 不等于同意扩大范围；第 6 项确认并审查四钩子后，在新一轮用户请求中验收 UserPromptSubmit 和 Stop，旧轮次不能事后猜测补基线。
+主线程本轮历史查看：`/path/to/skill/bin/router turn_usage stats --json`。关闭统计保留所有历史账本。升级旧 on 不等于同意扩大范围；第 6 项确认并审查四钩子后，在新一轮用户请求中验收 UserPromptSubmit 和 Stop，旧轮次不能事后猜测补基线。
 
 
 ## v2.5.4 运行时生命周期补充

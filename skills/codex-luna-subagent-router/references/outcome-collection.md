@@ -7,10 +7,10 @@
 在任意工作目录，使用实际 Skill 脚本的绝对路径：
 
 ```bash
-python3 /path/to/skill/scripts/route_advisor.py stats
-python3 /path/to/skill/scripts/route_advisor.py stats --json
-python3 /path/to/skill/scripts/route_advisor.py stats --current-scope --json
-python3 /path/to/skill/scripts/route_advisor.py --global-scope stats --json
+/path/to/skill/bin/router route_advisor stats
+/path/to/skill/bin/router route_advisor stats --json
+/path/to/skill/bin/router route_advisor stats --current-scope --json
+/path/to/skill/bin/router route_advisor --global-scope stats --json
 ```
 
 stats 默认所有 scope，不需要六轴；显示模型/effort/outcome/scope 分布、最后记录时间、pending、稀疏 bucket、旧记录、坏行和重复、可用建议与样本缺口。可用建议不等于已发生覆盖，不报告未经测量的费用节省。
@@ -20,7 +20,7 @@ stats 默认所有 scope，不需要六轴；显示模型/effort/outcome/scope �
 ## 派遣前 begin
 
 ```bash
-python3 /path/to/skill/scripts/route_advisor.py begin \
+/path/to/skill/bin/router route_advisor begin \
   --task-id request-unique-worker-01 \
   --task-family bounded-review \
   --task-kind review --task-scope bounded --reasoning-depth medium \
@@ -35,7 +35,7 @@ python3 /path/to/skill/scripts/route_advisor.py begin \
 未取得可信 runtime model/effort，或被 Lead 实质返工时：
 
 ```bash
-python3 /path/to/skill/scripts/route_advisor.py finalize \
+/path/to/skill/bin/router route_advisor finalize \
   --receipt-id RECEIPT_ID_FROM_BEGIN \
   --outcome partial --completion-reason lead_rework \
   --verification-summary "Targeted checks passed only after lead rework."
@@ -44,7 +44,7 @@ python3 /path/to/skill/scripts/route_advisor.py finalize \
 确有精确运行身份与结果证据时：
 
 ```bash
-python3 /path/to/skill/scripts/route_advisor.py finalize \
+/path/to/skill/bin/router route_advisor finalize \
   --receipt-id RECEIPT_ID_FROM_BEGIN \
   --outcome verified_pass --completion-reason accepted \
   --observed-model gpt-5.6-luna --observed-effort max \

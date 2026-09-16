@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.0 — 便携 Python 运行环境（未发布）
+
+- 新增 Windows x64/ARM64、macOS Intel/Apple Silicon 完整包，内置固定 CPython 3.13.15；源码 Git 不保存大型运行时二进制。
+- 新增统一启动器、只读 doctor 与全包完整性验证；不依赖系统 Python/PATH，不在 hooks 中下载依赖。
+- 原生安装入口与暂存/回滚升级；保留用户配置、无关 profiles 与历史账本；旧 hook 私有解释器迁移仍由第 6 项确认与客户端审查信任。
+- 上游来源/SHA256/许可证固定，四平台用实际随包解释器验证；README 保留 Agent 提示词安装为推荐路径。
+- 路由模型、并发语义及 token 读取口径不变，不声称修复历史日志解析缺口。
+
 ## 2.5.5 — 2026-09-16
 
 - Q4 改为 Host-first / schema-aware：Router 运行时依赖当前 Codex Host/Core，不把 PATH 中的 `codex` CLI 当必需组件或 Desktop schema 的唯一权威。

@@ -37,49 +37,47 @@
 <a id="install"></a>
 ## 安装／升级
 
-### 推荐：让 Codex 完成安装和引导
+### 推荐：把安装提示词交给 Agent / Codex
 
-在目标项目的 Codex 对话中发送：
+**v2.6.0 便携包正在 PR 验证，尚未正式发布。** 正式发布后使用下方提示词；PR 阶段仅使用用户明确指定的构建产物。不把 GitHub 的 Source code.zip 当作内置 Python 完整包。
 
 ```text
-请使用 $skill-installer 全量安装或升级这个 Skill：
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.5/skills/codex-luna-subagent-router
+请安装或升级 Codex Luna SubAgent Router：
+https://github.com/Aiyawoc/codex-luna-subagent-router
 
-刷新完整 Skill 包和随包 Agent profiles，然后读取 references/codex-guided-install.md。
-先运行 scripts/inspect_guided_install.py --json，逐项询问适用的缺失配置。
-保留我的既有路由、并发、明确 off/false、outcome/usage 数据和其他自定义配置。
-旧版已开启子 Agent 统计时，在第 6 项询问是否升级为主／子 Agent 统一统计；
-不要跳过新选项，也不要未经确认安装、信任或扩大钩子范围。
+先读取仓库安装指南并识别本机系统与 CPU。
+从指定正式 Release 选择 router-<版本>-<平台> 的完整包及 SHA256；
+找不到对应完整包时停止并说明，不静默改装源码版或调用系统旧 Python。
+可使用 $skill-installer 协助处理技能，但不能只复制 SKILL.md 或源码目录。
+校验下载摘要后解压，先用 bin/router（Windows bin/router.cmd）执行 doctor --verify，
+再安装完整 Skill、内置 Python 和随包 profiles，然后读取 references/codex-guided-install.md。
+所有辅助脚本都通过统一启动器运行，先执行 inspect_guided_install --json，逐项询问适用缺项。
+保留既有路由、并发、明确 off/false、outcome/usage 数据及其它配置。
+旧 hooks 切换私有解释器时仍在第 6 项询问，并交由客户端审查信任；不要自行授信。
+不要修改系统 Python、PATH 或在 hooks 运行时下载依赖。
 ```
 
-### 手动安装完整包
+### 备用：手动安装完整平台包
 
-以下命令适用于 macOS／Linux 的 Bash 环境；需要 Git 和 Python。CI 覆盖 Python 3.12／3.13。Windows 用户可交由 Codex 引导，或在合适的 Bash 环境运行安装器；原生 PowerShell 不能直接执行 Bash 脚本。
-
-**新安装**，在尚无同名目录的位置运行：
+下载与 CPU 对应的完整包及摘要并校验，解压到已安装 Skill 目录之外。macOS 使用：
 
 ```bash
-git clone --branch v2.5.5 --depth 1 \
-  https://github.com/Aiyawoc/codex-luna-subagent-router.git
-cd codex-luna-subagent-router
-bash skills/codex-luna-subagent-router/install.sh --global
+cd /解压目录/codex-luna-subagent-router
+./bin/router doctor --verify
+bash ./install.sh --global
 ```
 
-**升级已有源码 checkout**：先保留自己的本地改动，在干净工作区运行；未来升级时将下面的 tag 换成目标 Release。
+Windows 原生 PowerShell 使用（不要求 Python 或 Bash）：
 
-```bash
-git fetch origin tag v2.5.5
-git switch --detach v2.5.5
-bash skills/codex-luna-subagent-router/install.sh --global
+```powershell
+cd C:\解压目录\codex-luna-subagent-router
+.\bin\router.cmd doctor --verify
+.\bin\router.cmd install --global
 ```
 
-仅对一个项目安装时，将最后一行改为：
+也可使用 `./install.ps1 --global`；不自动绕过本机执行策略。项目安装将 `--global` 改为 `--project <项目路径>`。安装后读取输出的实际安装路径，继续完成六项问答；已有 hooks 不会被静默改写或授信。
 
-```bash
-bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-project
-```
-
-**安装器负责全量复制包、刷新 profiles 和列出配置缺项，不代替你回答引导问题。** 安装后继续让 Codex 按 [安装与升级指南](skills/codex-luna-subagent-router/references/codex-guided-install.md) 完成配置。不要只复制 `SKILL.md`；统计模块依赖多个脚本。升级保留外部账本和用户配置，新增或修改的 hooks 仍需客户端审查信任。
+完整包包含固定版 CPython 3.13.15。源码开发另需显式选择合格解释器，不能当作普通用户安装路线。详见 [便携运行环境与升级](skills/codex-luna-subagent-router/references/portable-runtime.md)。
 
 <a id="setup"></a>
 ## 安装引导：六个询问项
@@ -110,38 +108,38 @@ Router 运行时依赖 **Codex Host/Core** 暴露的 SubAgent、hooks 与 rollou
 <a id="data"></a>
 ## 查看数据
 
-先定义已安装 Skill 的路径。下面是默认全局路径；项目安装请使用 `<项目>/.agents/skills/codex-luna-subagent-router`。从**你的工作项目目录**调用脚本，不要为查看数据切换到 Skill 目录。
+先以安装器输出为准定义已安装 Skill 的路径；升级会复用明确的旧位置。下面是默认全局路径；项目安装请使用 `<项目>/.agents/skills/codex-luna-subagent-router`。从**你的工作项目目录**调用脚本，不要为查看数据切换到 Skill 目录。
 
 ```bash
 SKILL="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}/codex-luna-subagent-router"
 
 # 1. 验证结果：成功／失败／partial、未结算回执、可用校准建议
-python3 "$SKILL/scripts/route_advisor.py" stats
+"$SKILL/bin/router" route_advisor stats
 
 # 2. 子 Agent：模型／强度与四项 token 用量
-python3 "$SKILL/scripts/token_usage.py" stats
+"$SKILL/bin/router" token_usage stats
 
 # 3. 主 Agent：各轮主线程及可靠关联子线程的本轮用量
-python3 "$SKILL/scripts/turn_usage.py" stats
+"$SKILL/bin/router" turn_usage stats
 
 # 准备最终回复时的正文前快照（仅当前 scope 恰有一个 active turn 时成功）
-python3 "$SKILL/scripts/turn_usage.py" preview
+"$SKILL/bin/router" turn_usage preview
 
 # 4. 安装／升级还缺哪些明确选择（只读）
-python3 "$SKILL/scripts/inspect_guided_install.py" --json
+"$SKILL/bin/router" inspect_guided_install --json
 ```
 
 每个 `stats` 都可加 `--json` 输出原始整数和明细。常用筛选：
 
 ```bash
 # 当前项目的 outcome
-python3 "$SKILL/scripts/route_advisor.py" stats --current-scope --json
+"$SKILL/bin/router" route_advisor stats --current-scope --json
 
 # 某个父会话的子 Agent；替换为真实会话 ID
-python3 "$SKILL/scripts/token_usage.py" stats --parent-id ACTUAL_PARENT_ID --json
+"$SKILL/bin/router" token_usage stats --parent-id ACTUAL_PARENT_ID --json
 
 # 某个主会话的逐轮摘要
-python3 "$SKILL/scripts/turn_usage.py" stats --session-id ACTUAL_PARENT_ID --json
+"$SKILL/bin/router" turn_usage stats --session-id ACTUAL_PARENT_ID --json
 ```
 
 默认数据目录：`${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/`。
@@ -214,6 +212,7 @@ Luna high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | �
 | [安装与升级指南](skills/codex-luna-subagent-router/references/codex-guided-install.md) | 六项问答、缺项盘点、配置与钩子信任。 |
 | [路由策略](skills/codex-luna-subagent-router/references/routing-policy.md) · [任务规划](skills/codex-luna-subagent-router/references/work-planning.md) | 能力差距、精确绑定、整组任务和并发约束。 |
 | [Outcome 采集](skills/codex-luna-subagent-router/references/outcome-collection.md) | begin／finalize、保守历史校准与采样限制。 |
+| [便携 Python 与完整包](skills/codex-luna-subagent-router/references/portable-runtime.md) | 私有解释器、四平台包、升级与 hooks 审查。 |
 | [Token 统计](skills/codex-luna-subagent-router/references/token-accounting.md) | hooks、手动采集、统计口径、完整度和本轮归属。 |
 | [v2.5.5 Desktop 实机验收](docs/v2.5.5-desktop-acceptance.md) | Host-first Q4、实时并发、parent/child token、Worker 复用与 preview/Stop 收口。 |
 | [更新记录](CHANGELOG.md) · [v2.5.4 设计](docs/v2.5.4-runtime-lifecycle-accounting.md) | 版本变化和已知实机边界。 |

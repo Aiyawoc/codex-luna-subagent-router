@@ -23,10 +23,10 @@ Sol high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | 完
 先全量安装，再检查当前 Codex build 是否提供 UserPromptSubmit/Stop/SubagentStart/SubagentStop，以及 hooks 是否被用户或管理员禁用。`--hooks-supported` 是操作者已确认能力的声明，不是运行时探测结果，也不是信任绕过。
 
 ```bash
-python3 /path/to/skill/scripts/configure_token_accounting.py \
+/path/to/skill/bin/router configure_token_accounting \
   --scope user --mode on --install-hooks --hooks-supported --dry-run --json
 
-python3 /path/to/skill/scripts/configure_token_accounting.py \
+/path/to/skill/bin/router configure_token_accounting \
   --scope user --mode on --install-hooks --hooks-supported
 ```
 
@@ -39,13 +39,13 @@ python3 /path/to/skill/scripts/configure_token_accounting.py \
 只启用手动采集、不安装 hooks：
 
 ```bash
-python3 /path/to/skill/scripts/configure_token_accounting.py --scope user --mode on
+/path/to/skill/bin/router configure_token_accounting --scope user --mode on
 ```
 
 关闭并移除本 scope 的托管 handlers，不删除历史用量：
 
 ```bash
-python3 /path/to/skill/scripts/configure_token_accounting.py --scope user --mode off
+/path/to/skill/bin/router configure_token_accounting --scope user --mode off
 ```
 
 ## 自动流程与 finalize
@@ -57,7 +57,7 @@ SubagentStart 注册真实 agent_id 与父 session_id、scope。SubagentStop 只
 启用 conservative 时，用实际 spawn 返回的子 ID 关联原 outcome 回执：
 
 ```bash
-python3 /path/to/skill/scripts/token_usage.py attach \
+/path/to/skill/bin/router token_usage attach \
   --agent-id ACTUAL_CHILD_ID --parent-id ACTUAL_PARENT_ID \
   --receipt-id RECEIPT_FROM_BEGIN
 ```
@@ -65,7 +65,7 @@ python3 /path/to/skill/scripts/token_usage.py attach \
 之后原 `route_advisor.py finalize` 会查找并复核关联的用量。也可直接：
 
 ```bash
-python3 /path/to/skill/scripts/route_advisor.py finalize \
+/path/to/skill/bin/router route_advisor finalize \
   --receipt-id RECEIPT_FROM_BEGIN --outcome partial \
   --completion-reason lead_rework --verification-summary "Lead rework was required." \
   --usage-agent-id ACTUAL_CHILD_ID --usage-parent-id ACTUAL_PARENT_ID
@@ -76,9 +76,9 @@ python3 /path/to/skill/scripts/route_advisor.py finalize \
 无 hook 时，从实际 runtime 输出取得真实子 ID 后登记、读取：
 
 ```bash
-python3 /path/to/skill/scripts/token_usage.py start \
+/path/to/skill/bin/router token_usage start \
   --agent-id ACTUAL_CHILD_ID --parent-id ACTUAL_PARENT_ID
-python3 /path/to/skill/scripts/token_usage.py collect \
+/path/to/skill/bin/router token_usage collect \
   --agent-id ACTUAL_CHILD_ID --parent-id ACTUAL_PARENT_ID \
   --transcript /actual/codex-home/sessions/child-rollout.jsonl
 ```
@@ -88,11 +88,11 @@ python3 /path/to/skill/scripts/token_usage.py collect \
 ## 查看与汇总
 
 ```bash
-python3 /path/to/skill/scripts/token_usage.py stats
-python3 /path/to/skill/scripts/token_usage.py stats --json
-python3 /path/to/skill/scripts/token_usage.py stats --parent-id ACTUAL_PARENT_ID
-python3 /path/to/skill/scripts/token_usage.py stats --agent-id ACTUAL_CHILD_ID --json
-python3 /path/to/skill/scripts/route_advisor.py stats --json
+/path/to/skill/bin/router token_usage stats
+/path/to/skill/bin/router token_usage stats --json
+/path/to/skill/bin/router token_usage stats --parent-id ACTUAL_PARENT_ID
+/path/to/skill/bin/router token_usage stats --agent-id ACTUAL_CHILD_ID --json
+/path/to/skill/bin/router route_advisor stats --json
 ```
 
 显示已观察子 Agent 数、完整/部分/不可用覆盖、逐 Worker 四项用量、按观察模型/effort 汇总及原始整数。总和仅是已知数值之和，每个字段附 field_coverage。缓存字段缺失时，已知缓存合计不代表全部命中量。该系统不知道完全未被 hooks/start/collect 观察的 Worker 数，因此不能声称已覆盖所有实际子 Agent。
@@ -134,10 +134,10 @@ python3 /path/to/skill/scripts/route_advisor.py stats --json
 本轮汇总区间是“本轮起点到当前 Stop 快照”，不是整段会话累计，也不是每个并行任务的因果成本测量。显示已登记主/子线程的已知合计，未关联线程数量另提示；不保证所有 Worker/外部调用全覆盖。模型中途改变不能把全部用量标到一个模型。缓存命中包含在输入中，推理输出包含在输出中。
 
 ```bash
-python3 /path/to/skill/scripts/inspect_guided_install.py --json
-python3 /path/to/skill/scripts/turn_usage.py stats
-python3 /path/to/skill/scripts/turn_usage.py stats --session-id ACTUAL_PARENT_ID --json
-python3 /path/to/skill/scripts/turn_usage.py collect --session-id ACTUAL_PARENT_ID \
+/path/to/skill/bin/router inspect_guided_install --json
+/path/to/skill/bin/router turn_usage stats
+/path/to/skill/bin/router turn_usage stats --session-id ACTUAL_PARENT_ID --json
+/path/to/skill/bin/router turn_usage collect --session-id ACTUAL_PARENT_ID \
   --turn-id ACTUAL_TURN_ID --transcript /actual/codex-home/sessions/parent.jsonl
 ```
 
@@ -153,7 +153,7 @@ Codex 的 SubagentStart/SubagentStop `turn_id` 是子线程自己的 turn，不�
 最终回答正文不是 Stop hook 的可修改区域。开启 `main_and_subagents` 时，Lead 可在发送最终回答前运行：
 
 ```bash
-python3 /path/to/skill/scripts/turn_usage.py preview
+/path/to/skill/bin/router turn_usage preview
 ```
 
 仅当当前 scope 恰有一个 active turn 时返回摘要；多会话歧义时失败而不猜。正文必须标注“截至最终回复前”，因为 preview 之后的命令结果处理和最终正文自身仍会产生少量额外 token。Stop hook 继续记录更晚快照。不得为了得到“最终最终”数字触发第二个模型回合。

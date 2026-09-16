@@ -26,7 +26,9 @@ def session_limit(requested, project_root=None):
         try:
             import tomllib
             data = tomllib.loads(config.read_text(encoding="utf-8"))
-        except (ImportError, ValueError) as exc:
+        except ImportError as exc:
+            raise advisor.AdvisorError("Python tomllib is unavailable; use the bundled bin/router instead of system python3") from exc
+        except ValueError as exc:
             raise advisor.AdvisorError("cannot safely read Codex concurrency config") from exc
         try:
             value = concurrency.effective_subagent_limit(data)

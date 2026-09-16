@@ -323,7 +323,7 @@ class UpgradeTests(Sandbox):
 class ReleaseContractTests(unittest.TestCase):
     def test_upgrade_inventory_is_invoked_not_just_mentioned(self):
         text=(SCRIPTS.parent/'install.sh').read_text()
-        self.assertIn('python3 "$DEST_SKILL/scripts/inspect_guided_install.py"',text)
+        self.assertIn('"$CODEX_ROUTER_PYTHON" "$DEST_SKILL/scripts/inspect_guided_install.py"',text)
         guide=(SCRIPTS.parent/'references/codex-guided-install.md').read_text()
         self.assertIn('pending_questions',guide)
         self.assertIn('不开第 7 个统计问题',guide)

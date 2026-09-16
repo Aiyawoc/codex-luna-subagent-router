@@ -1,0 +1,14 @@
+#!/bin/sh
+# Bundled runtime only. No PATH discovery, download, or package installation.
+set -eu
+HERE=$(CDPATH= cd -- "${0%/*}/.." && pwd -P)
+PY="$HERE/runtime/python/bin/python3"
+if [ ! -x "$PY" ]; then
+    if [ -n "${CODEX_ROUTER_PYTHON:-}" ] && [ ! -f "$HERE/runtime/runtime.json" ]; then
+        case "$CODEX_ROUTER_PYTHON" in /*) PY="$CODEX_ROUTER_PYTHON" ;; *) echo 'ERROR: CODEX_ROUTER_PYTHON must be an absolute development interpreter path.' >&2; exit 2 ;; esac
+    else
+        echo 'ERROR: bundled Python missing. Obtain the complete package for this OS/CPU; do not use system python3.' >&2
+        exit 2
+    fi
+fi
+exec "$PY" -I -S -B -X utf8 "$HERE/scripts/runtime_dispatch.py" "$@"
