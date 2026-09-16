@@ -38,6 +38,20 @@ jobs:
           echo 'a3a471019266346b28b046afa195fa12219545df90f7e98b09eacb7737e67d4d  /tmp/v255.patch' | sha256sum -c -
           git apply --check /tmp/v255.patch
           git apply /tmp/v255.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('skills/codex-luna-subagent-router/references/codex-guided-install.md')
+          path.write_bytes(path.read_bytes().rstrip(b'\n') + b'\n')
+          manifest = Path('MANIFEST.sha256')
+          rel = str(path)
+          rows = manifest.read_text(encoding='utf-8').splitlines()
+          rows = [
+              ('b8e31f2342b9ef937b7cc6333c5544c3b57c7ab8bf069cc22a1b9231f36b92bb  ' + rel)
+              if row.endswith('  ' + rel) else row
+              for row in rows
+          ]
+          manifest.write_text('\n'.join(rows) + '\n', encoding='utf-8')
+          PY
           rm -f .github/v255.chunk*.b64 .github/workflows/apply-v255.yml
           git diff --check
       - name: Commit functional changes
