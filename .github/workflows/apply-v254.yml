@@ -32,3 +32,5 @@ jobs:
           git add -A
           git commit -m "feat: v2.5.4 运行时生命周期、Worker 复用与本轮用量修复"
           git push origin HEAD:v2.5.4-runtime-lifecycle-accounting
+
+# trigger: verified patch chunks
