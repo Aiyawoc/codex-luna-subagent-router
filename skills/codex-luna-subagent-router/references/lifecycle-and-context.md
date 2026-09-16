@@ -40,12 +40,12 @@ conservative 下，在实际 spawn 前 begin 固化回执与 scope。不要由 W
 
 ## Early stop
 
-新增信息价值低于运行成本，且没有必要独立验收职责时：stop 该 Worker，尝试以 early_stopped/partial 结清回执。不要等待无价值迟到结果；不要停掉可能改变安全结论的必要 Worker。
+新增信息价值低于运行成本，且没有必要独立验收职责时：stop 该 Worker，尝试以 early_stopped/partial 结清回执，close 对应 thread 或允许 runtime 回收。不要等待无价值迟到结果；不要停掉可能改变安全结论的必要 Worker。
 
 ## Close / 回收
 
 ```text
-result accepted -> no more steering needed -> close / allow runtime recycle
+result accepted -> no more steering needed -> close thread
 ```
 
 conservative 模式在结束前 finalize：有可信观察身份并通过验收记 verified_pass；明确质量失败记 verified_fail；身份未知、环境阻塞、取消和 Lead 实质返工记 partial。
@@ -54,7 +54,7 @@ conservative 模式在结束前 finalize：有可信观察身份并通过验收�
 
 ## Retry
 
-每子任务最多 2 attempt：保存旧有效证据，必要时 stop，尝试 finalize；fresh retry 创建新 task_id/回执。不要将新的独立目标送进旧线程，除非满足上面的条件复用规则。
+每子任务最多 2 attempt：保存旧证据，必要时 stop/finalize，close 旧 Worker thread；fresh retry：创建新 `task_id`、新回执和 fresh 新 Worker。不要将新的独立目标送进旧线程，除非满足上面的条件复用规则。
 
 ## 叶子边界
 
