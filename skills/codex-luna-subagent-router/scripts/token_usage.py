@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import time
 from collections import Counter
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path, PurePosixPath
@@ -17,9 +18,11 @@ SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import outcome_store as store
-from usage_reader import FIELDS, empty, read_usage
+from usage_reader import FIELDS, MAX_BYTES, empty, read_usage
+from usage_cache import VERSION as READER_VERSION
+import usage_diagnostics as diagnostics
 
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 ROW_FIELDS = {"schema_version", "usage_id", "agent_id", "parent_id", "agent_type", "scope_id", "started_at", "updated_at", "receipt_id", "snapshot", "locator"}
 SNAPSHOT_FIELDS = {"status", "source", "counts", "reasons", "usage_events", "last_usage_at", "model", "effort", "terminal_observed", "bytes_read"}
@@ -48,8 +51,10 @@ def compact(value: int | None) -> str:
 
 
 WAIT_REASONS = {"terminal_not_observed", "unflushed_tail"}
-INFO_REASONS = {"non_usage_counter"}
+INFO_REASONS = {"non_usage_counter", "repeated_session_header"}
 REASON_LABELS = {
+    "source_advanced_during_read": "读取期间日志继续增长，下次复核继续",
+    "unassociated_children": "存在尚未关联的子线程",
     "missing_baseline": "缺少起始基线",
     "non_usage_counter": "已排除非用量计数",
     "terminal_not_observed": "未读到结束事件",
@@ -75,6 +80,22 @@ REASON_LABELS = {
     "malformed_record": "日志记录损坏",
     "non_monotonic_time": "日志时间不连续",
 }
+REASON_LABELS.update({
+    "repeated_session_header": "已核对同身份重复会话头",
+    "multiple_session_headers": "旧读取器拒绝重复会话头，待复核",
+    "conflicting_session_headers": "会话头身份或继承边界冲突",
+    "turn_boundary_unreached": "读取尚未到达本轮边界",
+    "transcript_path_missing": "开始记录存在，但没有可用日志定位",
+    "header_unavailable": "会话头尚不可读",
+    "record_too_large": "单条日志超过安全读取上限",
+    "activity_read_incomplete": "子线程关联活动读取未完成",
+    "activity_boundary_changed": "子线程关联活动边界发生变化",
+    "historical_child_end_missing": "历史子线程缺少结束边界，未扩展统计区间",
+    "main_turn_baseline_missing": "旧记录缺少日志定位或开始基线，待复核",
+    "invalid_interval_boundary": "开始与结束区间不一致",
+    "transcript_read_failed": "读取日志发生错误",
+})
+
 MODEL_NAMES = {"gpt-5.6-luna": "Luna", "gpt-5.6-sol": "Sol", "gpt-6-astra": "Astra"}
 
 
@@ -159,8 +180,10 @@ def _valid_locator(locator):
 
 
 def validate_row(row):
-    if not isinstance(row, dict) or set(row) != ROW_FIELDS or row["schema_version"] != "1.0":
+    if not isinstance(row, dict) or (not ROW_FIELDS <= set(row) or set(row) - ROW_FIELDS - {"reader_version"}) or row["schema_version"] != "1.0":
         raise store.StoreError("invalid usage row")
+    if row.get("reader_version") is not None:
+        _id(row["reader_version"])
     if row["usage_id"] != usage_id(row["agent_id"], row["parent_id"]):
         raise store.StoreError("invalid usage id")
     if row["agent_type"] is not None:
@@ -275,7 +298,7 @@ def locator_path(row, home, root=None):
     return Path(root).resolve() / ".codex" / loc["relative"]
 
 
-def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, source=None, agent_type=None):
+def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, source=None, agent_type=None, max_seconds=2.0, max_bytes=MAX_BYTES):
     uid = usage_id(agent_id, parent_id)
     with store.locked(path, timeout=0.4):
         latest, _ = load_latest(path)
@@ -287,7 +310,7 @@ def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, sourc
         source = source or ("app-server" if row["snapshot"]["source"] == "codex_app_server_v2" else "rollout")
         target = Path(transcript) if transcript else locator_path(row, home, root)
         if target:
-            snap = read_usage(target, agent_id, parent_id, codex_home=home, project_root=root, source=source)
+            snap = read_usage(target, agent_id, parent_id, codex_home=home, project_root=root, source=source, cache_ledger=path, max_seconds=max_seconds, max_bytes=max_bytes)
             # Keep only a relative locator, never the absolute project/home path.
             if snap["bytes_read"] > 0:
                 row["locator"] = locator_for(target, home, root)
@@ -297,8 +320,9 @@ def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, sourc
             prev = old["snapshot"]
             if snap["status"] == "unavailable" or (snap["counts"]["total_tokens"] < prev["counts"]["total_tokens"]):
                 snap = dict(prev, status="partial", terminal_observed=False,
-                            reasons=sorted(set(prev["reasons"]) | {"stale_previous_snapshot"}))
+                            reasons=sorted(set(prev["reasons"]) | set(snap["reasons"]) | {"stale_previous_snapshot"}))
         row["snapshot"] = snap
+        row["reader_version"] = READER_VERSION
         return _write(path, row, old)
 
 
@@ -338,7 +362,7 @@ def _sum(rows):
 
 def statistics(path=None, *, scope=None, parent_id=None, agent_id=None):
     path = Path(path or default_usage_path())
-    latest, diagnostics = load_latest(path)
+    latest, ledger_diagnostics = load_latest(path)
     rows = [r for r in latest.values() if (scope is None or r["scope_id"] == scope)
             and (parent_id is None or r["parent_id"] == parent_id) and (agent_id is None or r["agent_id"] == agent_id)]
     by_route = {}
@@ -348,8 +372,29 @@ def statistics(path=None, *, scope=None, parent_id=None, agent_id=None):
     return dict(usage_file=str(path), observed_subagents=len(rows), statuses=dict(Counter(r["snapshot"]["status"] for r in rows)),
                 known_usage=_sum(rows), completeness=aggregate_snapshots([r["snapshot"] for r in rows]), by_model=[dict(model=m, effort=e, workers=len(items), **_sum(items)) for (m, e), items in sorted(by_route.items(), key=lambda x: str(x[0]))],
                 workers=[{**{k: v for k, v in r.items() if k != "locator"}, "summary": summary(r["snapshot"], model_label(r["snapshot"], r["agent_type"])),
+                          "diagnostics": diagnostics.describe(r),
                           "display": {k: compact(v) for k, v in r["snapshot"]["counts"].items()}} for r in sorted(rows, key=lambda x: x["started_at"])],
-                **diagnostics, limitation="Known usage only; cache is a subset of input. Not billing, quota, or savings. Coverage excludes unobserved Workers.")
+                **ledger_diagnostics, limitation="Known usage only; cache is a subset of input. Not billing, quota, or savings. Coverage excludes unobserved Workers.")
+
+
+def refresh(path, parent_id, sid, root, *, agent_id=None, limit=20, max_seconds=8.0, max_bytes=MAX_BYTES):
+    _id(parent_id)
+    if agent_id is not None: _id(agent_id)
+    if not diagnostics.budget(limit, max_seconds, max_bytes):
+        raise store.StoreError("invalid_read_budget")
+    latest, _ = load_latest(path)
+    rows = [r for r in latest.values() if r["parent_id"] == parent_id and r["scope_id"] == sid
+            and (agent_id is None or r["agent_id"] == agent_id)]
+    rows.sort(key=lambda r: (r["snapshot"]["status"] == "complete" and r.get("reader_version") == READER_VERSION, r["updated_at"]))
+    deadline = time.monotonic() + max_seconds
+    checked = []
+    for row in rows[:limit]:
+        if time.monotonic() >= deadline: break
+        result = collect(path, row["agent_id"], parent_id, sid, root=root,
+                         max_seconds=max(0.01, min(2.0, deadline-time.monotonic())), max_bytes=max_bytes)
+        checked.append(dict(agent_id=row["agent_id"], status=result["snapshot"]["status"], reasons=result["snapshot"]["reasons"]))
+    return dict(scope_id=sid, parent_id=parent_id, refreshed=checked, processed=len(checked), remaining=len(rows)-len(checked),
+                bounded=True, discovery=False, outcome_unchanged=True)
 
 
 def hook(payload, path=None, project_root=None):
@@ -404,6 +449,13 @@ def main(argv=None):
     s.add_argument("--json", action="store_true")
     s.add_argument("--parent-id")
     s.add_argument("--agent-id")
+    s.add_argument("--current-scope", action="store_true")
+    s = commands.add_parser("refresh")
+    s.add_argument("--parent-id", required=True)
+    s.add_argument("--agent-id")
+    s.add_argument("--limit", type=int, default=20)
+    s.add_argument("--max-seconds", type=float, default=8.0)
+    s.add_argument("--max-bytes", type=int, default=MAX_BYTES)
     for command in ("start", "collect", "attach"):
         s = commands.add_parser(command)
         s.add_argument("--agent-id", required=True)
@@ -430,7 +482,7 @@ def main(argv=None):
                 raise store.StoreError("hook input too large")
             output = hook(json.loads(raw), path, args.project_root)
         elif args.command == "stats":
-            sid = store.resolve_scope(args.project_root, args.global_scope)[0] if args.project_root or args.global_scope else None
+            sid = store.resolve_scope(args.project_root, args.global_scope)[0] if args.project_root or args.global_scope or args.current_scope else None
             output = statistics(path, scope=sid, parent_id=args.parent_id, agent_id=args.agent_id)
             if not args.json:
                 print(f"已观察子 Agent：{output['observed_subagents']} | 状态：{json.dumps(output['statuses'], ensure_ascii=False)}")
@@ -438,6 +490,7 @@ def main(argv=None):
                 print(summary(known, "已知用量合计（含缓存）"))
                 print(f"已观察范围：完整 {known['complete']} / 待确认 {known['waiting']} / 部分 {known['partial']} / 不可用 {known['unavailable']}")
                 for row in output["workers"]:
+                    print(diagnostics.context_line(row))
                     print(row["summary"])
                 print("缓存命中包含于输入；不可用不代表 0。完整快照不代表账单结算。")
                 return 0
@@ -445,7 +498,9 @@ def main(argv=None):
             sid, root = store.resolve_scope(args.project_root, args.global_scope)
             if not enabled(root):
                 raise store.StoreError("token accounting is off in effective routing.json")
-            if args.command == "start":
+            if args.command == "refresh":
+                output = refresh(path, args.parent_id, sid, root, agent_id=args.agent_id, limit=args.limit, max_seconds=args.max_seconds, max_bytes=args.max_bytes)
+            elif args.command == "start":
                 output = register(path, args.agent_id, args.parent_id, sid)
             elif args.command == "collect":
                 output = collect(path, args.agent_id, args.parent_id, sid, transcript=args.transcript, root=root, source=args.source)

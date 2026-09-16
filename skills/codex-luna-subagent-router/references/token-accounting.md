@@ -1,4 +1,4 @@
-# SubAgent token 统计（v2.5.4）
+# 主／子 Agent token 统计（v2.6.1）
 
 仅 `token_accounting=on` 采集；缺失/off 保持关闭。此选项独立于 luna_only/adaptive 和 evidence_calibration，关闭历史校准也能查看用量。不会切换模型、修改路由成本表、估算账单或绕过 hooks 信任。
 
@@ -129,7 +129,7 @@ SubagentStart 注册真实 agent_id 与父 session_id、scope。SubagentStop 只
 
 读不到游标时，只允许以已登记的精确 turn_id 和可验证累计边界读取；从未登记 UserPromptSubmit 的 Stop 不使用生命周期累计冒充本轮。读日志上限仍为 64 MiB/短时预算；大日志、不支持格式、重写/计数重置显示不可用或缺口，不无限扫描。
 
-子线程首次 SubagentStart 仅在明确的 parent session/turn 能关联时进入本轮；已经存在的子线程在 UserPromptSubmit 保存自己的游标，本轮只计其新增区间。父子分别读取各自线程局部 token_count，不混入 App Server 聚合/账号用量；不明确的线程不并入合计。新请求封存旧轮次，旧 Stop 不吸收新轮次的 steering。快照晚到时应在下一请求前 collect 复核；封存后的统计保留当时状态，不跨轮猜测更新。
+子线程首次 SubagentStart 仅在明确的 parent session/turn 能关联时进入本轮；已经存在的子线程在 UserPromptSubmit 保存自己的游标，本轮只计其新增区间。父子分别读取各自线程局部 token_count，不混入 App Server 聚合/账号用量；不明确的线程不并入合计。新请求封存旧轮次，旧 Stop 不吸收新轮次的 steering。快照晚到时应在下一请求前 collect 复核；v2.6.1 起可显式 refresh 已封存快照，但须保留原区间，尤其不能无终点扩大旧 child 用量。
 
 本轮汇总区间是“本轮起点到当前 Stop 快照”，不是整段会话累计，也不是每个并行任务的因果成本测量。显示已登记主/子线程的已知合计，未关联线程数量另提示；不保证所有 Worker/外部调用全覆盖。模型中途改变不能把全部用量标到一个模型。缓存命中包含在输入中，推理输出包含在输出中。
 
@@ -157,3 +157,23 @@ Codex 的 SubagentStart/SubagentStop `turn_id` 是子线程自己的 turn，不�
 ```
 
 仅当当前 scope 恰有一个 active turn 时返回摘要；多会话歧义时失败而不猜。正文必须标注“截至最终回复前”，因为 preview 之后的命令结果处理和最终正文自身仍会产生少量额外 token。Stop hook 继续记录更晚快照。不得为了得到“最终最终”数字触发第二个模型回合。
+
+
+## v2.6.1：恢复与诊断
+
+stats 是只读已保存快照，不重新扫描日志。逐条显示 session/turn 或 parent/child、scope、phase、开始与更新时间、reader 版本；JSON diagnostics 另含快照年龄、已扫描偏移和旧来源标记。旧无 reader_version 的数字属于 legacy/unknown，不能仅因升级显示程序就当成重新验证。
+
+read_usage 对同一明确日志/查询保存数字解析缓存；超过读取预算可在下一次有界调用继续，不再永久从头读到相同位置。首次仍验证身份/计数基线，缓存不保存正文或绝对路径，不代替正式账本。预算未到达目标用 turn_boundary_unreached，真正缺失保留 turn_boundary_missing，路径缺失使用 transcript_path_missing。缓存依赖可信追加日志；同大小编辑、截断、首行/偏移锚点改变或损坏会失效，任意历史中部改写应删除数字缓存后全量重新核验。
+
+重复 session_meta 仅当线程、parent、创建/ordinal 和继承边界一致时作为信息处理；冲突仍不可用。保留原始计数缺口，不按模型角色猜数字。
+
+```bash
+/path/to/skill/bin/router token_usage refresh --parent-id ACTUAL_PARENT_ID --limit 20
+/path/to/skill/bin/router turn_usage refresh --session-id ACTUAL_PARENT_ID --limit 20 --json
+/path/to/skill/bin/router turn_usage preview --session-id ACTUAL_PARENT_ID --turn-id ACTUAL_TURN_ID --json
+/path/to/skill/bin/router turn_usage stats --current-scope --phase sealed --limit 20 --json
+```
+
+refresh 只复核指定会话且同 scope 的已登记 locator，不搜索最新日志。默认整批 20 条/8 秒、每次单文件 64 MiB；processed 不等于 complete。不同 scope 使用明确的项目根或 --global-scope；token_usage 的 scope 选项在子命令前，turn_usage 在子命令后。已封存主轮次保持 sealed；旧 child 无可验证终点保持 historical_child_end_missing，不把生命周期累计混入旧轮。反复刷新取同一身份最新快照而非求和，不改变 outcome。下一自然 UserPromptSubmit 可对刚封存的前轮执行一次短预算复核，无后台任务、无 sleep、无额外模型轮次。
+
+preview 的 --json 错误包含固定 code，分别指出无活跃轮次、多候选、指定轮次未登记/不活跃、scope 不匹配和未启用统计。不要用它查看“最近一次”历史。hooks 仍不阻塞停止；v2.6.1 定义须按第 6 项审查。

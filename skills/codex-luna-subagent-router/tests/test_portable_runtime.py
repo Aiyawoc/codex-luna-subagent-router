@@ -110,7 +110,7 @@ class RuntimeTests(unittest.TestCase):
     def test_hook_version_agrees_with_usage(self):
         import token_usage
         self.assertEqual(hooks.VERSION,token_usage.VERSION)
-        self.assertEqual(hooks.VERSION,'2.6.0')
+        self.assertEqual(hooks.VERSION,'2.6.1')
 
     def test_bundled_hook_uses_private_interpreter_and_dispatch(self):
         with tempfile.TemporaryDirectory() as tmp:

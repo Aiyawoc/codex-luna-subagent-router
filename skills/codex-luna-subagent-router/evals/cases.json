@@ -404,6 +404,56 @@
       "id": "token-failed-worker",
       "prompt": "Worker 被返工且有可信用量。",
       "expected": "keep_partial_outcome_and_independent_usage"
+    },
+    {
+      "id": "usage-budget-unreached",
+      "prompt": "长日志尚未读到本轮起点，读取预算已耗尽。",
+      "required": [
+        "preserve_read_budget_reason",
+        "bounded_resume_same_query"
+      ],
+      "forbid": [
+        "claim_boundary_absent",
+        "unknown_as_zero"
+      ]
+    },
+    {
+      "id": "usage-repeated-header",
+      "prompt": "日志出现两个 session_meta，检查是否可以继续统计。",
+      "required": [
+        "verify_same_identity_and_lineage",
+        "preserve_cumulative_baseline"
+      ],
+      "forbid": [
+        "ignore_conflicting_identity",
+        "infer_model_from_profile"
+      ]
+    },
+    {
+      "id": "usage-sealed-refresh",
+      "prompt": "复核已经封存的父轮次，其中一个子线程已在后续轮次复用。",
+      "required": [
+        "preserve_sealed_phase",
+        "verified_child_end_boundary",
+        "replace_snapshot_not_sum"
+      ],
+      "forbid": [
+        "charge_future_usage_to_history",
+        "invent_missing_end"
+      ]
+    },
+    {
+      "id": "usage-stats-preview-diagnostics",
+      "prompt": "解释历史 stats 和当前 preview 为什么不同。",
+      "required": [
+        "saved_snapshot_not_live",
+        "scope_phase_timestamps",
+        "explicit_ambiguous_turn_error"
+      ],
+      "forbid": [
+        "refresh_on_stats",
+        "guess_latest_session"
+      ]
     }
   ]
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.1 — 用量恢复与诊断（未发布）
+
+- 保留未刷盘日志 locator，精确区分路径/轮次/预算错误；数字解析缓存支持有界续读，不保存正文，不把预算耗尽伪装成边界不存在。
+- 同身份同继承边界的重复 session_meta 仅作信息；冲突头、计数缺口与身份不明仍拒绝猜测。
+- 新增主/子 refresh 和显式 sealed 复核；冻结历史 child 终点，避免后续复用污染；下一自然请求短预算复核前轮，无后台进程/轮询/模型续写。
+- stats 保持只读并展示时间、scope、阶段、reader 来源；preview 新增结构化错误与 JSON；无关联 child 的合计不显示完整。
+- 兼容旧账本读取、保留质量 outcome 和信任边界；hook 定义升为 2.6.1，仍需第 6 项审查。未提供原始用户 rollout，自动化回归不代替真实 Desktop 验收。
+
 ## 2.6.0 — 便携 Python 运行环境（未发布）
 
 - 新增 Windows x64/ARM64、macOS Intel/Apple Silicon 完整包，内置固定 CPython 3.13.15；源码 Git 不保存大型运行时二进制。
