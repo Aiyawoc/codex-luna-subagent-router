@@ -5,11 +5,11 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 # Cost-Aware SubAgent Router
 
-在可靠完成任务的前提下最小化预期总成本。主 Agent 保持用户选择的模型和 reasoning。用户本轮明确要求优先；权限、精确绑定与不可逆操作边界仍生效。
+在可靠完成任务的前提下最小化预期总成本。主 Agent 保持用户选择的模型和 reasoning。用户本轮要求优先；权限、精确绑定和不可逆边界仍生效。
 
 ## 入口
 
-安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；校准缺失/off 不读写历史。
+安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
 
 - `luna_only`：自动 Worker 只用 Luna；能力不足由 Lead 接管。
 - `adaptive`：Luna → `gpt-5.6-sol` → GPT-6 Astra；经济、中等、专家三层。Terra 不参与新自动路由。
@@ -43,7 +43,7 @@ Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类
 
 同回执重复 finalize 幂等，冲突报错；retry 用新 task ID 和回执。记录失败应披露，但不能为日志阻塞 stop/close。任务结束用 `stats` 检查 pending，不猜测补写。Outcome 验收仍无引擎 hook；完全跳过 begin 不会自动获得质量回执。
 
-只存受控 metadata；不记录 prompt、正文、源码、完整日志、账号/密钥。summary 也需去敏。详见 `references/outcome-collection.md`。
+只存受控 metadata；不得记录 prompt、正文、源码、完整日志、账号/密钥。summary 也需去敏。详见 `references/outcome-collection.md`。
 
 ## Token 统计
 
@@ -54,7 +54,7 @@ Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类
 ## 执行与边界
 
 1. 推断目标与验收；仅实质歧义提问。必须有本轮或适用 AGENTS 长期委派授权。
-2. 路由后预检 exact model+effort、写入范围与真实容量；支持 `list_agents` 时只把 PendingInit/Running 计入并发，Completed 历史不是累计总数。创建失败按原始错误区分 thread limit / server overload / unknown。
+2. 路由后预检 exact model+effort、写入范围与真实容量，再生成 RoutePlan 2.1；支持 `list_agents` 时只把 PendingInit/Running 计入并发，Completed 历史不是累计总数。创建失败按原始错误区分 thread limit / server overload / unknown。
 3. 确定要派遣后读 `task-packet.md` 与 `lifecycle-and-context.md`。同工作流、模型强度已知且无需独立性的 Completed Worker 可条件复用；否则 fresh。Worker 不创建下级、不做最终不可逆动作。
 4. Worker 以 `TASK_ACK <task_id>` 回传人类可读的有效信息。Lead 去重综合 Worker 证据，不原样转贴 Worker 回复或日志。
 5. 同波等待仍必要 Worker；失去价值时 early stop。验收/记录后允许 runtime 回收；retry 前处理旧执行。
