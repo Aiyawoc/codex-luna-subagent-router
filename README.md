@@ -39,7 +39,7 @@
 
 ### 推荐：把安装提示词交给 Agent / Codex
 
-**v2.6.0 便携包正在 PR 验证，尚未正式发布。** 正式发布后使用下方提示词；PR 阶段仅使用用户明确指定的构建产物。不把 GitHub 的 Source code.zip 当作内置 Python 完整包。
+**v2.6.0 便携运行时已合并 main；v2.6.1 统计修复尚未正式发布。** 正式发布后使用下方提示词；PR 阶段仅使用用户明确指定的构建产物。不把 GitHub 的 Source code.zip 当作内置 Python 完整包。
 
 ```text
 请安装或升级 Codex Luna SubAgent Router：
@@ -160,6 +160,17 @@ Luna high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | �
 ```
 
 `k / m / b` 分别表示千／百万／十亿；缓存是输入子项，推理是输出子项，都不重复加总。**完整快照、待确认、部分统计、不可用是用量完整度，不是任务质量评分。** 缺失值为 null，不是 0。详细诊断看 JSON 的 `snapshot.reasons`。
+
+### v2.6.1：历史复核与诊断（未发布）
+
+`stats` 仍只读保存快照，新增逐条 scope、阶段、时间与 reader 来源；`preview --json` 区分无活跃轮次、多候选、scope 错误及未启用统计。需要重新读取原始日志时显式使用：
+
+```bash
+"$SKILL/bin/router" token_usage refresh --parent-id ACTUAL_PARENT_ID --limit 20
+"$SKILL/bin/router" turn_usage refresh --session-id ACTUAL_PARENT_ID --limit 20 --json
+```
+
+以上在原工作项目执行，ID 与 scope 以已有 stats 为准；旧 global 记录需明确选 global。长日志支持有界续读，重复刷新不重复求和，旧子线程无终点不扩展区间。`processed` 不是完整率。详见 [v2.6.1 恢复与本机验收](docs/v2.6.1-usage-recovery.md)。
 
 <a id="cost"></a>
 ## Token 与费用对比（案例占位）

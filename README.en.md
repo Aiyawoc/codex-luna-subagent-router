@@ -39,7 +39,7 @@ Delegation works both downward and locally upward: Astra high → Luna high, or 
 
 ### Recommended: give an installation prompt to your Agent / Codex
 
-**The v2.6.0 portable packages are under PR validation, not a published release.** Use the prompt below once an approved release exists. During PR testing, select the specific CI artifact explicitly. GitHub's automatic Source code archives do not include Python.
+**The v2.6.0 portable runtime is merged into main; v2.6.1 accounting fixes are not yet a published release.** Use the prompt below once an approved release exists. During PR testing, select the specific CI artifact explicitly. GitHub's automatic Source code archives do not include Python.
 
 ```text
 Install or upgrade Codex Luna SubAgent Router:
@@ -163,6 +163,17 @@ Luna high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | �
 ```
 
 This means total 45k, input 42k including 30k cached, and output 3k. `k / m / b` mean thousand/million/billion. Cached input is part of input; reasoning output is part of output. Neither is counted twice. **Complete, awaiting confirmation, partial and unavailable describe usage completeness, not task quality.** Missing counts are null, not zero. Inspect `snapshot.reasons` in JSON for diagnostics.
+
+### v2.6.1: recovery and diagnostics (unreleased)
+
+`stats` remains a read-only saved-snapshot view with scope, phase, timestamps and reader provenance. `preview --json` distinguishes missing/ambiguous active turns, scope errors and opt-in failures. Explicitly reread registered transcripts with:
+
+```bash
+"$SKILL/bin/router" token_usage refresh --parent-id ACTUAL_PARENT_ID --limit 20
+"$SKILL/bin/router" turn_usage refresh --session-id ACTUAL_PARENT_ID --limit 20 --json
+```
+
+Run in the original project; use real IDs and the scope shown by stats. Old global records require explicit global selection. Bounded reads resume long logs without adding snapshots twice. Historical children without verified end boundaries stay partial. `processed` does not mean complete. See [recovery design and local acceptance](docs/v2.6.1-usage-recovery.md).
 
 <a id="cost"></a>
 ## Token and cost comparison (case-study placeholder)

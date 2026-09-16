@@ -17,7 +17,7 @@ import outcome_store as store
 from configure_evidence_calibration import _routing_path, ConfigurationError
 
 OWNER = "codex-luna-subagent-router:token-accounting"
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 EVENTS = ("UserPromptSubmit", "Stop", "SubagentStart", "SubagentStop")
 
 

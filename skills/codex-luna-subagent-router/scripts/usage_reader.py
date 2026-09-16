@@ -116,206 +116,342 @@ class Accumulator:
             self.reasons.add("cache_breakdown_missing")
 
 
-def read_usage(path: Path, agent_id: str, parent_id: str, *, codex_home: Path,
-               project_root: Path | None = None, source="rollout", max_bytes=MAX_BYTES,
-               max_seconds=MAX_SECONDS, thread_kind="subagent", turn_id=None,
-               cursor=None) -> dict[str, Any]:
-    """Read ONLY the explicit file; no glob, parent log, SQLite, or network scan.
+INFO_REASONS = {'non_usage_counter', 'repeated_session_header'}
+START_EVENTS = {'task_started', 'turn_started'}
+END_EVENTS = {'task_complete', 'turn_complete', 'turn_completed', 'turn_aborted'}
 
-    complete means a consistent local accounting snapshot with a terminal event,
-    not backend settlement or a guarantee that no later turn will resume.
+
+def _identity(meta):
+    """Compare identity/lineage only, not mutable descriptive metadata or prompts."""
+    src = meta.get('source')
+    nested = src.get('subagent') if isinstance(src, dict) else None
+    spawn = nested.get('thread_spawn') if isinstance(nested, dict) else None
+    nested_parent = spawn.get('parent_thread_id') if isinstance(spawn, dict) else None
+    direct = meta.get('parent_thread_id')
+    if direct is not None and nested_parent is not None and direct != nested_parent:
+        raise ValueError('conflicting_session_headers')
+    parent = direct if direct is not None else nested_parent
+    identity = _route_text(meta.get('id'))
+    if identity is None or (parent is not None and _route_text(parent) is None):
+        raise ValueError('thread_identity_mismatch')
+    ordinal = meta.get('subagent_history_start_ordinal')
+    if ordinal is not None and (type(ordinal) is not int or ordinal < 0):
+        raise ValueError('invalid_history_boundary')
+    try:
+        created = _time(meta.get('timestamp')).isoformat()
+    except ValueError as exc:
+        raise ValueError('creation_boundary_missing') from exc
+    lineage = [meta.get('forked_from_id'), meta.get('history_base')]
+    return dict(id=identity, parent=parent,
+                child=parent is not None or (isinstance(src, dict) and 'subagent' in src) or src == 'subagent',
+                created=created, ordinal=ordinal, inherited=bool(any(lineage)),
+                lineage=hashlib.sha256(json.dumps(lineage, sort_keys=True).encode()).hexdigest())
+
+
+class _Scan:
+    """Serializable numeric-only state for one exact accounting interval."""
+    def __init__(self, agent, parent, kind, turn, cursor, source):
+        self.agent, self.parent, self.kind, self.turn, self.cursor, self.source = agent, parent, kind, turn, cursor, source
+        self.acc = Accumulator(allow_zero_origin=source == 'rollout')
+        self.acc.allow_reset_origin = cursor is None and kind == 'subagent'
+        self.identity = None
+        self.active_turn = None
+        self.active_route = (None, None)
+        self.target_seen = False
+        self.routes = set()
+        self.terminal = False
+        self.last_at = None
+        self.stamp_previous = None
+        self.closed = False
+        self.activities = set()
+
+    def export(self):
+        return dict(activities=sorted(self.activities), identity=self.identity, active_turn=self.active_turn, active_route=list(self.active_route),
+                    target_seen=self.target_seen, routes=[list(r) for r in sorted(self.routes, key=str)],
+                    terminal=self.terminal, last_at=self.last_at, stamp_previous=self.stamp_previous, closed=self.closed,
+                    previous=self.acc.previous, values=self.acc.values, events=self.acc.events,
+                    own_seen=self.acc.own_seen, reasons=sorted(self.acc.reasons),
+                    zero_origin=self.acc.allow_zero_origin)
+
+    def restore(self, data):
+        # Strictly validate the disposable cache before using it. Invalid state restarts parsing.
+        import re
+        if not isinstance(data, dict) or set(data) != set(self.export()):
+            raise ValueError('invalid cache state')
+        for k in ('target_seen', 'terminal', 'closed', 'own_seen', 'zero_origin'):
+            if type(data[k]) is not bool:
+                raise ValueError('invalid cache flags')
+        if type(data['events']) is not int or data['events'] < 0:
+            raise ValueError('invalid cache event count')
+        for k in ('last_at', 'stamp_previous'):
+            if data[k] is not None:
+                _time(data[k])
+        if data['active_turn'] is not None and _route_text(data['active_turn']) is None:
+            raise ValueError('invalid cache turn')
+        activities = data['activities']
+        if not isinstance(activities, list) or len(activities) > 64 or any(_route_text(v) is None for v in activities):
+            raise ValueError('invalid cached activity')
+        self.activities = set(activities)
+        routes = data['routes']
+        if not isinstance(routes, list) or len(routes) > 2:
+            raise ValueError('invalid cache routes')
+        for route in [data['active_route'], *routes]:
+            if not isinstance(route, list) or len(route) != 2 or any(v is not None and _route_text(v) is None for v in route):
+                raise ValueError('invalid cache route')
+        if data['previous'] is not None:
+            if not isinstance(data['previous'], dict) or set(data['previous']) != set(FIELDS):
+                raise ValueError('invalid cache baseline')
+            counts(data['previous'])
+        if not isinstance(data['values'], dict) or set(data['values']) != set(FIELDS):
+            raise ValueError('invalid cache counts')
+        counts(data['values'])
+        reasons = data['reasons']
+        if not isinstance(reasons, list) or len(reasons) > 30 or any(not isinstance(r, str) or not re.fullmatch('[a-z_]{1,64}', r) for r in reasons):
+            raise ValueError('invalid cache reasons')
+        identity = data['identity']
+        if self.source == 'rollout':
+            if not isinstance(identity, dict) or set(identity) != {'id','parent','child','created','ordinal','inherited','lineage'}:
+                raise ValueError('invalid cache identity')
+            if identity['id'] != self.agent or type(identity['child']) is not bool or type(identity['inherited']) is not bool:
+                raise ValueError('invalid cache identity')
+            if self.parent is not None and identity['parent'] not in (None, self.parent):
+                raise ValueError('invalid cache parent')
+            if self.kind == 'main' and identity['child']:
+                raise ValueError('invalid cache parent kind')
+            _time(identity['created'])
+            if identity['ordinal'] is not None and (type(identity['ordinal']) is not int or identity['ordinal'] < 0):
+                raise ValueError('invalid cache ordinal')
+            if not isinstance(identity['lineage'], str) or not re.fullmatch('[a-f0-9]{64}', identity['lineage']):
+                raise ValueError('invalid cache lineage')
+        for k in ('identity','active_turn','target_seen','terminal','last_at','stamp_previous','closed'):
+            setattr(self, k, data[k])
+        self.active_route = tuple(data['active_route'])
+        self.routes = {tuple(r) for r in routes}
+        self.acc.previous, self.acc.values, self.acc.events = data['previous'], data['values'], data['events']
+        self.acc.own_seen, self.acc.reasons, self.acc.allow_zero_origin = data['own_seen'], set(reasons), data['zero_origin']
+
+    def consume(self, row, offset):
+        if self.source == 'app-server':
+            params = row.get('params', {})
+            if not isinstance(params, dict) or params.get('threadId') != self.agent:
+                return
+            if row.get('method') == 'turn/completed':
+                self.terminal = True
+            if row.get('method') != 'thread/tokenUsage/updated':
+                return
+            info = params.get('tokenUsage', {})
+            if not isinstance(info, dict):
+                self.acc.reasons.add('invalid_counter'); return
+            try:
+                before = self.acc.events
+                self.acc.accept(counts(info.get('total'), True), counts(info.get('last'), True))
+                if self.acc.events > before:
+                    self.terminal = False
+            except ValueError as exc:
+                self.acc.reasons.add(str(exc))
+            return
+        payload = row.get('payload', {})
+        if not isinstance(payload, dict):
+            self.acc.reasons.add('malformed_record'); return
+        if self.identity is None:
+            if row.get('type') != 'session_meta' or payload.get('id') != self.agent:
+                raise ValueError('thread_identity_mismatch')
+            self.identity = _identity(payload)
+            if self.kind == 'main' and self.identity['child']:
+                raise ValueError('child_is_not_main')
+            if self.parent is not None and self.identity['parent'] not in (None, self.parent):
+                raise ValueError('parent_identity_mismatch')
+            self.acc.allow_zero_origin = not self.identity['inherited']
+            return
+        if row.get('type') == 'session_meta':
+            try:
+                same = _identity(payload) == self.identity
+            except ValueError:
+                same = False
+            if not same:
+                raise ValueError('conflicting_session_headers')
+            self.acc.reasons.add('repeated_session_header')
+            return  # Duplicate metadata never resets counters, route or interval boundaries.
+        try:
+            stamp = _time(row.get('timestamp'))
+            own = stamp >= _time(self.identity['created'])
+            if self.identity['ordinal'] is not None:
+                ordinal = row.get('ordinal')
+                if type(ordinal) is not int or ordinal < 0:
+                    raise ValueError('ordinal_missing')
+                own = ordinal >= self.identity['ordinal']
+            if own:
+                if self.stamp_previous and stamp < _time(self.stamp_previous):
+                    self.acc.reasons.add('non_monotonic_time')
+                self.stamp_previous = stamp.isoformat()
+        except ValueError as exc:
+            self.acc.reasons.add(str(exc)); return
+        kind = row.get('type')
+        starts = kind == 'event_msg' and payload.get('type') in START_EVENTS
+        if kind == 'turn_context' or starts:
+            new_turn = _route_text(payload.get('turn_id'))
+            # A later turn must not contaminate historical target counts or diagnostics.
+            if self.turn is not None and self.target_seen and own and new_turn is not None and new_turn != self.turn:
+                self.closed = True
+                return
+            if kind == 'turn_context':
+                self.active_route = (_route_text(payload.get('model')), _route_text(payload.get('effort')))
+            elif new_turn != self.active_turn:
+                self.active_route = (None, None)  # A start ID is not model identity evidence.
+            self.active_turn = new_turn
+            if own and (self.turn is None or self.active_turn == self.turn):
+                self.target_seen = True
+                self.terminal = False
+        own = own and (self.cursor is None or offset >= self.cursor['offset'])
+        own = own and (self.turn is None or self.active_turn == self.turn)
+        if own and kind == 'response_item' and payload.get('type') == 'sub_agent_activity':
+            agent = _route_text(payload.get('agent_thread_id'))
+            if agent and agent != self.agent and str(payload.get('kind', '')).lower() in ('started', 'interacted'):
+                if len(self.activities) < 64: self.activities.add(agent)
+                else: self.acc.reasons.add('child_limit_exceeded')
+        if kind != 'event_msg':
+            return
+        if own and payload.get('type') in END_EVENTS:
+            event_turn = payload.get('turn_id')
+            if self.turn is None or event_turn in (None, self.turn):
+                self.terminal = True
+        if payload.get('type') != 'token_count' or payload.get('info') is None:
+            return
+        info = payload['info']
+        try:
+            before = self.acc.events
+            self.acc.accept(counts(info.get('total_token_usage')), counts(info.get('last_token_usage')), own)
+            if self.acc.events > before:
+                self.last_at = stamp.isoformat()
+                if len(self.routes) < 2:
+                    self.routes.add(self.active_route)
+                self.terminal = False
+        except (ValueError, AttributeError) as exc:
+            if own:
+                self.acc.reasons.add(str(exc) if isinstance(exc, ValueError) else 'invalid_counter')
+
+    def snapshot(self, source_name, offset, transient):
+        reasons = self.acc.reasons | transient
+        if self.turn is not None and not self.target_seen:
+            # Keep the real budget/IO/tail reason, instead of falsely asserting absence.
+            reasons.add('turn_boundary_unreached' if transient else 'turn_boundary_missing')
+        if not self.terminal:
+            reasons.add('terminal_not_observed')
+        if len(self.routes) > 1:
+            reasons.add('multiple_model_routes')
+        route = next(iter(self.routes)) if len(self.routes) == 1 else (None, None)
+        result = empty('no_usage', source_name)
+        result.update(status=('partial' if reasons - INFO_REASONS else 'complete') if self.acc.events else 'unavailable',
+                      counts=self.acc.values if self.acc.events else result['counts'], reasons=sorted(reasons) or ['no_usage'],
+                      usage_events=self.acc.events, last_usage_at=self.last_at, model=route[0], effort=route[1],
+                      terminal_observed=self.terminal, bytes_read=offset)
+        if result['status'] == 'complete' and result['reasons'] == ['no_usage']:
+            result['reasons'] = []
+        return result
+
+
+def read_usage(path: Path, agent_id: str, parent_id: str | None, *, codex_home: Path,
+               project_root: Path | None = None, source='rollout', max_bytes=MAX_BYTES,
+               max_seconds=MAX_SECONDS, thread_kind='subagent', turn_id=None,
+               cursor=None, end_cursor=None, cache_ledger=None, activity_out=None) -> dict[str, Any]:
+    """Read one explicit transcript with bounded, resumable numeric parsing.
+
+    Start/end cursor anchors are immutable accounting boundaries. The optional
+    cache is disposable and never replaces a missing identity/baseline. Repeated
+    calls replace snapshots rather than summing them. No log discovery/network.
     """
-    source_name = "codex_rollout_v1" if source == "rollout" else "codex_app_server_v2"
-    result = empty("no_usage", source_name)
-    if source not in ("rollout", "app-server"):
-        return empty("unsupported_format", source_name)
-    if thread_kind not in ("main", "subagent"):
-        return empty("unsupported_thread_kind", source_name)
-    if thread_kind == "main" and (parent_id is not None or source != "rollout" or not turn_id):
-        return empty("main_turn_identity_required", source_name)
-    if thread_kind == "subagent" and agent_id == parent_id:
-        return empty("parent_is_not_child", source_name)
+    import usage_cache
+    source_name = 'codex_rollout_v1' if source == 'rollout' else 'codex_app_server_v2'
+    if source not in ('rollout', 'app-server'):
+        return empty('unsupported_format', source_name)
+    if thread_kind not in ('main', 'subagent'):
+        return empty('unsupported_thread_kind', source_name)
+    if thread_kind == 'main' and (parent_id is not None or source != 'rollout' or not turn_id):
+        return empty('main_turn_identity_required', source_name)
+    if thread_kind == 'subagent' and agent_id == parent_id:
+        return empty('parent_is_not_child', source_name)
+    if type(max_bytes) is not int or max_bytes < 1 or not isinstance(max_seconds, (float,int)) or not 0 < max_seconds <= 60:
+        return empty('invalid_read_budget', source_name)
     path = Path(path).expanduser().absolute()
     allowed = [Path(codex_home).expanduser().resolve()]
     if project_root:
-        allowed.append(Path(project_root).resolve() / ".codex")
+        allowed.append(Path(project_root).resolve() / '.codex')
     try:
         store.safe_path(path)
-        if path.suffix != ".jsonl" or not any(path.resolve().is_relative_to(root) for root in allowed):
-            return empty("path_outside_allowed_roots", source_name)
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+        if path.suffix != '.jsonl' or not any(path.resolve().is_relative_to(root) for root in allowed):
+            return empty('path_outside_allowed_roots', source_name)
+        fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
     except (OSError, ValueError):
-        return empty("transcript_unavailable", source_name)
-    acc = Accumulator(allow_zero_origin=source == "rollout")
-    acc.allow_reset_origin = cursor is None and thread_kind == "subagent"
-    meta = None
-    boundary = None
-    ordinal_boundary = None
-    active_route = (None, None)
-    active_turn = None
-    target_seen = False
-    routes = set()
-    used = 0
-    terminal = False
-    last_at = None
-    stamp_previous = None
+        return empty('transcript_unavailable', source_name)
+    query = [agent_id, parent_id, thread_kind, turn_id, cursor, source]
+    cache_path = usage_cache.path_for(cache_ledger, path, query) if cache_ledger else None
+    scan = _Scan(agent_id, parent_id, thread_kind, turn_id, cursor, source)
+    transient, offset, spent = set(), 0, 0
     deadline = time.monotonic() + max_seconds
     try:
-        with os.fdopen(fd, "rb") as handle:
-            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
-                return empty("not_regular_file", source_name)
-            if cursor is not None:
+        with os.fdopen(fd, 'rb') as handle:
+            st = os.fstat(handle.fileno())
+            if not stat.S_ISREG(st.st_mode):
+                return empty('not_regular_file', source_name)
+            for bound in (cursor, end_cursor):
+                if bound is not None:
+                    try:
+                        validate_cursor(handle, bound)
+                    except ValueError:
+                        return empty('transcript_changed_since_start', source_name)
+            upper = end_cursor['offset'] if end_cursor else st.st_size
+            if cursor and cursor['offset'] > upper:
+                return empty('invalid_interval_boundary', source_name)
+            # Identity pin is small and always re-read even on a cache hit.
+            head = handle.readline(MAX_LINE + 1)
+            header_digest = hashlib.sha256(head).hexdigest()
+            handle.seek(0)
+            saved = usage_cache.load(cache_path, handle, query, header_digest, upper)
+            if saved:
                 try:
-                    validate_cursor(handle, cursor)
-                except ValueError:
-                    return empty("transcript_changed_since_start", source_name)
-            while True:
-                line_offset = handle.tell()
-                if used >= max_bytes or time.monotonic() >= deadline:
-                    acc.reasons.add("read_budget_exceeded")
-                    break
-                line = handle.readline(min(MAX_LINE + 1, max_bytes - used + 1))
+                    scan.restore(saved['state'])
+                    offset = saved['boundary']['offset']
+                except (ValueError, KeyError, TypeError):
+                    scan = _Scan(agent_id, parent_id, thread_kind, turn_id, cursor, source)
+            handle.seek(offset)
+            while offset < upper and not scan.closed:
+                if spent >= max_bytes or time.monotonic() >= deadline:
+                    transient.add('read_budget_exceeded'); break
+                line = handle.readline(min(MAX_LINE + 1, max_bytes - spent + 1, upper - offset))
                 if not line:
                     break
-                used += len(line)
-                if len(line) > MAX_LINE or used > max_bytes:
-                    acc.reasons.add("read_budget_exceeded")
-                    break
-                if not line.endswith(b"\n"):
-                    acc.reasons.add("unflushed_tail")
-                    break
+                spent += len(line)
+                if len(line) > MAX_LINE:
+                    transient.add('record_too_large'); break
+                if spent > max_bytes or (not line.endswith(b'\n') and offset + len(line) < upper):
+                    transient.add('read_budget_exceeded'); break
+                if not line.endswith(b'\n'):
+                    transient.add('unflushed_tail'); break
                 try:
                     row = json.loads(line)
                     if not isinstance(row, dict):
                         raise ValueError()
-                except (ValueError, UnicodeError):
-                    acc.reasons.add("malformed_record")
+                except (ValueError, UnicodeError, RecursionError):
+                    scan.acc.reasons.add('malformed_record')
+                    offset += len(line)
                     continue
-                if source == "app-server":
-                    params = row.get("params", {})
-                    if not isinstance(params, dict) or params.get("threadId") != agent_id:
-                        continue
-                    if row.get("method") == "turn/completed":
-                        terminal = True
-                        continue
-                    if row.get("method") != "thread/tokenUsage/updated":
-                        continue
-                    info = params.get("tokenUsage", {})
-                    if not isinstance(info, dict):
-                        acc.reasons.add("invalid_counter")
-                        continue
-                    try:
-                        total, last = counts(info.get("total"), True), counts(info.get("last"), True)
-                        before = acc.events
-                        acc.accept(total, last)
-                        if acc.events > before:
-                            terminal = False
-                    except ValueError as exc:
-                        acc.reasons.add(str(exc))
-                        # A synthetic/invalid update is NOT a new cumulative baseline.
-                        # Keep the last verified baseline; the next delta must still
-                        # agree with last_token_usage or is rejected as a real gap.
-                    continue
-                payload = row.get("payload", {})
-                if not isinstance(payload, dict):
-                    acc.reasons.add("malformed_record")
-                    continue
-                if meta is None:
-                    if row.get("type") != "session_meta" or payload.get("id") != agent_id:
-                        return empty("thread_identity_mismatch", source_name)
-                    meta = payload
-                    acc.allow_zero_origin = not (meta.get("forked_from_id") or meta.get("history_base"))
-                    # Parent is explicit in newer rollouts or nested in older sources.
-                    recorded_parent = meta.get("parent_thread_id")
-                    if recorded_parent is None:
-                        src = meta.get("source", {})
-                        if isinstance(src, dict):
-                            sub = src.get("subagent", {})
-                            if isinstance(sub, dict):
-                                spawn = sub.get("thread_spawn", {})
-                                if isinstance(spawn, dict):
-                                    recorded_parent = spawn.get("parent_thread_id")
-                    src = meta.get("source")
-                    is_child = recorded_parent is not None or (isinstance(src, dict) and "subagent" in src) or src == "subagent"
-                    if thread_kind == "main" and is_child:
-                        return empty("child_is_not_main", source_name)
-                    if thread_kind == "subagent" and recorded_parent is not None and recorded_parent != parent_id:
-                        return empty("parent_identity_mismatch", source_name)
-                    try:
-                        boundary = _time(meta.get("timestamp"))
-                    except ValueError:
-                        return empty("creation_boundary_missing", source_name)
-                    ordinal_boundary = meta.get("subagent_history_start_ordinal")
-                    if ordinal_boundary is not None and (type(ordinal_boundary) is not int or ordinal_boundary < 0):
-                        return empty("invalid_history_boundary", source_name)
-                    continue
-                if row.get("type") == "session_meta":
-                    return empty("multiple_session_headers", source_name)
                 try:
-                    stamp = _time(row.get("timestamp"))
-                    own = stamp >= boundary
-                    if ordinal_boundary is not None:
-                        ordinal = row.get("ordinal")
-                        if type(ordinal) is not int or ordinal < 0:
-                            raise ValueError("ordinal_missing")
-                        own = ordinal >= ordinal_boundary
-                    if own and stamp_previous and stamp < stamp_previous:
-                        acc.reasons.add("non_monotonic_time")
-                    if own:
-                        stamp_previous = stamp
+                    scan.consume(row, offset)
                 except ValueError as exc:
-                    acc.reasons.add(str(exc))
-                    continue
-                if row.get("type") == "turn_context":
-                    active_turn = payload.get("turn_id")
-                    if own and (turn_id is None or active_turn == turn_id):
-                        target_seen = True
-                    active_route = (_route_text(payload.get("model")), _route_text(payload.get("effort")))
-                    if own and (turn_id is None or active_turn == turn_id):
-                        terminal = False
-                own = own and (cursor is None or line_offset >= cursor["offset"])
-                own = own and (turn_id is None or active_turn == turn_id)
-                if row.get("type") != "event_msg":
-                    continue
-                if own and payload.get("type") in ("task_complete", "turn_complete", "turn_completed", "turn_aborted"):
-                    event_turn = payload.get("turn_id")
-                    if turn_id is None or event_turn in (None, turn_id):
-                        terminal = True
-                if own and payload.get("type") in ("task_started", "turn_started"):
-                    terminal = False
-                if payload.get("type") != "token_count" or payload.get("info") is None:
-                    continue
-                info = payload["info"]
-                try:
-                    total, last = counts(info.get("total_token_usage")), counts(info.get("last_token_usage"))
-                    before = acc.events
-                    acc.accept(total, last, own)
-                    if acc.events > before:
-                        last_at = stamp.isoformat()
-                        routes.add(active_route)
-                        terminal = False
-                except (ValueError, AttributeError) as exc:
-                    acc.reasons.add(str(exc) if isinstance(exc, ValueError) else "invalid_counter")
-                    # A synthetic/invalid update is NOT a new cumulative baseline.
-                    # Keep the last verified baseline; the next delta must still
-                    # agree with last_token_usage or is rejected as a real gap.
-    except (OSError, ValueError):
-        acc.reasons.add("transcript_read_failed")
-    if turn_id is not None and not target_seen:
-        return empty("turn_boundary_missing", source_name)
-    if not terminal:
-        acc.reasons.add("terminal_not_observed")
-    if len(routes) > 1:
-        acc.reasons.add("multiple_model_routes")
-    route = next(iter(routes)) if len(routes) == 1 else (None, None)
-    reasons = sorted(acc.reasons)
-    integrity_reasons = set(reasons) - {"non_usage_counter"}
-    result.update(status=("partial" if integrity_reasons else "complete") if acc.events else "unavailable",
-                  counts=acc.values if acc.events else {k: None for k in FIELDS},
-                  reasons=reasons or ([] if acc.events else ["no_usage"]), usage_events=acc.events,
-                  last_usage_at=last_at, model=route[0], effort=route[1], terminal_observed=terminal,
-                  bytes_read=used)
-    return result
+                    bad = empty(str(exc), source_name)
+                    bad['bytes_read'] = offset + len(line)
+                    return bad
+                if not scan.closed:
+                    offset += len(line)
+            if end_cursor is None and not scan.closed and os.fstat(handle.fileno()).st_size > upper:
+                transient.add('source_advanced_during_read')
+            if scan.identity is not None or source == 'app-server':
+                usage_cache.save(cache_path, handle, query, header_digest, offset, scan.export())
+    except OSError:
+        transient.add('transcript_read_failed')
+    if activity_out is not None:
+        activity_out.update(scan.activities)
+    return scan.snapshot(source_name, offset, transient)
 
 
 def validate_cursor(handle, cursor):
