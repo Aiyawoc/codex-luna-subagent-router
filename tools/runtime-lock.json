@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "python_version": "3.13.15",
+  "targets": {
+    "windows-x64": {
+      "source": "python.org embeddable",
+      "url": "https://www.python.org/ftp/python/3.13.15/python-3.13.15-embeddable-amd64.zip",
+      "sha256": "791ada5e20aba24524f8d939cdeb069976d632a699fe5cb65274b23f4545e68a",
+      "archive": "zip",
+      "upstream_metadata": "https://www.python.org/ftp/python/3.13.15/windows-3.13.15.json"
+    },
+    "windows-arm64": {
+      "source": "python.org embeddable",
+      "url": "https://www.python.org/ftp/python/3.13.15/python-3.13.15-embeddable-arm64.zip",
+      "sha256": "1ab59dce63c61e780b6448bf38ad1b66d5428be831e42d1f09fc11258a4eab4f",
+      "archive": "zip",
+      "upstream_metadata": "https://www.python.org/ftp/python/3.13.15/windows-3.13.15.json"
+    },
+    "macos-arm64": {
+      "source": "python-build-standalone install_only_stripped",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.13.15%2B20260901-aarch64-apple-darwin-install_only_stripped.tar.gz",
+      "sha256": "d3904bd6a072246e07aa0bdadee9a14e80521e42a943c0848059feb16a2816dc",
+      "archive": "tar.gz",
+      "size": 25147663,
+      "upstream_metadata": "https://github.com/astral-sh/python-build-standalone/releases/tag/20260901",
+      "upstream_commit": "4bb01f09aaf362c71e891be4a41cb6d6ddf830b3"
+    },
+    "macos-x64": {
+      "source": "python-build-standalone install_only_stripped",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.13.15%2B20260901-x86_64-apple-darwin-install_only_stripped.tar.gz",
+      "sha256": "f712a9143c8a5d248438ec7921a0b48d548bca4f1337d33c690d28c2d0504137",
+      "archive": "tar.gz",
+      "size": 24912286,
+      "upstream_metadata": "https://github.com/astral-sh/python-build-standalone/releases/tag/20260901",
+      "upstream_commit": "4bb01f09aaf362c71e891be4a41cb6d6ddf830b3"
+    }
+  }
+}

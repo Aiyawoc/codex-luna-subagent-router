@@ -35,7 +35,7 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertIn("Started/Interacted", text)
 
     def test_v254_contract_survives_v255(self):
-        self.assertEqual((ROOT / "VERSION").read_text().strip(), "2.5.5")
+        self.assertEqual((ROOT / "VERSION").read_text().strip(), "2.6.0")
 
 
 if __name__ == "__main__":

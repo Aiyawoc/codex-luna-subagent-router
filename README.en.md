@@ -37,52 +37,51 @@ Delegation works both downward and locally upward: Astra high → Luna high, or 
 <a id="install"></a>
 ## Install / upgrade
 
-### Recommended: let Codex install and guide setup
+### Recommended: give an installation prompt to your Agent / Codex
 
-Send this in a Codex conversation for the target project:
+**The v2.6.0 portable packages are under PR validation, not a published release.** Use the prompt below once an approved release exists. During PR testing, select the specific CI artifact explicitly. GitHub's automatic Source code archives do not include Python.
 
 ```text
-Use $skill-installer to install or fully upgrade this Skill:
-https://github.com/Aiyawoc/codex-luna-subagent-router/tree/v2.5.5/skills/codex-luna-subagent-router
+Install or upgrade Codex Luna SubAgent Router:
+https://github.com/Aiyawoc/codex-luna-subagent-router
 
-Refresh the complete Skill package and every bundled Agent profile, then read
-references/codex-guided-install.md. Run scripts/inspect_guided_install.py --json
-first and explicitly ask about every applicable missing option.
-Preserve my existing routing, concurrency, explicit off/false choices,
-outcome/usage history and other custom settings.
-If child token accounting is already on, use question 6 to ask whether to expand
-to combined main/child accounting. Do not skip new options, install or trust hooks,
-or expand their scope without confirmation.
+Read the installation guide and identify this host's OS and CPU architecture.
+Obtain the matching router-<version>-<platform> complete package and SHA256
+from the chosen published Release. Stop if it is missing; do not silently
+substitute a source archive or system Python.
+You may use $skill-installer to assist, but copying only SKILL.md or the source
+directory is insufficient. Verify the archive digest before extraction.
+Run bin/router doctor --verify (Windows: bin/router.cmd), then install the full
+Skill, private Python and bundled profiles. Read references/codex-guided-install.md.
+Use the unified launcher for every helper. Run inspect_guided_install --json
+and ask every applicable missing setup question.
+Preserve routing, concurrency, explicit off/false choices, outcome/usage data
+and unrelated configuration. Review old hook interpreter migration under
+question 6; require the normal client trust review. Do not grant trust yourself.
+Do not modify system Python/PATH or download dependencies from running hooks.
 ```
 
-### Manual full-package installation
+### Alternative: install a complete platform package manually
 
-These commands target Bash on macOS/Linux and require Git and Python. CI covers Python 3.12/3.13. On Windows, use Codex-guided setup or an appropriate Bash environment; native PowerShell cannot directly execute the Bash installer.
-
-**New installation**, in a location without an existing directory of the same name:
+Download the matching complete package and checksum, verify it, and extract it outside the installed Skill. On macOS:
 
 ```bash
-git clone --branch v2.5.5 --depth 1 \
-  https://github.com/Aiyawoc/codex-luna-subagent-router.git
-cd codex-luna-subagent-router
-bash skills/codex-luna-subagent-router/install.sh --global
+cd /extracted/codex-luna-subagent-router
+./bin/router doctor --verify
+bash ./install.sh --global
 ```
 
-**Upgrade an existing source checkout**: preserve local edits first and use a clean working tree. Replace the tag with the desired Release for future upgrades.
+On native Windows PowerShell (no Python or Bash prerequisite):
 
-```bash
-git fetch origin tag v2.5.5
-git switch --detach v2.5.5
-bash skills/codex-luna-subagent-router/install.sh --global
+```powershell
+cd C:\extracted\codex-luna-subagent-router
+.\bin\router.cmd doctor --verify
+.\bin\router.cmd install --global
 ```
 
-For a project-only installation, replace the final command with:
+`./install.ps1 --global` is also available; no execution-policy bypass is performed. For a project install, replace `--global` with `--project <project-path>`. Use the actual installed path reported by the installer, then finish the six setup questions and hook review.
 
-```bash
-bash skills/codex-luna-subagent-router/install.sh --project /path/to/your-project
-```
-
-**The installer copies the complete package, refreshes profiles and inventories missing settings; it does not answer setup questions for you.** Continue with Codex using the [installation/upgrade guide](skills/codex-luna-subagent-router/references/codex-guided-install.md). Never replace only `SKILL.md`: accounting depends on multiple scripts. Upgrades preserve external ledgers and user settings; new or changed hooks still require review and trust in the client.
+Complete packages contain pinned CPython 3.13.15. Source development requires an explicitly selected compatible interpreter and is not the end-user installation route. See [private runtime delivery](skills/codex-luna-subagent-router/references/portable-runtime.md).
 
 <a id="setup"></a>
 ## Six setup questions
@@ -113,35 +112,37 @@ The Router depends on the **Codex Host/Core** capabilities exposed by the active
 <a id="data"></a>
 ## Inspect data
 
+Use the actual installed path printed by the installer. On Windows, replace `bin/router` with `bin/router.cmd` or `bin/router.ps1`.
+
 Define the installed Skill path first. This is the global default; for a project installation use `<project>/.agents/skills/codex-luna-subagent-router`. Invoke scripts from **your working project directory**, not by changing into the installed Skill.
 
 ```bash
 SKILL="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}/codex-luna-subagent-router"
 
 # 1. Quality outcomes, pending receipts and available calibration recommendations
-python3 "$SKILL/scripts/route_advisor.py" stats
+"$SKILL/bin/router" route_advisor stats
 
 # 2. Child model/effort and the four token metrics
-python3 "$SKILL/scripts/token_usage.py" stats
+"$SKILL/bin/router" token_usage stats
 
 # 3. Main-turn usage and safely associated child increments
-python3 "$SKILL/scripts/turn_usage.py" stats
+"$SKILL/bin/router" turn_usage stats
 
 # 4. Missing explicit setup choices (read-only)
-python3 "$SKILL/scripts/inspect_guided_install.py" --json
+"$SKILL/bin/router" inspect_guided_install --json
 ```
 
 Add `--json` to any `stats` command for exact counts and details. Common filters:
 
 ```bash
 # Outcomes for the current project
-python3 "$SKILL/scripts/route_advisor.py" stats --current-scope --json
+"$SKILL/bin/router" route_advisor stats --current-scope --json
 
 # Children of a particular parent session; substitute the real ID
-python3 "$SKILL/scripts/token_usage.py" stats --parent-id ACTUAL_PARENT_ID --json
+"$SKILL/bin/router" token_usage stats --parent-id ACTUAL_PARENT_ID --json
 
 # Per-turn summaries for a main session
-python3 "$SKILL/scripts/turn_usage.py" stats --session-id ACTUAL_PARENT_ID --json
+"$SKILL/bin/router" turn_usage stats --session-id ACTUAL_PARENT_ID --json
 ```
 
 Default data directory: `${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/`.
@@ -208,6 +209,8 @@ The [comparison data](docs/examples/cost-comparison.json) contains anonymous cou
 
 <a id="docs"></a>
 ## Documentation and boundaries
+
+[Private Python and complete platform packages](skills/codex-luna-subagent-router/references/portable-runtime.md): launchers, verified downloads, upgrades and hook review.
 
 | Document | Contents |
 |---|---|

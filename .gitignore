@@ -25,3 +25,10 @@ build/
 # Local runtime files
 *.log
 .tmp/
+
+# Runtimes are shipped in platform packages, not source Git history
+skills/codex-luna-subagent-router/runtime/python/
+skills/codex-luna-subagent-router/runtime/runtime.json
+skills/codex-luna-subagent-router/runtime/TARGET
+skills/codex-luna-subagent-router/runtime/licenses/
+skills/codex-luna-subagent-router/PACKAGE-MANIFEST.json

@@ -7,7 +7,7 @@
 多任务先执行：
 
 ```bash
-python3 /path/to/skill/scripts/route_advisor.py plan /path/to/work-plan.json \
+/path/to/skill/bin/router route_advisor plan /path/to/work-plan.json \
   --lead-model gpt-6-astra --lead-effort high --open-workers ACTUAL_ACTIVE_COUNT
 ```
 

@@ -21,6 +21,16 @@ configuration and migration, including concurrency and evidence calibration.
 EOF
 }
 
+SOURCE_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
+if [[ -f "$SOURCE_DIR/runtime/runtime.json" ]]; then
+  exec /bin/sh "$SOURCE_DIR/bin/router" install "$@"
+fi
+if [[ -z "${CODEX_ROUTER_PYTHON:-}" || "$CODEX_ROUTER_PYTHON" != /* ]]; then
+  echo "ERROR: source archive has no bundled Python. Use a complete platform package. Developers may explicitly set CODEX_ROUTER_PYTHON to an absolute Python >=3.11 path." >&2
+  exit 2
+fi
+"$CODEX_ROUTER_PYTHON" -I -S -B -X utf8 "$SOURCE_DIR/scripts/runtime_dispatch.py" doctor >/dev/null
+# Retained source-development installer; never selected by complete packages.
 MODE="global"
 PROJECT=""
 while [[ $# -gt 0 ]]; do
@@ -47,7 +57,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 
 if [[ "$MODE" == "global" ]]; then
   SKILLS_BASE="${CODEX_SKILLS_DIR:-$HOME/.agents/skills}"
@@ -61,7 +71,7 @@ fi
 DEST_SKILL="$SKILLS_BASE/codex-luna-subagent-router"
 mkdir -p "$SKILLS_BASE" "$AGENTS_BASE"
 
-python3 - "$SOURCE_DIR" "$DEST_SKILL" <<'PY'
+"$CODEX_ROUTER_PYTHON" - "$SOURCE_DIR" "$DEST_SKILL" <<'PY'
 from pathlib import Path
 import shutil
 import sys
@@ -99,7 +109,7 @@ chmod +x \
   "$DEST_SKILL/scripts/inspect_guided_install.py" \
   "$DEST_SKILL/scripts/validate_route_plan.py"
 
-python3 "$DEST_SKILL/scripts/validate_route_plan.py" \
+"$CODEX_ROUTER_PYTHON" "$DEST_SKILL/scripts/validate_route_plan.py" \
   "$DEST_SKILL/examples/route-plan.valid.json" >/dev/null
 
 INSTALLED_VERSION="$(tr -d '[:space:]' < "$DEST_SKILL/VERSION")"
@@ -138,12 +148,12 @@ echo "Main-turn summaries: turn_usage.py stats; review UserPromptSubmit/Stop tog
 
 echo "Read-only guided setup inventory (pending items require explicit answers):"
 if [[ "$MODE" == "project" ]]; then
-  python3 "$DEST_SKILL/scripts/inspect_guided_install.py" --project-root "$PROJECT" || {
+  "$CODEX_ROUTER_PYTHON" "$DEST_SKILL/scripts/inspect_guided_install.py" --project-root "$PROJECT" || {
     echo "Setup inventory failed; do not skip configuration review." >&2
     exit 2
   }
 else
-  python3 "$DEST_SKILL/scripts/inspect_guided_install.py" || {
+  "$CODEX_ROUTER_PYTHON" "$DEST_SKILL/scripts/inspect_guided_install.py" || {
     echo "Setup inventory failed; do not skip configuration review." >&2
     exit 2
   }

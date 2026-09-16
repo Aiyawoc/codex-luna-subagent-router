@@ -17,7 +17,7 @@ import outcome_store as store
 from configure_evidence_calibration import _routing_path, ConfigurationError
 
 OWNER = "codex-luna-subagent-router:token-accounting"
-VERSION = "2.5.4"
+VERSION = "2.6.0"
 EVENTS = ("UserPromptSubmit", "Stop", "SubagentStart", "SubagentStop")
 
 
@@ -39,12 +39,25 @@ def read_json(path):
 
 
 def hook_handler(script, python=None, project_root=None):
-    python = str(python or sys.executable)
-    script = str(Path(script).absolute())
+    script_path = Path(script).absolute()
+    skill_root = script_path.parent.parent
+    bundled = (skill_root / "runtime/runtime.json").exists()
+    if bundled:
+        from runtime_support import runtime_executable, validate_runtime
+        validate_runtime(skill_root)
+        python = str(runtime_executable(skill_root))
+    else:
+        python = str(python or sys.executable)
+    script = str(script_path)
     if any(c in python + script for c in "\r\n\x00"):
         raise ConfigurationError("invalid command path")
     root_args = ["--project-root", str(Path(project_root).resolve())] if project_root else []
-    args = [python, script, *root_args, "--hook-version", VERSION, "hook"]
+    if bundled:
+        from runtime_support import FLAGS
+        args = [python, *FLAGS, str(script_path.with_name("runtime_dispatch.py")), "token_usage",
+                *root_args, "--hook-version", VERSION, "hook"]
+    else:
+        args = [python, script, *root_args, "--hook-version", VERSION, "hook"]
     if os.name == "nt":
         # cmd-style command line, for Codex's Windows command override.
         # Reject metacharacters instead of pretending to escape arbitrary shell code.
