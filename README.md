@@ -70,11 +70,11 @@ ${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/reports/
 
 输出三份文件：
 
-- `brief.md`：格式化简报，汇总 outcome、SubAgent 覆盖率/用量、主轮次覆盖率和主要诊断。
+- `brief.md`：与聊天 stdout 完全一致的固定面板，固定按“核心指标 → Token 完整度 → 已知用量 → 模型使用 → 验收结果 → 需要关注”输出。
 - `data.json`：权威机器可读快照，保留嵌套结构和 token 原始整数；去除本机 ledger 绝对路径。
 - `data.csv`：UTF-8 BOM 扁平表，按 `outcome_summary / outcome_route / recommendation / subagent / turn_main / turn_child` 行导出，适合 Excel、Numbers 和脚本分析。
 
-CSV/JSON 会保留 session / turn / agent ID 以便排障，但不写入 prompt、回复正文、源码或原始 rollout 行。`partial/unavailable` 仍表示未知/不完整，绝不会在报告中改写为 0 或 complete。
+默认 `router report` 会先把固定面板直接输出到聊天可读取的 stdout，再生成三份文件；Skill 要把该面板作为回复主要内容展示，而不是只报告文件路径。CSV/JSON 会保留 session / turn / agent ID 以便排障，但不写入 prompt、回复正文、源码或原始 rollout 行。`partial/unavailable` 仍表示未知/不完整，绝不会在报告中改写为 0 或 complete。
 
 详细说明见 [v2.6.2 数据简报命令](docs/v2.6.2-report.md)。
 

@@ -162,69 +162,108 @@ def _coverage_line(coverage):
 
 
 def markdown(payload):
+    """Fixed chat-first Markdown panel. brief.md and stdout intentionally share this exact layout."""
     data = payload["data"]
     outcomes, subagents, turns = data["outcomes"], data["subagents"], data["turns"]["summary"]
     known = subagents.get("known_usage", {}).get("counts", {})
     subcov = subagents.get("completeness", {})
     maincov = turns.get("main_completeness", {})
     threadcov = turns.get("registered_thread_completeness", {})
+    turn_known = threadcov.get("counts", {})
+    outcome_counts = outcomes.get("outcomes", {})
+    scope = payload["scope"]["scope_id"] or "all"
+    mode = payload["scope"]["mode"]
+
     lines = [
-        "# Codex Router 数据简报",
+        "# 📊 Codex Router · 数据简报",
         "",
-        f"- 生成时间：`{payload['generated_at']}`",
-        f"- Router：`v{payload['router_version']}`",
-        f"- 数据范围：`{payload['scope']['scope_id'] or 'all'}`（{payload['scope']['mode']}）",
-        "- 采集方式：只读现有 `route_advisor stats`、`token_usage stats`、`turn_usage stats` 数据；**不会执行 refresh，也不会修改账本**。",
+        f"`Router v{payload['router_version']}` · `{scope}` · `{mode}` · `{payload['generated_at']}`",
         "",
-        "## 概览",
+        "## 核心指标",
         "",
-        f"- 验收结果：{outcomes.get('total_outcomes', 0)} 条；verified_pass {outcomes.get('outcomes', {}).get('verified_pass', 0)} / verified_fail {outcomes.get('outcomes', {}).get('verified_fail', 0)} / partial {outcomes.get('outcomes', {}).get('partial', 0)}。",
-        f"- 待结算回执：{outcomes.get('pending_count', 0)}；可用校准建议：{len(outcomes.get('available_recommendations', []))}。",
-        f"- 已观察 SubAgent：{subagents.get('observed_subagents', 0)}；{_coverage_line(subcov)}。",
-        f"- SubAgent 已知用量：{_compact_counts(known)}。",
-        f"- 已登记主轮次：{turns.get('registered_turns', 0)}；阶段 {json.dumps(turns.get('phases', {}), ensure_ascii=False, sort_keys=True)}。",
-        f"- 主 Agent 快照：{_coverage_line(maincov)}；已登记主/子线程快照：{_coverage_line(threadcov)}。",
-        f"- 本轮账本已知合计：{_compact_counts(threadcov.get('counts', {}))}；未安全关联子线程 {turns.get('excluded_children', 0)} 个。",
+        "| 指标 | 当前值 | 指标 | 当前值 |",
+        "|---|---:|---|---:|",
+        f"| ✅ Verified pass | **{outcome_counts.get('verified_pass', 0)}** | ❌ Verified fail | **{outcome_counts.get('verified_fail', 0)}** |",
+        f"| ◐ Partial outcome | **{outcome_counts.get('partial', 0)}** | ⏳ Pending receipt | **{outcomes.get('pending_count', 0)}** |",
+        f"| 🤖 SubAgent | **{subagents.get('observed_subagents', 0)}** | 🧵 主轮次 | **{turns.get('registered_turns', 0)}** |",
+        f"| 🔢 SubAgent 已知 Token | **{token_usage.compact(known.get('total_tokens'))}** | 🔢 主/子轮次已知 Token | **{token_usage.compact(turn_known.get('total_tokens'))}** |",
         "",
-        "## Outcome 分布",
+        "## Token 完整度",
         "",
-        "| 模型 | 强度 | 结果 | 数量 |",
-        "|---|---|---|---:|",
+        "| 范围 | 完整 | 待确认 | 部分 | 不可用 |",
+        "|---|---:|---:|---:|---:|",
+        f"| SubAgent | {subcov.get('complete', 0)} | {subcov.get('waiting', 0)} | {subcov.get('partial', 0)} | {subcov.get('unavailable', 0)} |",
+        f"| Main Agent | {maincov.get('complete', 0)} | {maincov.get('waiting', 0)} | {maincov.get('partial', 0)} | {maincov.get('unavailable', 0)} |",
+        f"| 已登记主/子线程 | {threadcov.get('complete', 0)} | {threadcov.get('waiting', 0)} | {threadcov.get('partial', 0)} | {threadcov.get('unavailable', 0)} |",
+        "",
+        "## 已知用量",
+        "",
+        "| 范围 | 总量 | 输入 | 缓存输入 | 输出 |",
+        "|---|---:|---:|---:|---:|",
+        f"| SubAgent | {token_usage.compact(known.get('total_tokens'))} | {token_usage.compact(known.get('input_tokens'))} | {token_usage.compact(known.get('cached_input_tokens'))} | {token_usage.compact(known.get('output_tokens'))} |",
+        f"| 已登记主/子轮次 | {token_usage.compact(turn_known.get('total_tokens'))} | {token_usage.compact(turn_known.get('input_tokens'))} | {token_usage.compact(turn_known.get('cached_input_tokens'))} | {token_usage.compact(turn_known.get('output_tokens'))} |",
+        "",
+        "## 模型使用",
+        "",
+        "| 模型 | 强度 | Worker | 总量 | 输入 | 缓存 | 输出 |",
+        "|---|---|---:|---:|---:|---:|---:|",
     ]
-    for item in outcomes.get("by_model", []):
-        lines.append(f"| {item.get('model') or '未知'} | {item.get('effort') or '未知'} | {item.get('outcome')} | {item.get('count', 0)} |")
-    if not outcomes.get("by_model"):
-        lines.append("| - | - | 暂无记录 | 0 |")
-    lines.extend(["", "## SubAgent 路由与已知用量", "", "| 模型 | 强度 | Worker | 总量 | 输入 | 缓存 | 输出 |", "|---|---|---:|---:|---:|---:|---:|"])
     for item in subagents.get("by_model", []):
         c = item.get("counts", {})
-        lines.append(f"| {item.get('model') or '未核实'} | {item.get('effort') or '未知'} | {item.get('workers', 0)} | {token_usage.compact(c.get('total_tokens'))} | {token_usage.compact(c.get('input_tokens'))} | {token_usage.compact(c.get('cached_input_tokens'))} | {token_usage.compact(c.get('output_tokens'))} |")
+        lines.append(
+            f"| {item.get('model') or '未核实'} | {item.get('effort') or '未知'} | {item.get('workers', 0)} | "
+            f"{token_usage.compact(c.get('total_tokens'))} | {token_usage.compact(c.get('input_tokens'))} | "
+            f"{token_usage.compact(c.get('cached_input_tokens'))} | {token_usage.compact(c.get('output_tokens'))} |"
+        )
     if not subagents.get("by_model"):
         lines.append("| - | - | 0 | - | - | - | - |")
+
+    lines.extend([
+        "",
+        "## 验收结果",
+        "",
+        "| 结果 | 数量 |",
+        "|---|---:|",
+        f"| ✅ verified_pass | {outcome_counts.get('verified_pass', 0)} |",
+        f"| ❌ verified_fail | {outcome_counts.get('verified_fail', 0)} |",
+        f"| ◐ partial | {outcome_counts.get('partial', 0)} |",
+        f"| ⏳ pending receipt | {outcomes.get('pending_count', 0)} |",
+        f"| 📐 可用校准建议 | {len(outcomes.get('available_recommendations', []))} |",
+        "",
+        "## ⚠️ 需要关注",
+        "",
+    ])
     reasons = Counter()
     for worker in subagents.get("workers", []):
         reasons.update(worker.get("snapshot", {}).get("reasons", []))
     reasons.update(turns.get("reason_counts", {}))
-    lines.extend(["", "## 主要诊断", ""])
+    if turns.get("excluded_children", 0):
+        lines.append(f"- `unassociated_children`：{turns['excluded_children']}")
     if reasons:
         for reason, count in reasons.most_common(10):
             lines.append(f"- `{reason}`：{count}")
-    else:
-        lines.append("- 当前已保存统计没有诊断原因。")
+    if not reasons and not turns.get("excluded_children", 0):
+        lines.append("- ✅ 当前已保存统计没有诊断原因。")
+
     lines.extend([
-        "", "## 数据文件", "",
-        "- `data.json`：完整、嵌套、保留原始整数的机器可读快照；适合作为后续分析的权威导出。",
-        "- `data.csv`：扁平化 outcome / SubAgent / 主轮次 / 子线程记录；适合 Excel、Numbers、脚本和数据分析工具。",
-        "- CSV/JSON 可能包含 session / turn / agent ID；不包含 prompt、回复正文、源码或原始 rollout 行。",
-        "", "## 口径说明", "",
-        "- token 数为已知快照，不是账单、配额或实际节省；缓存命中属于输入子项。",
-        "- `partial` / `unavailable` 不等于 0；本命令不会为了生成报告自动补读长日志。",
+        "",
+        "> 当前面板只读已保存统计，不执行 `refresh`。`partial / unavailable` 代表未知或不完整，不按 0 计算。",
+        "",
+        "## 数据文件",
+        "",
+        "- `brief.md`：与聊天中显示相同的固定面板。",
+        "- `data.json`：权威机器可读快照，保留嵌套结构和 token 原始整数。",
+        "- `data.csv`：UTF-8 BOM 扁平表，适合 Excel、Numbers、脚本和数据分析工具。",
+        "",
+        "## 口径说明",
+        "",
+        "- token 是已知快照，不是账单、配额或实测节省；缓存命中属于输入子项。",
         "- Outcome 是 Lead 验收结果；token 完整度与任务质量是两个不同维度。",
-        "- `all` 范围可能混合多个项目；需要项目简报时应从目标项目目录运行默认命令，或显式传 `--project-root`。",
+        "- CSV/JSON 可能包含 session / turn / agent ID；不包含 prompt、回复正文、源码或原始 rollout 行。",
+        "- `all` 范围可能混合多个项目；项目简报优先从目标项目目录运行，或显式传 `--project-root`。",
         "",
     ])
     return "\n".join(lines)
-
 
 def write_report(data, scope_id, mode, output_root):
     generated_at = _timestamp()

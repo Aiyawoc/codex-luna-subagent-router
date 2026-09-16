@@ -53,7 +53,7 @@ Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类
 
 `main_and_subagents` 下准备最终回复前运行 `turn_usage.py preview`；成功时把“截至最终回复前”的简报附到正文末尾，失败/歧义则省略。Stop 仍保存更晚快照；不要为补 token 再触发模型轮次。
 
-用户要求汇总统计时运行 `bin/router report`：只读复用 stats，生成 Markdown 简报及 JSON/CSV；不自动 refresh。
+用户要求汇总时运行 `bin/router report`：只读 stats、不 refresh；正文展示固定面板，并保留 JSON/CSV。
 
 ## 执行与边界
 

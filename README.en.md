@@ -70,11 +70,11 @@ ${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/reports/
 
 It writes three files:
 
-- `brief.md`: formatted outcome, SubAgent coverage/usage, main-turn coverage, and top diagnostics.
+- `brief.md`: the same fixed panel printed to chat stdout, always ordered as core metrics → token completeness → known usage → model usage → acceptance results → attention items.
 - `data.json`: canonical nested export with exact token integers; local ledger absolute paths are removed.
 - `data.csv`: UTF-8 BOM flat export with `outcome_summary / outcome_route / recommendation / subagent / turn_main / turn_child` records for Excel, Numbers, or scripts.
 
-CSV/JSON retain session / turn / agent IDs for troubleshooting, but contain no prompts, response bodies, source code, or raw rollout lines. `partial/unavailable` stays unknown/incomplete and is never rewritten as zero or complete.
+By default, `router report` prints the fixed panel to stdout first so the Skill can present it directly in chat, then writes the three files. The Skill should surface that panel as the main reply instead of only reporting file paths. CSV/JSON retain session / turn / agent IDs for troubleshooting, but contain no prompts, response bodies, source code, or raw rollout lines. `partial/unavailable` stays unknown/incomplete and is never rewritten as zero or complete.
 
 See [v2.6.2 report command](docs/v2.6.2-report.md).
 

@@ -93,14 +93,30 @@ class ReportTests(unittest.TestCase):
             self.assertNotIn("registry", exported["data"]["outcomes"])
             self.assertNotIn("usage_file", exported["data"]["subagents"])
             brief = md_path.read_text(encoding="utf-8")
-            self.assertIn("Codex Router 数据简报", brief)
-            self.assertIn("不会执行 refresh", brief)
-            self.assertIn("SubAgent 已知用量", brief)
+            self.assertIn("📊 Codex Router · 数据简报", brief)
+            self.assertIn("## 核心指标", brief)
+            self.assertIn("## Token 完整度", brief)
+            self.assertIn("## 已知用量", brief)
+            self.assertIn("## 模型使用", brief)
+            self.assertIn("## 验收结果", brief)
+            self.assertIn("## ⚠️ 需要关注", brief)
+            self.assertIn("不执行 `refresh`", brief)
+            self.assertIn("brief.md`：与聊天中显示相同的固定面板", brief)
             with csv_path.open(encoding="utf-8-sig", newline="") as handle:
                 rows = list(csv.DictReader(handle))
             types = {row["record_type"] for row in rows}
             self.assertTrue({"outcome_summary", "outcome_route", "subagent", "turn_main", "turn_child"} <= types)
             self.assertEqual(next(row for row in rows if row["record_type"] == "subagent")["total_tokens"], "100")
+
+    def test_fixed_panel_section_order_is_stable(self):
+        text = report.markdown({"generated_at": "2026-09-16T10:00:00Z", "router_version": "2.6.2",
+                                "scope": {"scope_id": "project-demo", "mode": "current"}, "data": sample_data()})
+        headings = ["## 核心指标", "## Token 完整度", "## 已知用量", "## 模型使用",
+                    "## 验收结果", "## ⚠️ 需要关注", "## 数据文件", "## 口径说明"]
+        positions = [text.index(h) for h in headings]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("| ✅ Verified pass | **1** | ❌ Verified fail | **0** |", text)
+        self.assertIn("| SubAgent | 1 | 0 | 0 | 0 |", text)
 
     def test_dispatch_exposes_single_report_command(self):
         import subprocess
