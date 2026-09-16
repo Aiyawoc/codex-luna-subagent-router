@@ -15,10 +15,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Archive exact source for verification
         run: git archive --format=tar HEAD > router-source.tar
+      - name: Inspect pinned upstream runtime metadata
+        run: python3 tools/runtime_sources.py > runtime-sources.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: router-source
-          path: router-source.tar
+          path: |
+            router-source.tar
+            runtime-sources.json
           retention-days: 7
