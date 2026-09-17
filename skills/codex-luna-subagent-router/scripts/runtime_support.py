@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import platform
+import re
 import stat
 import sys
 from pathlib import Path, PurePosixPath
@@ -13,6 +14,14 @@ MINIMUM = (3, 11)
 FLAGS = ['-I', '-S', '-B', '-X', 'utf8']
 ROOT = Path(__file__).resolve().parents[1]
 MODULES = ('tomllib', 'json', 'hashlib', 'ssl', 'sqlite3', 'ctypes', 'subprocess', 'decimal', 'uuid')
+
+
+def skill_version(root=ROOT):
+    """Return the installed Router product version from the single VERSION source."""
+    value = (Path(root) / 'VERSION').read_text(encoding='utf-8').strip()
+    if not re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?', value):
+        raise ValueError('invalid Router VERSION')
+    return value
 
 
 def target_name():

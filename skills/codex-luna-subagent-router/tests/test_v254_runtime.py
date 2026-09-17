@@ -6,7 +6,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import outcome_store
+import report
 import route_advisor
+import runtime_support
 
 
 class RuntimeContractTests(unittest.TestCase):
@@ -34,8 +37,15 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertIn("turn_usage.py preview", text)
         self.assertIn("Started/Interacted", text)
 
-    def test_v254_contract_survives_v255(self):
-        self.assertEqual((ROOT / "VERSION").read_text().strip(), "2.6.3")
+    def test_product_version_has_single_version_file_source(self):
+        expected = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertEqual(expected, "2.6.4")
+        self.assertEqual(runtime_support.skill_version(), expected)
+        self.assertEqual(outcome_store.ROUTER_VERSION, expected)
+        self.assertEqual(route_advisor.ROUTER_VERSION, expected)
+        self.assertEqual(report.ROUTER_VERSION, expected)
+        source = (ROOT / "scripts" / "outcome_store.py").read_text(encoding="utf-8")
+        self.assertNotIn('ROUTER_VERSION = "', source)
 
 
 if __name__ == "__main__":

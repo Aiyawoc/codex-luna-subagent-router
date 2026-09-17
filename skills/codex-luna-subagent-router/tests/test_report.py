@@ -85,7 +85,8 @@ class ReportTests(unittest.TestCase):
     def test_report_writes_markdown_json_and_csv_without_local_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             payload, md_path, json_path, csv_path = report.write_report(sample_data(), "project-demo", "current", Path(tmp))
-            self.assertEqual(payload["router_version"], "2.6.2")
+            self.assertEqual(payload["router_version"], (ROOT / "VERSION").read_text(encoding="utf-8").strip())
+            self.assertIn(f"`Router v{payload['router_version']}`", md_path.read_text(encoding="utf-8"))
             self.assertTrue(md_path.is_file())
             self.assertTrue(json_path.is_file())
             self.assertTrue(csv_path.is_file())
