@@ -243,3 +243,7 @@ For version history and deeper technical changes, see [CHANGELOG.md](CHANGELOG.m
 ## License
 
 [MIT](LICENSE)
+
+## Friendly links
+
+[![认可linux.do](https://ld.xh.do/ld-badge.svg)](https://linux.do)

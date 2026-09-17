@@ -246,3 +246,7 @@ Router 的统计与校准设计遵循以下边界：
 ## License
 
 [MIT](LICENSE)
+
+## 友情链接
+
+[![认可linux.do](https://ld.xh.do/ld-badge.svg)](https://linux.do)
