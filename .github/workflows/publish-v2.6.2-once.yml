@@ -1,0 +1,129 @@
+name: Publish v2.6.2 Once
+
+on:
+  push:
+    branches: ["release/v2.6.2-publish"]
+    paths: [".github/workflows/publish-v2.6.2-once.yml"]
+
+permissions:
+  contents: read
+
+env:
+  TARGET_SHA: b9a037b6d5064781fb61c11ea803d07c194bcb33
+  RELEASE_VERSION: 2.6.2
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm reviewed main target and unpublished version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          MAIN_SHA="$(gh api repos/${GITHUB_REPOSITORY}/git/ref/heads/main --jq .object.sha)"
+          test "$MAIN_SHA" = "$TARGET_SHA"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${RELEASE_VERSION} already exists; refusing duplicate publication." >&2
+            exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "Release v${RELEASE_VERSION} already exists; refusing duplicate publication." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          persist-credentials: false
+      - name: Confirm version and source integrity
+        run: |
+          set -euo pipefail
+          test "$(tr -d '[:space:]' < skills/codex-luna-subagent-router/VERSION)" = "$RELEASE_VERSION"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify manifest and full regression suite
+        run: |
+          python tools/verify_manifest.py
+          python -m unittest discover -s skills/codex-luna-subagent-router/tests -v
+
+  packages:
+    needs: authorize
+    uses: ./.github/workflows/portable-runtime.yml
+    with:
+      ref: b9a037b6d5064781fb61c11ea803d07c194bcb33
+    permissions:
+      contents: read
+
+  publish:
+    needs: [authorize, packages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: portable-*
+          path: packages
+          merge-multiple: true
+      - name: Verify all four complete platform archives
+        shell: python
+        run: |
+          import hashlib
+          import os
+          from pathlib import Path
+          version = os.environ['RELEASE_VERSION']
+          root = Path('packages')
+          names = [
+              f'router-{version}-windows-x64.zip',
+              f'router-{version}-windows-arm64.zip',
+              f'router-{version}-macos-x64.tar.gz',
+              f'router-{version}-macos-arm64.tar.gz',
+          ]
+          expected = set(names + [name + '.sha256' for name in names])
+          actual = {p.name for p in root.iterdir()}
+          assert actual == expected, (actual, expected)
+          lines = []
+          for name in names:
+              digest, recorded = (root / (name + '.sha256')).read_text(encoding='utf-8').strip().split('  ', 1)
+              assert recorded == name
+              assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest
+              lines.append(f'{digest}  {name}')
+          (root / 'SHA256SUMS').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+      - name: Publish v2.6.2 stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > RELEASE_NOTES.md <<'EOF'
+          ## v2.6.2
+
+          当前稳定版。本版本仅新增一键统计简报与数据导出，不改变路由策略、并发、hooks、token 采集、历史 refresh、outcome 校准或账本格式。
+
+          ### 新增 `router report`
+          - 从现有 `route_advisor stats`、`token_usage stats`、`turn_usage stats` 只读汇总数据。
+          - 在 Codex 对话中以固定聊天面板输出：核心指标、Token 完整度、已知用量、模型使用、验收结果和需要关注。
+          - 同时保存 `brief.md`、`data.json` 和 `data.csv`；Markdown 与聊天 stdout 使用同一模板。
+          - 不隐式执行 `refresh`；`partial / unavailable` 保持未知，不补 0。
+          - JSON 保留精确整数，CSV 使用 UTF-8 BOM，适合 Excel、Numbers 与脚本分析。
+
+          ### 便携运行环境
+          - 四个平台完整包继续内置固定 CPython 3.13.15，不依赖系统 Python、PATH、pip 或 uv。
+          - Windows x64 / ARM64 与 macOS Intel / Apple Silicon 均使用包内 Python 完成构建后 smoke、安装升级、hooks 和完整回归。
+
+          ### 验证
+          - 329 项回归测试通过。
+          - 常规 CI：Ubuntu 3.12 / 3.13、macOS 3.12、Windows 3.12 全部通过。
+          - 四个平台 Portable Runtime 验收全部通过，并实际运行 `router report`。
+          - Release 附带四个平台完整包、逐包 `.sha256` 与汇总 `SHA256SUMS`。
+
+          > GitHub 自动生成的 “Source code” ZIP/TAR 不包含 Python 运行时。需要免系统 Python 安装时，请下载下方对应平台的 `router-2.6.2-*` 完整包。
+          EOF
+          TAG="v${RELEASE_VERSION}"
+          gh release create "$TAG" --target "$TARGET_SHA" --title "$TAG" --draft --notes-file RELEASE_NOTES.md
+          gh release upload "$TAG" packages/*
+          gh release edit "$TAG" --draft=false --prerelease=false
