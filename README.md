@@ -20,10 +20,10 @@
 
 | 系统 | CPU | 完整包 |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.6.2-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.6.2-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.6.2-windows-x64.zip` |
-| Windows | ARM64 | `router-2.6.2-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.6.3-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.6.3-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.6.3-windows-x64.zip` |
+| Windows | ARM64 | `router-2.6.3-windows-arm64.zip` |
 
 每个完整包都附带独立 `.sha256`，Release 中同时提供 `SHA256SUMS`。
 
@@ -110,7 +110,7 @@ Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker �
 请安装或升级 Codex Luna SubAgent Router 到当前稳定版 v2.6.3：
 https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.3
 
-先识别本机操作系统与 CPU 架构，下载匹配的 router-2.6.2-<platform> 完整包和校验文件。
+先识别本机操作系统与 CPU 架构，下载匹配的 router-2.6.3-<platform> 完整包和校验文件。
 不要使用 GitHub 自动生成的 Source code.zip/.tar.gz 代替完整包。
 
 校验 SHA256 后，先运行包内 doctor --verify，再执行完整安装/升级。
@@ -140,7 +140,7 @@ $codex-luna-subagent-router 按成本优先策略完成这个任务。
 
 ## 数据简报
 
-v2.6.3 提供一键统计简报：
+自 v2.6.2 起提供一键统计简报：
 
 ```text
 $codex-luna-subagent-router 生成当前项目的数据简报。
@@ -178,7 +178,7 @@ ${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/reports/
 "$ROUTER" report --output-dir /path/to/export
 ```
 
-详细说明见 [v2.6.3 数据简报](docs/v2.6.3-report.md)。
+详细说明见 [v2.6.2 数据简报](docs/v2.6.2-report.md)。
 
 ## 配置
 
@@ -234,7 +234,7 @@ Router 的统计与校准设计遵循以下边界：
 
 面向使用者：
 
-- [v2.6.3 数据简报](docs/v2.6.3-report.md)
+- [v2.6.2 数据简报](docs/v2.6.2-report.md)
 - [便携 Python 与完整包](skills/codex-luna-subagent-router/references/portable-runtime.md)
 - [路由策略](skills/codex-luna-subagent-router/references/routing-policy.md)
 - [工作规划](skills/codex-luna-subagent-router/references/work-planning.md)
