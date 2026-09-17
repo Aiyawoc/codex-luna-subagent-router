@@ -59,7 +59,7 @@ Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类
 
 1. 推断目标与验收；仅实质歧义提问。必须有本轮或适用 AGENTS 长期委派授权。
 2. 路由后预检 exact model+effort、写入范围与真实容量，再生成 RoutePlan 2.1；支持 `list_agents` 时只把 PendingInit/Running 计入并发，Completed 历史不是累计总数。创建失败按原始错误区分 thread limit / server overload / unknown。
-3. 确定要派遣后读 `task-packet.md` 与 `lifecycle-and-context.md`。同工作流、模型强度已知且无需独立性的 Completed Worker 可条件复用；否则 fresh。Worker 不创建下级、不做最终不可逆动作。
+3. 确定要派遣后读 `task-packet.md` 与 `lifecycle-and-context.md`；按 `Evidence reuse` 复用有效证据。同工作流且满足条件才复用 Completed Worker，否则 fresh。Worker 不创建下级、不做最终不可逆动作。
 4. Worker 以 `TASK_ACK <task_id>` 回传人类可读的有效信息。Lead 去重综合 Worker 证据，不原样转贴 Worker 回复或日志。
 5. 同波等待仍必要 Worker；失去价值时 early stop。验收/记录后允许 runtime 回收；retry 前处理旧执行。
 

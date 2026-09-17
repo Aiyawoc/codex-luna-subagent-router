@@ -28,6 +28,8 @@ Codex V2 可能自动卸载可回收的 Completed resident；Skill 不通过无�
 
 复用线程的 token 只统计本轮新增区间，不能把三天前的生命周期累计重新算入本轮；同一原任务的小补充不制造新的独立 outcome 样本。 materially new 且独立验收的新任务才可使用新 receipt。
 
+线程复用不决定证据是否复用：fresh Worker 也可接收 `task-packet.md` 的 `evidence_reuse`；已有 Worker 若证据已变化，同样必须收到更新后的最小 Evidence Packet。
+
 ## 派遣登记
 
 conservative 下，在实际 spawn 前 begin 固化回执与 scope。不要由 Worker 自己判定自己的成功；Lead 完成验收后 finalize。一个合并 Worker 只记一个回执，不能靠多个子检查放大样本数。

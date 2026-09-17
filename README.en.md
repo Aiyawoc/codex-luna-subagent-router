@@ -6,9 +6,9 @@
 
 A cost-first SubAgent routing Skill for Codex. It can choose **Luna / Sol / Astra + reasoning effort** per task, plan a whole workload, run independent Workers concurrently, calibrate routing from verified outcomes, and optionally track main/child token usage.
 
-Current stable release: [**v2.6.2**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.2) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+Current stable release: [**v2.6.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.3) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.6.2 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
+> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.6.3 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 
 [Quick start](#quick-start) · [Capabilities](#capabilities) · [Install and upgrade](#install-and-upgrade) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
 
@@ -16,7 +16,7 @@ Current stable release: [**v2.6.2**](https://github.com/Aiyawoc/codex-luna-subag
 
 ### 1. Download the correct platform package
 
-From the [v2.6.2 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.2), download:
+From the [v2.6.3 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.3), download:
 
 | OS | CPU | Complete package |
 |---|---|---|
@@ -73,6 +73,7 @@ The Router guides delegation authorization, routing mode, concurrency, calibrati
 | **Whole-workload planning** | Evaluate multiple delegable tasks together; run independent work concurrently and serialize dependencies or write conflicts. |
 | **Three model tiers** | `adaptive` mode can move across Luna → Sol → Astra when more capability is needed. |
 | **Worker reuse** | Reuse a completed Worker when the workstream matches, context is still valuable, and the route remains sufficient. |
+| **Evidence reuse** | Pass still-valid confirmed facts, evidence locations, and completed exploration to Workers so fresh Workers do not repeat sufficient discovery. |
 | **Verified-outcome calibration** | Optionally use local verified results to adjust later routing conservatively. |
 | **Token accounting** | Optionally track total, input, cached input, output, and completeness for main/child Agents. |
 | **Data brief** | `router report` renders a fixed statistics panel and saves Markdown, JSON, and CSV. |
@@ -100,8 +101,8 @@ The Router does not switch the user's Lead model. It decides whether to delegate
 You can paste this into Codex:
 
 ```text
-Install or upgrade Codex Luna SubAgent Router to stable v2.6.2:
-https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.2
+Install or upgrade Codex Luna SubAgent Router to stable v2.6.3:
+https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.3
 
 Detect the operating system and CPU architecture first, then download the matching
 router-2.6.2-<platform> complete package and checksum files.
@@ -136,7 +137,7 @@ For workloads with several independent subtasks, the Router evaluates the worklo
 
 ## Data brief
 
-v2.6.2 adds a one-command statistics brief:
+v2.6.3 adds a one-command statistics brief:
 
 ```text
 $codex-luna-subagent-router Generate a data brief for the current project.
@@ -174,7 +175,7 @@ The command can also be used directly:
 "$ROUTER" report --output-dir /path/to/export
 ```
 
-See [v2.6.2 data brief](docs/v2.6.2-report.md) for details.
+See [v2.6.3 data brief](docs/v2.6.3-report.md) for details.
 
 ## Configuration
 
@@ -230,7 +231,7 @@ The Router's accounting and calibration follow these boundaries:
 
 User-facing references:
 
-- [v2.6.2 data brief](docs/v2.6.2-report.md)
+- [v2.6.3 data brief](docs/v2.6.3-report.md)
 - [Portable Python and complete packages](skills/codex-luna-subagent-router/references/portable-runtime.md)
 - [Routing policy](skills/codex-luna-subagent-router/references/routing-policy.md)
 - [Work planning](skills/codex-luna-subagent-router/references/work-planning.md)

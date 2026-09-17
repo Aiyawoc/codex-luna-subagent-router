@@ -30,6 +30,21 @@ class AgentCommunicationP0Tests(unittest.TestCase):
         self.assertIn("为空时直接省略", text)
         self.assertIn("<= 200", text)
 
+    def test_evidence_reuse_is_defined_once_in_task_packet(self) -> None:
+        packet = (ROOT / "references" / "task-packet.md").read_text(encoding="utf-8")
+        lifecycle = (ROOT / "references" / "lifecycle-and-context.md").read_text(encoding="utf-8")
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        self.assertEqual(packet.count("## Evidence reuse"), 1)
+        for field in ("confirmed", "sources", "covered", "gaps", "do_not_repeat"):
+            self.assertIn(f'"{field}"', packet)
+        for reason in ("证据不足", "已过期", "相互冲突", "无法验证", "独立复核"):
+            self.assertIn(reason, packet)
+        self.assertIn("fresh Worker 也可以复用已有证据", packet)
+        self.assertIn("线程复用不决定证据是否复用", lifecycle)
+        self.assertNotIn('"do_not_repeat"', lifecycle)
+        self.assertNotIn('"confirmed"', skill)
+        self.assertIn("Evidence reuse", skill)
+
     def test_lifecycle_has_wait_early_stop_close_and_fresh_retry(self) -> None:
         text = (ROOT / "references" / "lifecycle-and-context.md").read_text(encoding="utf-8")
         self.assertIn("仍然必要", text)

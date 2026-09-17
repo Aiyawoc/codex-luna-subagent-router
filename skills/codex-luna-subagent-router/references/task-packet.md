@@ -29,8 +29,9 @@ Lead 发给 Worker 的 packet 也是可能被人直接查看的 Agent 间消息�
 ## 只在相关时增加
 
 - `root_request_id`：需要额外根任务关联时；若提供必须匹配 RoutePlan。
-- `necessary_context`：无法从仓库/工具廉价恢复、且会改变执行的事实。
-- `resources`：文件、symbol、日志或文档位置。
+- `necessary_context`：不属于“已有证据交接”、又无法从仓库/工具廉价恢复且会改变执行的事实。
+- `resources`：本任务需要读取、但尚未被作为复用证据交接的文件、symbol、日志或文档位置。
+- `evidence_reuse`：已有证据足以减少重复探索时使用；字段与失效规则只在下方 **Evidence reuse** 定义。
 - `constraints`：真正影响权限、范围或实现的限制。
 - `in_scope` / `out_of_scope`：边界不显然时。
 - `clarifications`：只传递**影响当前 Worker** 的已解决澄清，不必复制根任务全部问答。
@@ -47,6 +48,26 @@ Lead 发给 Worker 的 packet 也是可能被人直接查看的 Agent 间消息�
 - symbol / 函数名 > 整个模块
 - 日志位置 + 关键错误 > 整份日志
 - 已确认决策 > 完整讨论历史
+
+## Evidence reuse
+
+Evidence reuse 与 Worker 线程复用是两件事：**fresh Worker 也可以复用已有证据**。Lead 已经拥有足够、相关且仍有效的证据时，应把最小 Evidence Packet 放入 `evidence_reuse`，避免 Worker 重新做同一轮检索、读取或验证。
+
+```json
+{
+  "evidence_reuse": {
+    "confirmed": ["已经确认、会影响本子任务判断的事实或关系"],
+    "sources": ["文件 / symbol / 日志 / 测试 / 运行时证据位置"],
+    "covered": ["已经完成且无需重复的探索或验证"],
+    "gaps": ["仍未确认、需要 Worker 补齐的证据缺口"],
+    "do_not_repeat": ["除非证据失效，否则不要重复的具体探索"]
+  }
+}
+```
+
+只传递本 Worker 会用到的证据；同一事实或位置进入 `evidence_reuse` 后，不再复制到 `necessary_context` / `resources`。`do_not_repeat` 只用于避免冗余探索，不得阻止完成验收所需的新验证。
+
+仅在以下情况重新探索既有覆盖范围：证据不足、已过期、相互冲突、当前 Worker 无法验证其来源，或任务明确要求独立复核。发现这些情况时说明原因并补齐证据，不把旧结论当成不可质疑事实。
 
 ## 默认结果协议
 
