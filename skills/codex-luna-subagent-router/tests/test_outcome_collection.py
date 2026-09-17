@@ -57,6 +57,17 @@ class TempCase(unittest.TestCase):
 
 
 class ReceiptTests(TempCase):
+    def test_new_receipts_and_records_use_installed_product_version(self):
+        expected = (SCRIPTS.parent / 'VERSION').read_text(encoding='utf-8').strip()
+        receipt = s.begin(self.path, metadata(), 'version-source-worker-01', NOW)
+        self.assertEqual(receipt['router_version'], expected)
+        record = s.finalize(
+            self.path, receipt['receipt_id'], 'verified_pass', 'Version source check.',
+            observed_model=receipt['model'], observed_effort=receipt['effort'],
+            identity_source='runtime_metadata', completion_reason='accepted', now=NOW,
+        )
+        self.assertEqual(record['router_version'], expected)
+
     def test_begin_is_idempotent_and_pending_visible(self):
         one = s.begin(self.path, metadata(), 'request-one-worker-01', NOW)
         two = s.begin(self.path, metadata(), 'request-one-worker-01', NOW)

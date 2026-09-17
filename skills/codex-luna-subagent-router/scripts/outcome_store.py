@@ -12,8 +12,10 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import runtime_support
+
 POLICY_VERSION = "2026-09-09.v1"  # Keep exact-family v2.5.0 evidence compatible.
-ROUTER_VERSION = "2.6.2"
+ROUTER_VERSION = runtime_support.skill_version()
 AXES = {
     "task_kind": ("leaf", "scan", "implementation", "debug", "review", "architecture", "verification", "research", "other"),
     "task_scope": ("micro", "bounded", "workflow"),

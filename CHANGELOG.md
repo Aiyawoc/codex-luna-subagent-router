@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.6.4 — 版本来源单一化（2026-09-17）
+
+- 修复 v2.6.3 实际安装包中 `router report` 仍显示 `Router v2.6.2` 的问题。
+- 移除 outcome/report 链路中的产品版本硬编码；`VERSION` 成为 Router 产品版本的唯一来源，report、route advisor、outcome 与 receipt 元数据统一读取该值。
+- 保留旧 outcome/receipt 的兼容读取，不重写历史记录；新记录使用当前安装版本。
+- `turn_usage preview` 在没有 active turn 时继续按既有设计不生成额外 token 摘要。
+
 ## 2.6.3 — Evidence reuse（2026-09-17）
 
 - 在 Task Packet 中新增唯一的 `## Evidence reuse` 协议：Lead 可把已确认事实/关系、证据位置、已覆盖探索、证据缺口与 `do_not_repeat` 以最小 Evidence Packet 交给 Worker。
