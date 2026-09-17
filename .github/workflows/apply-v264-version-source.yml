@@ -1,0 +1,60 @@
+name: Apply v2.6.4 Version Source Once
+
+on:
+  push:
+    branches: ["fix/v2.6.4-version-source"]
+    paths: [".github/workflows/apply-v264-version-source.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v2.6.4-version-source
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply reviewed v2.6.4 fix and validate
+        run: |
+          set -euo pipefail
+          base64 -d .github/v264-fix.patch.gz.b64 | gunzip > /tmp/v264.patch
+          git apply --check /tmp/v264.patch
+          git apply /tmp/v264.patch
+          git rm .github/v264-fix.patch.gz.b64
+          git rm .github/workflows/apply-v264-version-source.yml
+          python tools/verify_manifest.py
+          python -m unittest discover -s skills/codex-luna-subagent-router/tests -v
+          test "$(wc -c < skills/codex-luna-subagent-router/SKILL.md)" -lt 6000
+          tmp="$(mktemp -d)"
+          CODEX_HOME="$tmp/codex" python skills/codex-luna-subagent-router/scripts/report.py --global-scope --output-dir "$tmp/reports" > "$tmp/report.txt"
+          grep -F '`Router v2.6.4`' "$tmp/report.txt"
+          REPORT_JSON="$(find "$tmp/reports" -name data.json -print -quit)" python - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ['REPORT_JSON'])
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          assert payload['router_version'] == '2.6.4', payload['router_version']
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          root = Path('skills/codex-luna-subagent-router')
+          version = (root / 'VERSION').read_text(encoding='utf-8').strip()
+          assert version == '2.6.4'
+          source = (root / 'scripts/outcome_store.py').read_text(encoding='utf-8')
+          assert 'ROUTER_VERSION = "' not in source
+          assert 'ROUTER_VERSION = runtime_support.skill_version()' in source
+          PY
+          git diff --check
+      - name: Commit final v2.6.4 source tree
+        run: |
+          set -euo pipefail
+          git config user.name "Ethen Lee"
+          git config user.email "soldiers@vip.qq.com"
+          git add -A
+          git commit -m "fix: v2.6.4 统一 Router 版本来源"
+          git push origin HEAD:fix/v2.6.4-version-source
