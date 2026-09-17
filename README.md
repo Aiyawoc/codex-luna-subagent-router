@@ -6,9 +6,9 @@
 
 这是一个面向 Codex 的成本优先 SubAgent 路由 Skill。它可以按任务复杂度在 **Luna / Sol / Astra + reasoning effort** 之间选择 Worker，支持整组任务规划、并发执行、验证结果校准，以及可选的主／子 Agent token 统计。
 
-当前稳定版：[**v2.6.2**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.2) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
+当前稳定版：[**v2.6.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.3) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
-> **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.6.2 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
+> **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.6.3 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
 
 [快速开始](#快速开始) · [主要能力](#主要能力) · [安装与升级](#安装与升级) · [在-codex-中使用](#在-codex-中使用) · [数据简报](#数据简报) · [配置](#配置) · [常用命令](#常用命令) · [安全与隐私](#安全与隐私) · [文档](#文档)
 
@@ -16,7 +16,7 @@
 
 ### 1. 下载正确的平台包
 
-从 [v2.6.2 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.2) 下载：
+从 [v2.6.3 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.3) 下载：
 
 | 系统 | CPU | 完整包 |
 |---|---|---|
@@ -73,6 +73,7 @@ Router 会围绕委派授权、路由策略、并发、校准与 token 统计完
 | **整组任务规划** | 一次评估多个可下放子任务；独立任务可并发，有依赖或写入冲突时分波执行。 |
 | **三层模型** | `adaptive` 模式可在 Luna → Sol → Astra 中按任务需要升级能力。 |
 | **Worker 复用** | 同一工作流、上下文仍有价值且能力足够时，可复用已完成 Worker。 |
+| **证据复用** | Lead 把仍有效的已确认事实、证据位置和已完成探索交给 Worker；fresh Worker 也无需重复已经充分的探索。 |
 | **验证结果校准** | 可选使用本地已验证结果，对后续路由做保守校准。 |
 | **Token 统计** | 可选统计主／子 Agent 的总量、输入、缓存输入、输出与完整度。 |
 | **数据简报** | `router report` 以固定面板汇总统计，同时保存 Markdown、JSON 和 CSV。 |
@@ -93,6 +94,12 @@ Router 会围绕委派授权、路由策略、并发、校准与 token 统计完
 
 Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker 使用的模型/强度。
 
+### Evidence reuse
+
+委派时，Router 会优先复用 Lead 已经拿到的有效证据，而不是让每个 Worker 从头重复搜索。证据不足、过期、冲突、无法验证来源，或任务明确要求独立复核时，Worker 才重新探索对应部分。
+
+证据复用与 Worker 线程复用无关：即使创建 fresh Worker，也可以把已有证据随 Task Packet 交给它。详细字段与失效条件只在 [Task Packet](skills/codex-luna-subagent-router/references/task-packet.md#evidence-reuse) 定义。
+
 ## 安装与升级
 
 ### 推荐：让 Codex / Agent 执行升级
@@ -100,8 +107,8 @@ Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker �
 可以把下面这段直接发送给 Codex：
 
 ```text
-请安装或升级 Codex Luna SubAgent Router 到当前稳定版 v2.6.2：
-https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.2
+请安装或升级 Codex Luna SubAgent Router 到当前稳定版 v2.6.3：
+https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.3
 
 先识别本机操作系统与 CPU 架构，下载匹配的 router-2.6.2-<platform> 完整包和校验文件。
 不要使用 GitHub 自动生成的 Source code.zip/.tar.gz 代替完整包。
@@ -133,7 +140,7 @@ $codex-luna-subagent-router 按成本优先策略完成这个任务。
 
 ## 数据简报
 
-v2.6.2 提供一键统计简报：
+v2.6.3 提供一键统计简报：
 
 ```text
 $codex-luna-subagent-router 生成当前项目的数据简报。
@@ -171,7 +178,7 @@ ${CODEX_HOME:-$HOME/.codex}/state/codex-luna-subagent-router/reports/
 "$ROUTER" report --output-dir /path/to/export
 ```
 
-详细说明见 [v2.6.2 数据简报](docs/v2.6.2-report.md)。
+详细说明见 [v2.6.3 数据简报](docs/v2.6.3-report.md)。
 
 ## 配置
 
@@ -227,7 +234,7 @@ Router 的统计与校准设计遵循以下边界：
 
 面向使用者：
 
-- [v2.6.2 数据简报](docs/v2.6.2-report.md)
+- [v2.6.3 数据简报](docs/v2.6.3-report.md)
 - [便携 Python 与完整包](skills/codex-luna-subagent-router/references/portable-runtime.md)
 - [路由策略](skills/codex-luna-subagent-router/references/routing-policy.md)
 - [工作规划](skills/codex-luna-subagent-router/references/work-planning.md)

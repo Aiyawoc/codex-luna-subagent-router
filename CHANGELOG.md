@@ -1,6 +1,13 @@
 # Changelog
 
-## 2.6.2 — 一键数据简报（未发布）
+## 2.6.3 — Evidence reuse（2026-09-17）
+
+- 在 Task Packet 中新增唯一的 `## Evidence reuse` 协议：Lead 可把已确认事实/关系、证据位置、已覆盖探索、证据缺口与 `do_not_repeat` 以最小 Evidence Packet 交给 Worker。
+- fresh Worker 与证据复用解耦；fresh Worker 也可复用有效证据，复用旧 Worker 也必须接收已变化的证据。
+- 只有证据不足、过期、冲突、不可验证或明确要求独立复核时才重复探索；`do_not_repeat` 不得阻止验收所需的新验证。
+- 避免双重约定：Task Packet 负责字段与失效规则，生命周期仅说明线程复用关系，Skill/README 只引用行为。
+
+## 2.6.2 — 一键数据简报（2026-09-17）
 
 - 仅新增一个用户命令 `bin/router report`；不改变路由、hooks、token 采集、refresh、outcome 或账本格式。
 - 只读复用 `route_advisor stats`、`token_usage stats`、`turn_usage stats` 的现有统计逻辑，一次生成格式化 Markdown 简报。
