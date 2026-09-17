@@ -20,10 +20,10 @@ From the [v2.6.3 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/
 
 | OS | CPU | Complete package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.6.2-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.6.2-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.6.2-windows-x64.zip` |
-| Windows | ARM64 | `router-2.6.2-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.6.3-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.6.3-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.6.3-windows-x64.zip` |
+| Windows | ARM64 | `router-2.6.3-windows-arm64.zip` |
 
 Each complete package has an adjacent `.sha256`, and the Release also contains `SHA256SUMS`.
 
@@ -105,7 +105,7 @@ Install or upgrade Codex Luna SubAgent Router to stable v2.6.3:
 https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.3
 
 Detect the operating system and CPU architecture first, then download the matching
-router-2.6.2-<platform> complete package and checksum files.
+router-2.6.3-<platform> complete package and checksum files.
 Do not substitute GitHub's automatic Source code.zip/.tar.gz archive.
 
 Verify SHA256, run the bundled doctor --verify, then perform the full install/upgrade.
@@ -137,7 +137,7 @@ For workloads with several independent subtasks, the Router evaluates the worklo
 
 ## Data brief
 
-v2.6.3 adds a one-command statistics brief:
+Since v2.6.2, the Router includes a one-command statistics brief:
 
 ```text
 $codex-luna-subagent-router Generate a data brief for the current project.
@@ -175,7 +175,7 @@ The command can also be used directly:
 "$ROUTER" report --output-dir /path/to/export
 ```
 
-See [v2.6.3 data brief](docs/v2.6.3-report.md) for details.
+See [v2.6.2 data brief](docs/v2.6.2-report.md) for details.
 
 ## Configuration
 
@@ -231,7 +231,7 @@ The Router's accounting and calibration follow these boundaries:
 
 User-facing references:
 
-- [v2.6.3 data brief](docs/v2.6.3-report.md)
+- [v2.6.2 data brief](docs/v2.6.2-report.md)
 - [Portable Python and complete packages](skills/codex-luna-subagent-router/references/portable-runtime.md)
 - [Routing policy](skills/codex-luna-subagent-router/references/routing-policy.md)
 - [Work planning](skills/codex-luna-subagent-router/references/work-planning.md)
