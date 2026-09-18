@@ -10,7 +10,7 @@ Current stable release: [**v2.6.5**](https://github.com/Aiyawoc/codex-luna-subag
 
 > **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.6.5 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 
-[Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
+[Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Using with @Visualize](#using-with-visualize) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
 
 ## Capabilities
 
@@ -214,6 +214,38 @@ Common commands:
 On Windows, use the installed `bin\router.cmd` launcher instead.
 
 Existing `stats` / `preview` / `refresh` commands remain available for inspecting or reviewing historical accounting. `refresh` is explicit; normal `stats` and `report` never scan rollouts behind the user's back.
+
+## Using with @Visualize
+
+If the current ChatGPT client provides `@Visualize`, Agent Router can generate the authoritative structured result first and then hand it to `@Visualize` for interactive presentation. **Agent Router remains the source of truth for routing and accounting; @Visualize only presents the result, does not recompute routes, and must not turn missing data into zero.**
+
+The prompts below can be copied directly.
+
+### 1. Interactive data brief dashboard
+
+```text
+$codex-luna-subagent-router Generate a data brief for the current project. Then hand the generated data.json to @Visualize and create an interactive dashboard showing main/SubAgent token share, model and reasoning effort, input/cached input/output, cache hit rate, completeness, and items needing attention. Add filters for model, Agent type, and status. Keep partial / unavailable values unknown instead of treating them as zero.
+```
+
+### 2. Token and cache trends
+
+```text
+$codex-luna-subagent-router Generate a data brief for the current project. Then hand the generated data.json to @Visualize and create a Token and cache trend view: show input, cached input, output, and cache hit rate by turn; distinguish Lead / SubAgent and model / reasoning effort; highlight high-input low-cache turns, unusual growth, and incomplete turns. Keep missing or unavailable values unknown and do not infer them.
+```
+
+### 3. RoutePlan / Worker DAG
+
+```text
+$codex-luna-subagent-router Generate a structured RoutePlan / work plan for the current task, planning only and without executing Workers. Then hand that plan to @Visualize and render a Worker DAG showing the Lead, wave, task_id, dependencies, Worker model / reasoning effort, minimum capability, capability gap reason, fresh / reuse status, read/write ownership, and Evidence reuse. Treat the Agent Router RoutePlan as the only routing source of truth; do not recompute routes in @Visualize.
+```
+
+### 4. Routing decision explanation
+
+```text
+$codex-luna-subagent-router Generate the routing decision and candidate comparison for the current task, including lead_only / delegate, recommended model, reasoning effort, minimum capability, route direction, capability gap, and the main decision reasons. Then hand the result to @Visualize and create an interactive routing explanation that visualizes the Lead → Worker choice and candidate differences. Only present results already computed by Agent Router; do not reimplement or modify routing rules in @Visualize.
+```
+
+If `@Visualize` is unavailable, Agent Router continues to work normally; use the generated `brief.md`, `data.json`, `data.csv`, and RoutePlan results directly.
 
 ## Security and privacy
 

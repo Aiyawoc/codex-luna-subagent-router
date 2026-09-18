@@ -10,7 +10,7 @@
 
 > **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.6.5 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
 
-[主要能力](#主要能力) · [快速开始](#快速开始) · [在-codex-中使用](#在-codex-中使用) · [数据简报](#数据简报) · [配置](#配置) · [常用命令](#常用命令) · [安全与隐私](#安全与隐私) · [文档](#文档)
+[主要能力](#主要能力) · [快速开始](#快速开始) · [在-codex-中使用](#在-codex-中使用) · [数据简报](#数据简报) · [配置](#配置) · [常用命令](#常用命令) · [与-visualize-配合](#与-visualize-配合) · [安全与隐私](#安全与隐私) · [文档](#文档)
 
 ## 主要能力
 
@@ -216,6 +216,38 @@ ROUTER="/实际安装路径/codex-luna-subagent-router/bin/router"
 Windows 将启动器替换为实际安装路径下的 `bin\router.cmd`。
 
 需要查看或恢复历史统计时，可使用现有 `stats` / `preview` / `refresh` 命令。`refresh` 是显式操作；普通 `stats` 和 `report` 不会偷偷扫描日志。
+
+## 与 @Visualize 配合
+
+如果当前 ChatGPT 客户端提供 `@Visualize`，可以让 Agent Router 先生成结构化结果，再交给 `@Visualize` 做交互式展示。**Agent Router 仍是路由与统计事实来源，@Visualize 只负责可视化，不重新计算路由，也不把缺失数据补成 0。**
+
+下面这些提示词可以直接复制使用。
+
+### 1. 数据简报交互面板
+
+```text
+$codex-luna-subagent-router 生成当前项目的数据简报。然后交由 @Visualize 使用本次生成的 data.json 制作一个交互式数据面板：展示主 / 子 Agent Token 占比、模型与 reasoning effort、输入 / 缓存输入 / 输出、缓存命中率、完整度和需要关注项；支持按模型、Agent 类型和状态筛选。partial / unavailable 保持未知，不按 0 处理。
+```
+
+### 2. Token 与缓存趋势
+
+```text
+$codex-luna-subagent-router 生成当前项目的数据简报。然后交由 @Visualize 使用本次生成的 data.json 制作 Token 与缓存趋势视图：按 turn 展示输入、缓存输入、输出和缓存命中率，区分主 Agent / SubAgent 以及 model / reasoning effort，并突出高输入低缓存命中、异常增长和 incomplete turn。缺失或不可用的数据保持未知，不自行推断。
+```
+
+### 3. RoutePlan / Worker DAG
+
+```text
+$codex-luna-subagent-router 为当前任务生成结构化 RoutePlan / 工作计划，只规划，不执行 Worker。然后交由 @Visualize 将本次计划制作成 Worker DAG：展示 Lead、wave、task_id、依赖关系、Worker model / reasoning effort、minimum capability、capability gap reason、fresh / reuse、读写所有权和 Evidence reuse。以 Agent Router 生成的 RoutePlan 为唯一事实来源，不由 @Visualize 重新计算路由。
+```
+
+### 4. 路由决策解释
+
+```text
+$codex-luna-subagent-router 根据当前任务生成路由决策与候选对比，包含 lead_only / delegate、推荐 model、reasoning effort、minimum capability、route direction、capability gap 和主要决策理由。然后交由 @Visualize 制作交互式路由解释视图，用图形展示 Lead → Worker 的选择过程和候选差异。只展示 Agent Router 已计算的结果，不在 @Visualize 中重新实现或修改路由规则。
+```
+
+`@Visualize` 不可用时，不影响 Agent Router 的正常工作；仍可直接使用 `brief.md`、`data.json`、`data.csv` 和 RoutePlan 结果。
 
 ## 安全与隐私
 
