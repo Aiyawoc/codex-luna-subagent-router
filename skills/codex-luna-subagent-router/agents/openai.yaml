@@ -1,5 +1,5 @@
 interface:
-  display_name: "成本优先 SubAgent 路由"
+  display_name: "Agent Router"
   short_description: "Luna Only / Adaptive，三层最低足够 Worker"
   default_prompt: "使用 $codex-luna-subagent-router；Adaptive 先检查 capability gap，再在 Luna/Sol/Astra 中选择最低足够 Worker。"
 policy:
