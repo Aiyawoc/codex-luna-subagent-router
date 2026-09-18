@@ -111,14 +111,14 @@ jobs:
           )
           needle = "    def test_two_turns_not_session_cumulative(self):\n"
           added = (
-              "    def test_stop_summary_is_compact_with_blank_lines(self):\\n"
-              "        self.hook();self.add([ctx(),event(),terminal()]);out=self.hook('Stop')\\n"
-              "        text=out['systemMessage']\\n"
-              "        self.assertIn('本轮 Token 用量\\\\n\\\\n主 Agent · Astra high\\\\n输入 42k（缓存 30k 71%） · 输出 3k\\\\n\\\\n完整度：完整 1 · 待确认 0 · 部分 0 · 不可用 0',text)\\n"
-              "        self.assertNotIn('完整快照',text)\\n"
-              "        self.assertNotIn('本轮已知合计',text)\\n"
-              "        self.assertNotIn('总量 ',text)\\n"
-              "\\n"
+              "    def test_stop_summary_is_compact_with_blank_lines(self):\n"
+              "        self.hook();self.add([ctx(),event(),terminal()]);out=self.hook('Stop')\n"
+              "        text=out['systemMessage']\n"
+              "        self.assertIn('本轮 Token 用量\\n\\n主 Agent · Astra high\\n输入 42k（缓存 30k 71%） · 输出 3k\\n\\n完整度：完整 1 · 待确认 0 · 部分 0 · 不可用 0',text)\n"
+              "        self.assertNotIn('完整快照',text)\n"
+              "        self.assertNotIn('本轮已知合计',text)\n"
+              "        self.assertNotIn('总量 ',text)\n"
+              "\n"
           )
           if needle not in tests:
               raise SystemExit("test insertion point not found")
