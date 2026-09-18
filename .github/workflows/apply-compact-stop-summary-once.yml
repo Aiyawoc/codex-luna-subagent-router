@@ -129,11 +129,26 @@ jobs:
           )
           test_path.write_text(tests, encoding="utf-8")
 
+          recovery_path = Path("skills/codex-luna-subagent-router/tests/test_usage_recovery.py")
+          recovery = recovery_path.read_text(encoding="utf-8")
+          old_recovery = """        self.assertIn('尚未关联', summary)
+        combined = next(line for line in summary.splitlines() if line.startswith('本轮已知合计'))
+        self.assertNotIn('完整快照', combined)
+"""
+          new_recovery = """        self.assertIn('未关联线程：1（未计入）', summary)
+        self.assertIn('完整度：完整 1 · 待确认 0 · 部分 0 · 不可用 0', summary)
+        self.assertNotIn('完整快照', summary)
+"""
+          if old_recovery not in recovery:
+              raise SystemExit("usage recovery assertion block not found")
+          recovery_path.write_text(recovery.replace(old_recovery, new_recovery, 1), encoding="utf-8")
+
           manifest_path = Path("MANIFEST.sha256")
           lines = manifest_path.read_text(encoding="utf-8").splitlines()
           changed = {
               turn_path.as_posix(): hashlib.sha256(turn_path.read_bytes()).hexdigest(),
               test_path.as_posix(): hashlib.sha256(test_path.read_bytes()).hexdigest(),
+              recovery_path.as_posix(): hashlib.sha256(recovery_path.read_bytes()).hexdigest(),
           }
           out = []
           seen = set()
@@ -161,6 +176,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add skills/codex-luna-subagent-router/scripts/turn_usage.py \
                   skills/codex-luna-subagent-router/tests/test_turn_usage.py \
+                  skills/codex-luna-subagent-router/tests/test_usage_recovery.py \
                   MANIFEST.sha256
           git commit -m "fix: 精简 Stop Hook Token 摘要"
           git push origin HEAD:fix/compact-stop-hook-summary
