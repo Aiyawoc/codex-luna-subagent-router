@@ -341,21 +341,51 @@ def finish(payload, upath, sid, root, *, mark_stopped=True, refresh_sealed=False
         return save(path, row, old)
 
 
-def report(row, heading="本轮 token 用量（已登记线程，本轮起点至当前快照）", *, include_context=False):
+def _cache_percent(counts):
+    input_tokens = counts["input_tokens"]
+    cached_tokens = counts["cached_input_tokens"]
+    if input_tokens is None or cached_tokens is None:
+        return None
+    if input_tokens == 0:
+        return 0 if cached_tokens == 0 else None
+    return (cached_tokens * 100 + input_tokens // 2) // input_tokens
+
+
+def _usage_line(snapshot):
+    counts = snapshot["counts"]
+    cached = usage.compact(counts["cached_input_tokens"])
+    percent = _cache_percent(counts)
+    if percent is not None:
+        cached += f" {percent}%"
+    return (f"输入 {usage.compact(counts['input_tokens'])}（缓存 {cached}）"
+            f" · 输出 {usage.compact(counts['output_tokens'])}")
+
+
+def report(row, heading="本轮 Token 用量", *, include_context=False):
     snapshots = [row["main_snapshot"], *row["child_snapshots"].values()]
     aggregate = usage.aggregate_snapshots(snapshots)
     if row["excluded_children"]:
         aggregate["status"] = "partial" if aggregate["counts"]["total_tokens"] is not None else "unavailable"
         aggregate["reasons"] = sorted(set(aggregate["reasons"]) | {"unassociated_children"})
-    lines = [heading, usage.summary(row["main_snapshot"], "主 Agent · " + usage.model_label(row["main_snapshot"]))]
-    for agent, snap in row["child_snapshots"].items():
-        lines.append(usage.summary(snap, "子 Agent · " + usage.model_label(snap) + " · " + agent[-6:]))
-    lines.append(usage.summary(aggregate, "本轮已知合计（含缓存）"))
-    lines.append(f"已登记范围：完整 {aggregate['complete']} / 待确认 {aggregate['waiting']} / 部分 {aggregate['partial']} / 不可用 {aggregate['unavailable']}；不含未关联线程，不是账单。")
-    if row["excluded_children"]:
-        lines.append(f"本轮另有 {row['excluded_children']} 个已触发子线程无法安全关联，未计入。")
+
+    lines = [heading]
     if include_context:
-        lines.insert(1, diagnostics.context_line(row))
+        lines.append(diagnostics.context_line(row))
+    lines.extend(["", "主 Agent · " + usage.model_label(row["main_snapshot"]), _usage_line(row["main_snapshot"])])
+
+    for agent, snap in row["child_snapshots"].items():
+        lines.extend(["", "子 Agent · " + usage.model_label(snap) + " · " + agent[-6:], _usage_line(snap)])
+
+    if len(snapshots) > 1:
+        lines.extend(["", "本轮合计", _usage_line(aggregate)])
+
+    lines.extend([
+        "",
+        f"完整度：完整 {aggregate['complete']} · 待确认 {aggregate['waiting']} · 部分 {aggregate['partial']} · 不可用 {aggregate['unavailable']}",
+        "范围：仅已登记线程，不是账单。",
+    ])
+    if row["excluded_children"]:
+        lines.append(f"未关联线程：{row['excluded_children']}（未计入）")
     return "\n".join(lines)
 
 
