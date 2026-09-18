@@ -1,10 +1,10 @@
-# Codex Cost-Aware SubAgent Router
+# Agent Router
 
 **简体中文** | [English](README.en.md)
 
 **保持主 Agent 不变，把适合的子任务交给成本更低、但足够完成任务的 Worker。**
 
-这是一个面向 Codex 的成本优先 SubAgent 路由 Skill。它可以按任务复杂度在 **Luna / Sol / Astra + reasoning effort** 之间选择 Worker，支持整组任务规划、并发执行、验证结果校准，以及可选的主／子 Agent token 统计。
+**Agent Router** 是一个面向 Codex 的成本优先 SubAgent 路由 Skill。它可以按任务复杂度在 **Luna / Sol / Astra + reasoning effort** 之间选择 Worker，支持整组任务规划、并发执行、验证结果校准，以及可选的主／子 Agent token 统计。
 
 当前稳定版：[**v2.6.4**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.4) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
@@ -53,7 +53,7 @@ Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker �
 可以把下面这段直接发送给 Codex：
 
 ```text
-请安装或升级 Codex Luna SubAgent Router 到当前稳定版 v2.6.4：
+请安装或升级 Agent Router（Skill ID：`$codex-luna-subagent-router`）到当前稳定版 v2.6.4：
 https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.4
 
 先识别本机操作系统与 CPU 架构，下载匹配的 router-2.6.4-<platform> 完整包和校验文件。
@@ -112,7 +112,7 @@ cd C:\解压目录\codex-luna-subagent-router
 安装完成后，可以直接在 Codex 中说：
 
 ```text
-请检查 Codex Luna SubAgent Router 的安装状态，并按照安装引导完成所有尚未配置的选项。
+请检查 Agent Router（`$codex-luna-subagent-router`）的安装状态，并按照安装引导完成所有尚未配置的选项。
 ```
 
 Router 会围绕委派授权、路由策略、并发、校准与 token 统计完成引导；已明确关闭的选项不会被静默重新开启。
