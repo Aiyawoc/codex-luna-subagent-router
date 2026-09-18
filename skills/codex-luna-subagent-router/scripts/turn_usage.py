@@ -341,26 +341,6 @@ def finish(payload, upath, sid, root, *, mark_stopped=True, refresh_sealed=False
         return save(path, row, old)
 
 
-def _cache_percent(counts):
-    input_tokens = counts["input_tokens"]
-    cached_tokens = counts["cached_input_tokens"]
-    if input_tokens is None or cached_tokens is None:
-        return None
-    if input_tokens == 0:
-        return 0 if cached_tokens == 0 else None
-    return (cached_tokens * 100 + input_tokens // 2) // input_tokens
-
-
-def _usage_line(snapshot):
-    counts = snapshot["counts"]
-    cached = usage.compact(counts["cached_input_tokens"])
-    percent = _cache_percent(counts)
-    if percent is not None:
-        cached += f" {percent}%"
-    return (f"输入 {usage.compact(counts['input_tokens'])}（缓存 {cached}）"
-            f" · 输出 {usage.compact(counts['output_tokens'])}")
-
-
 def report(row, heading="本轮 Token 用量", *, include_context=False):
     snapshots = [row["main_snapshot"], *row["child_snapshots"].values()]
     aggregate = usage.aggregate_snapshots(snapshots)
@@ -371,13 +351,13 @@ def report(row, heading="本轮 Token 用量", *, include_context=False):
     lines = [heading]
     if include_context:
         lines.append(diagnostics.context_line(row))
-    lines.extend(["", "主 Agent · " + usage.model_label(row["main_snapshot"]), _usage_line(row["main_snapshot"])])
+    lines.extend(["", "主 Agent · " + usage.model_label(row["main_snapshot"]), usage.compact_usage_line(row["main_snapshot"])])
 
     for agent, snap in row["child_snapshots"].items():
-        lines.extend(["", "子 Agent · " + usage.model_label(snap) + " · " + agent[-6:], _usage_line(snap)])
+        lines.extend(["", "子 Agent · " + usage.model_label(snap) + " · " + agent[-6:], usage.compact_usage_line(snap)])
 
     if len(snapshots) > 1:
-        lines.extend(["", "本轮合计", _usage_line(aggregate)])
+        lines.extend(["", "本轮合计", usage.compact_usage_line(aggregate)])
 
     lines.extend([
         "",
