@@ -10,60 +10,7 @@ Current stable release: [**v2.6.4**](https://github.com/Aiyawoc/codex-luna-subag
 
 > **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.6.4 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 
-[Quick start](#quick-start) · [Capabilities](#capabilities) · [Install and upgrade](#install-and-upgrade) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
-
-## Quick start
-
-### 1. Download the correct platform package
-
-From the [v2.6.4 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.4), download:
-
-| OS | CPU | Complete package |
-|---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.6.4-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.6.4-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.6.4-windows-x64.zip` |
-| Windows | ARM64 | `router-2.6.4-windows-arm64.zip` |
-
-Each complete package has an adjacent `.sha256`, and the Release also contains `SHA256SUMS`.
-
-**There is currently no Linux portable package.** Linux or source development can explicitly use Python >= 3.11; see [portable runtime](skills/codex-luna-subagent-router/references/portable-runtime.md).
-
-### 2. Verify and install
-
-macOS:
-
-```bash
-cd /extracted/codex-luna-subagent-router
-./bin/router doctor --verify
-bash ./install.sh --global
-```
-
-Windows:
-
-```powershell
-cd C:\extracted\codex-luna-subagent-router
-.\bin\router.cmd doctor --verify
-.\bin\router.cmd install --global
-```
-
-For a project-local installation, replace `--global` with:
-
-```text
---project <project-path>
-```
-
-The installer preserves existing routing settings, explicit `off/false`, outcome/usage ledgers, unmanaged configuration, and unrelated Agent profiles. Installing or migrating hooks still requires normal user confirmation and client trust review.
-
-### 3. Let Codex finish guided setup
-
-After installation, you can simply tell Codex:
-
-```text
-Check the Codex Luna SubAgent Router installation and complete any remaining guided setup questions.
-```
-
-The Router guides delegation authorization, routing mode, concurrency, calibration, and token accounting. Settings that the user explicitly disabled are not silently re-enabled.
+[Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
 
 ## Capabilities
 
@@ -94,9 +41,9 @@ Typical routing intent:
 
 The Router does not switch the user's Lead model. It decides whether to delegate and which Worker model/effort to use.
 
-## Install and upgrade
+## Quick start
 
-### Recommended: let Codex / an Agent perform the upgrade
+### 1. Recommended: let Codex / an Agent perform the upgrade
 
 You can paste this into Codex:
 
@@ -115,7 +62,60 @@ If hooks must be installed or migrated, ask normally and use the client's trust 
 do not grant trust automatically.
 ```
 
-### Upgrade behavior
+### 2. Manual installation
+
+#### 2.1 Download the correct platform package
+
+From the [v2.6.4 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.4), download:
+
+| OS | CPU | Complete package |
+|---|---|---|
+| macOS | Apple Silicon / ARM64 | `router-2.6.4-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.6.4-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.6.4-windows-x64.zip` |
+| Windows | ARM64 | `router-2.6.4-windows-arm64.zip` |
+
+Each complete package has an adjacent `.sha256`, and the Release also contains `SHA256SUMS`.
+
+**There is currently no Linux portable package.** Linux or source development can explicitly use Python >= 3.11; see [portable runtime](skills/codex-luna-subagent-router/references/portable-runtime.md).
+
+#### 2.2 Verify and install
+
+macOS:
+
+```bash
+cd /extracted/codex-luna-subagent-router
+./bin/router doctor --verify
+bash ./install.sh --global
+```
+
+Windows:
+
+```powershell
+cd C:\extracted\codex-luna-subagent-router
+.\bin\router.cmd doctor --verify
+.\bin\router.cmd install --global
+```
+
+For a project-local installation, replace `--global` with:
+
+```text
+--project <project-path>
+```
+
+The installer preserves existing routing settings, explicit `off/false`, outcome/usage ledgers, unmanaged configuration, and unrelated Agent profiles. Installing or migrating hooks still requires normal user confirmation and client trust review.
+
+#### 2.3 Let Codex finish guided setup
+
+After installation, you can simply tell Codex:
+
+```text
+Check the Codex Luna SubAgent Router installation and complete any remaining guided setup questions.
+```
+
+The Router guides delegation authorization, routing mode, concurrency, calibration, and token accounting. Settings that the user explicitly disabled are not silently re-enabled.
+
+#### 2.4 Upgrade behavior
 
 - Complete packages support both fresh installation and upgrades;
 - the installer verifies staging before replacement and rolls back on failure;
