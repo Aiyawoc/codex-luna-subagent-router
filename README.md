@@ -10,60 +10,7 @@
 
 > **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.6.4 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
 
-[快速开始](#快速开始) · [主要能力](#主要能力) · [安装与升级](#安装与升级) · [在-codex-中使用](#在-codex-中使用) · [数据简报](#数据简报) · [配置](#配置) · [常用命令](#常用命令) · [安全与隐私](#安全与隐私) · [文档](#文档)
-
-## 快速开始
-
-### 1. 下载正确的平台包
-
-从 [v2.6.4 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.4) 下载：
-
-| 系统 | CPU | 完整包 |
-|---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.6.4-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.6.4-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.6.4-windows-x64.zip` |
-| Windows | ARM64 | `router-2.6.4-windows-arm64.zip` |
-
-每个完整包都附带独立 `.sha256`，Release 中同时提供 `SHA256SUMS`。
-
-**当前不提供 Linux 便携包。** Linux 或源码开发可显式使用 Python >= 3.11，见 [便携运行环境说明](skills/codex-luna-subagent-router/references/portable-runtime.md)。
-
-### 2. 校验并安装
-
-macOS：
-
-```bash
-cd /解压目录/codex-luna-subagent-router
-./bin/router doctor --verify
-bash ./install.sh --global
-```
-
-Windows：
-
-```powershell
-cd C:\解压目录\codex-luna-subagent-router
-.\bin\router.cmd doctor --verify
-.\bin\router.cmd install --global
-```
-
-项目级安装将 `--global` 替换为：
-
-```text
---project <项目路径>
-```
-
-安装器会保留已有路由配置、明确的 `off/false`、outcome/usage 账本、非 Router 管理的配置和其他 Agent profiles。需要安装或迁移 hooks 时仍会经过正常的用户确认与信任审查。
-
-### 3. 让 Codex 完成安装引导
-
-安装完成后，可以直接在 Codex 中说：
-
-```text
-请检查 Codex Luna SubAgent Router 的安装状态，并按照安装引导完成所有尚未配置的选项。
-```
-
-Router 会围绕委派授权、路由策略、并发、校准与 token 统计完成引导；已明确关闭的选项不会被静默重新开启。
+[主要能力](#主要能力) · [快速开始](#快速开始) · [在-codex-中使用](#在-codex-中使用) · [数据简报](#数据简报) · [配置](#配置) · [常用命令](#常用命令) · [安全与隐私](#安全与隐私) · [文档](#文档)
 
 ## 主要能力
 
@@ -99,9 +46,9 @@ Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker �
 
 证据复用与 Worker 线程复用无关：即使创建 fresh Worker，也可以把已有证据随 Task Packet 交给它。详细字段与失效条件只在 [Task Packet](skills/codex-luna-subagent-router/references/task-packet.md#evidence-reuse) 定义。
 
-## 安装与升级
+## 快速开始
 
-### 推荐：让 Codex / Agent 执行升级
+### 1. 推荐：让 Codex / Agent 执行升级
 
 可以把下面这段直接发送给 Codex：
 
@@ -117,7 +64,60 @@ https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.4
 如需安装或迁移 hooks，请正常询问并经过客户端信任审查；不要自行授信。
 ```
 
-### 升级注意事项
+### 2. 手动安装
+
+#### 2.1 下载正确的平台包
+
+从 [v2.6.4 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.4) 下载：
+
+| 系统 | CPU | 完整包 |
+|---|---|---|
+| macOS | Apple Silicon / ARM64 | `router-2.6.4-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.6.4-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.6.4-windows-x64.zip` |
+| Windows | ARM64 | `router-2.6.4-windows-arm64.zip` |
+
+每个完整包都附带独立 `.sha256`，Release 中同时提供 `SHA256SUMS`。
+
+**当前不提供 Linux 便携包。** Linux 或源码开发可显式使用 Python >= 3.11，见 [便携运行环境说明](skills/codex-luna-subagent-router/references/portable-runtime.md)。
+
+#### 2.2 校验并安装
+
+macOS：
+
+```bash
+cd /解压目录/codex-luna-subagent-router
+./bin/router doctor --verify
+bash ./install.sh --global
+```
+
+Windows：
+
+```powershell
+cd C:\解压目录\codex-luna-subagent-router
+.\bin\router.cmd doctor --verify
+.\bin\router.cmd install --global
+```
+
+项目级安装将 `--global` 替换为：
+
+```text
+--project <项目路径>
+```
+
+安装器会保留已有路由配置、明确的 `off/false`、outcome/usage 账本、非 Router 管理的配置和其他 Agent profiles。需要安装或迁移 hooks 时仍会经过正常的用户确认与信任审查。
+
+#### 2.3 让 Codex 完成安装引导
+
+安装完成后，可以直接在 Codex 中说：
+
+```text
+请检查 Codex Luna SubAgent Router 的安装状态，并按照安装引导完成所有尚未配置的选项。
+```
+
+Router 会围绕委派授权、路由策略、并发、校准与 token 统计完成引导；已明确关闭的选项不会被静默重新开启。
+
+#### 2.4 升级注意事项
 
 - 完整包可以用于新安装，也可以升级旧版本；
 - 安装器会先校验并在暂存目录准备，失败时回滚；
