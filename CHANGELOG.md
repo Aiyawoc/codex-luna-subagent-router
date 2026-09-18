@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.6.5 — Agent Router 触发与 Hook 展示收口（2026-09-18）
+
+- UI 与当前用户文档统一使用 **Agent Router** 展示名；稳定 Skill ID 继续保持 `$codex-luna-subagent-router`，目录、state 路径、环境变量和托管 marker 不改名。
+- 强化长期自动委派授权：每轮先评估是否值得委派；成本净收益、capability gap 或独立验证收益满足条件时自动调用 canonical Skill ID，无需用户再次点名 Agent Router。
+- 安装盘点不再只检查 `AGENTS.md` 托管 marker；现在识别 current / stale / malformed，旧授权块或损坏块会重新触发 Q2 刷新，同时保留用户其它 AGENTS 内容。
+- 精简主 Agent `Stop` Token 面板：增加空行，使用“输入（缓存/命中率）· 输出”格式；主面板继续汇总安全关联的 SubAgent 与本轮合计，详细诊断留在 stats/diagnostics。
+- 同步精简 `SubagentStop`：单个 Worker 仅显示模型与“输入（缓存/命中率）· 输出”；主/子 Hook 共用同一格式函数，避免后续展示漂移。
+- README 中英文重排为“主要能力 → 快速开始”，优先推荐 Codex/Agent 自动安装升级，再提供完整手动下载、校验与安装流程。
+
 ## 2.6.4 — 版本来源单一化（2026-09-17）
 
 - 修复 v2.6.3 实际安装包中 `router report` 仍显示 `Router v2.6.2` 的问题。
