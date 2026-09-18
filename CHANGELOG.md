@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.6 — Visualize 文档与 SubAgent Token 边界隔离（2026-09-18）
+
+- README 中英文新增 **@Visualize** 配合用法，提供数据简报 Dashboard、Token/缓存趋势、RoutePlan/Worker DAG 和路由决策解释四组可直接复制的提示词；Agent Router 继续作为路由与统计事实来源，Visualize 只负责展示。
+- 修复多 SubAgent 同轮统计的 sibling 污染：正常 `SubagentStop` 现在立即把精确 child locator 与 end boundary 同步进 parent turn。
+- 当 parent turn 在正常 `Stop` 前被封存时，可从精确 `parent_id + agent_id + scope` usage 记录补回缺失 child locator/end boundary，不再因为另一个 child 缺失 `SubagentStop` 而连带破坏健康 sibling。
+- 若健康 child 的 `SubagentStop` 晚于 parent turn seal，只恢复该精确 child 的 snapshot；其他 sibling 保持各自状态，已知 Token 继续独立汇总。
+- 本版**不**实现 Interrupted Worker Recovery；被中断 child 自身的恢复机制仍保持后续独立设计。
+
 ## 2.6.5 — Agent Router 触发与 Hook 展示收口（2026-09-18）
 
 - UI 与当前用户文档统一使用 **Agent Router** 展示名；稳定 Skill ID 继续保持 `$codex-luna-subagent-router`，目录、state 路径、环境变量和托管 marker 不改名。
