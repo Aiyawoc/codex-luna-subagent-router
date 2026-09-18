@@ -455,6 +455,12 @@ def hook(payload, path=None, project_root=None):
         # transcript_path belongs to the PARENT: never use it as a fallback.
         row = collect(path, agent, parent, sid, transcript=payload.get("agent_transcript_path"), root=root, source="rollout",
                       agent_type=payload.get("agent_type"))
+        if store.effective_config(root).get("token_accounting_scope") == "main_and_subagents":
+            try:
+                import turn_usage
+                turn_usage.sync_child_stop(payload, path, sid, root, row)
+            except (OSError, ValueError, TypeError, KeyError):
+                pass  # Turn accounting recovery must never block the SubagentStop lifecycle.
         return {"systemMessage": hook_summary(row["snapshot"], model_label(row["snapshot"], row["agent_type"])), "continue": True}
     finally:
         os.chdir(old_cwd)

@@ -231,6 +231,54 @@ class MainTurnTests(Sandbox):
         self.assertIn('本轮合计\n输入 84k（缓存 60k 71%） · 输出 6k',out['systemMessage'])
         self.assertEqual(len(self.row()['child_snapshots']),1)
 
+    def test_subagent_stop_syncs_turn_member_boundary_before_parent_stop(self):
+        self.hook()
+        usage.hook(self.hook_payload('SubagentStart'), self.upath)
+        self.transcript()
+        usage.hook(self.hook_payload('SubagentStop'), self.upath)
+        member = self.row()['members'][AGENT]
+        self.assertIsNotNone(member['locator'])
+        self.assertIsNotNone(member.get('end_cursor'))
+
+    def test_seal_backfills_exact_child_locator_from_usage_record(self):
+        self.hook()
+        usage.hook(self.hook_payload('SubagentStart'), self.upath)
+        self.transcript()
+        self.collect()  # Simulate an already collected child before turn-ledger sync.
+        self.assertIsNone(self.row()['members'][AGENT]['locator'])
+        self.hook(turn=TURN2)
+        old = self.row()
+        self.assertEqual(old['phase'], 'sealed')
+        self.assertIsNotNone(old['members'][AGENT]['locator'])
+        self.assertIsNotNone(old['members'][AGENT].get('end_cursor'))
+        self.assertEqual(old['child_snapshots'][AGENT]['status'], 'complete')
+        self.assertEqual(old['child_snapshots'][AGENT]['counts'], counter())
+
+    def test_late_healthy_child_stop_does_not_get_poisoned_by_unstopped_sibling(self):
+        other = 'child-worker-002'
+        self.hook()
+        usage.hook(self.hook_payload('SubagentStart'), self.upath)
+        other_start = self.hook_payload('SubagentStart')
+        other_start['agent_id'] = other
+        other_start['agent_transcript_path'] = str(self.home / 'sessions/child-2.jsonl')
+        usage.hook(other_start, self.upath)
+
+        # Child A has a valid final transcript, but its stop arrives only after
+        # the parent turn has already been sealed. Child B never emits Stop.
+        self.transcript()
+        self.hook(turn=TURN2)
+        self.assertEqual(self.row()['child_snapshots'][AGENT]['status'], 'unavailable')
+        self.assertEqual(self.row()['child_snapshots'][other]['status'], 'unavailable')
+
+        usage.hook(self.hook_payload('SubagentStop'), self.upath)
+        old = self.row()
+        self.assertEqual(old['child_snapshots'][AGENT]['status'], 'complete')
+        self.assertEqual(old['child_snapshots'][AGENT]['counts'], counter())
+        self.assertEqual(old['child_snapshots'][other]['status'], 'unavailable')
+        aggregate = usage.aggregate_snapshots([old['child_snapshots'][AGENT], old['child_snapshots'][other]])
+        self.assertEqual(aggregate['counts']['total_tokens'], counter()['total_tokens'])
+        self.assertEqual(aggregate['field_coverage']['total_tokens'], 1)
+
     def test_parent_activity_can_recover_child_association(self):
         self.hook()
         usage.register(self.upath, AGENT, PARENT, 'global', 'default')
