@@ -3,7 +3,7 @@ name: codex-luna-subagent-router
 description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存在能力差距或需要独立复核时使用；支持 luna_only/adaptive、整组任务规划，以及本 Skill 安装、升级和配置。
 ---
 
-# Cost-Aware SubAgent Router
+# Agent Router
 
 可靠完成任务并最小化总成本。主 Agent 保持用户选择的模型和 reasoning。用户本轮要求优先；权限、精确绑定和不可逆边界仍生效。
 
