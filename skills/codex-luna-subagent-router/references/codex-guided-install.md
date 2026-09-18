@@ -1,4 +1,4 @@
-# Codex v2 引导安装与升级
+# Agent Router · Codex 引导安装与升级
 
 安装、升级是线性任务，不创建 Worker。v2.6.0 交付开发版（正式 Release 发布前仅使用明确选择的 PR 产物）。
 
