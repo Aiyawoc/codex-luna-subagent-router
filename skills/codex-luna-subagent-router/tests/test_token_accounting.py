@@ -100,6 +100,15 @@ class FormatterTests(unittest.TestCase):
             self.assertIn(value, text)
         self.assertNotIn("75k", text)
 
+    def test_hook_summary_is_compact_and_multiline(self):
+        snapshot = dict(counts=counter(), status="complete", model="gpt-5.6-sol", effort="high", reasons=[])
+        self.assertEqual(
+            usage.hook_summary(snapshot),
+            "Sol high\n\n输入 42k（缓存 30k 71%） · 输出 3k",
+        )
+        self.assertNotIn("总量", usage.hook_summary(snapshot))
+        self.assertNotIn("完整快照", usage.hook_summary(snapshot))
+
 
 class ReaderTests(Sandbox):
     def test_exact_fresh_snapshot(self):
@@ -279,7 +288,7 @@ class LedgerAndHooksTests(Sandbox):
         self.transcript()
         output=usage.hook(self.hook_payload(),self.upath)
         self.assertTrue(output["continue"])
-        self.assertIn("总量 45k",output["systemMessage"])
+        self.assertEqual(output["systemMessage"], "Sol high\n\n输入 42k（缓存 30k 71%） · 输出 3k")
         self.assertFalse(self.registry.exists())
 
     def test_off_hook_does_not_collect(self):
@@ -401,7 +410,7 @@ class ExtraIntegrationTests(Sandbox):
         p.write_text(json.dumps(dict(schema_version='2.0',routing_mode='luna_only',token_accounting='on')))
         self.transcript()
         output=usage.hook(self.hook_payload(),self.upath,self.project)
-        self.assertIn('总量 45k',output['systemMessage'])
+        self.assertEqual(output['systemMessage'], 'Sol high\n\n输入 42k（缓存 30k 71%） · 输出 3k')
         self.assertEqual(usage.statistics(self.upath)['workers'][0]['scope_id'],store.scope_id(str(self.project)))
         cmd=config.hook_handler(SCRIPTS/'token_usage.py',project_root=self.project)['command']
         self.assertIn('--project-root',cmd)

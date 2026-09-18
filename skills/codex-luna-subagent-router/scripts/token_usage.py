@@ -128,6 +128,30 @@ def summary(snapshot, label=None) -> str:
             f"（缓存命中 {compact(c['cached_input_tokens'])}）| 输出 {compact(c['output_tokens'])} tokens | {display_status(snapshot)}")
 
 
+def cache_percent(counts):
+    input_tokens = counts["input_tokens"]
+    cached_tokens = counts["cached_input_tokens"]
+    if input_tokens is None or cached_tokens is None:
+        return None
+    if input_tokens == 0:
+        return 0 if cached_tokens == 0 else None
+    return (cached_tokens * 100 + input_tokens // 2) // input_tokens
+
+
+def compact_usage_line(snapshot):
+    counts = snapshot["counts"]
+    cached = compact(counts["cached_input_tokens"])
+    percent = cache_percent(counts)
+    if percent is not None:
+        cached += f" {percent}%"
+    return (f"输入 {compact(counts['input_tokens'])}（缓存 {cached}）"
+            f" · 输出 {compact(counts['output_tokens'])}")
+
+
+def hook_summary(snapshot, label=None):
+    return f"{label or model_label(snapshot)}\n\n{compact_usage_line(snapshot)}"
+
+
 def aggregate_snapshots(snapshots):
     """Known totals only. Completeness describes observed rows, never all work."""
     values, coverage = {}, {}
@@ -431,7 +455,7 @@ def hook(payload, path=None, project_root=None):
         # transcript_path belongs to the PARENT: never use it as a fallback.
         row = collect(path, agent, parent, sid, transcript=payload.get("agent_transcript_path"), root=root, source="rollout",
                       agent_type=payload.get("agent_type"))
-        return {"systemMessage": summary(row["snapshot"], model_label(row["snapshot"], row["agent_type"])), "continue": True}
+        return {"systemMessage": hook_summary(row["snapshot"], model_label(row["snapshot"], row["agent_type"])), "continue": True}
     finally:
         os.chdir(old_cwd)
 
