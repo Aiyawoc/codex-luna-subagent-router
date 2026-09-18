@@ -6,9 +6,9 @@
 
 **Agent Router** is a cost-first SubAgent routing Skill for Codex. It can choose **Luna / Sol / Astra + reasoning effort** per task, plan a whole workload, run independent Workers concurrently, calibrate routing from verified outcomes, and optionally track main/child token usage.
 
-Current stable release: [**v2.6.5**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.5) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+Current stable release: [**v2.6.6**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.6) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.6.5 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
+> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.6.6 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 
 [Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Using with @Visualize](#using-with-visualize) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
 
@@ -48,11 +48,11 @@ The Router does not switch the user's Lead model. It decides whether to delegate
 You can paste this into Codex:
 
 ```text
-Install or upgrade Agent Router (Skill ID: `$codex-luna-subagent-router`) to stable v2.6.5:
-https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.5
+Install or upgrade Agent Router (Skill ID: `$codex-luna-subagent-router`) to stable v2.6.6:
+https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.6
 
 Detect the operating system and CPU architecture first, then download the matching
-router-2.6.5-<platform> complete package and checksum files.
+router-2.6.6-<platform> complete package and checksum files.
 Do not substitute GitHub's automatic Source code.zip/.tar.gz archive.
 
 Verify SHA256, run the bundled doctor --verify, then perform the full install/upgrade.
@@ -66,14 +66,14 @@ do not grant trust automatically.
 
 #### 2.1 Download the correct platform package
 
-From the [v2.6.5 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.5), download:
+From the [v2.6.6 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.6), download:
 
 | OS | CPU | Complete package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.6.5-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.6.5-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.6.5-windows-x64.zip` |
-| Windows | ARM64 | `router-2.6.5-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.6.6-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.6.6-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.6.6-windows-x64.zip` |
+| Windows | ARM64 | `router-2.6.6-windows-arm64.zip` |
 
 Each complete package has an adjacent `.sha256`, and the Release also contains `SHA256SUMS`.
 
