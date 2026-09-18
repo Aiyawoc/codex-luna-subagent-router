@@ -78,7 +78,9 @@ jobs:
           python - <<'PY'
           import json, os
           from pathlib import Path
-          payload = json.loads((Path(os.environ["RUNNER_TEMP"]) / "report" / "data.json").read_text())
+          files = list((Path(os.environ["RUNNER_TEMP"]) / "report").rglob("data.json"))
+          assert len(files) == 1, files
+          payload = json.loads(files[0].read_text())
           assert payload["router_version"] == "2.6.5"
           PY
           ! grep -F 'router-2.6.4-' README.md README.en.md
