@@ -11,7 +11,7 @@ from pathlib import Path
 import outcome_store as store
 import configure_token_accounting as tokens
 import configure_subagent_limit as concurrency
-from configure_guided_install import START_MARKER, END_MARKER
+from configure_guided_install import _authorization_block, authorization_state
 
 
 def _toml(path):
@@ -39,14 +39,25 @@ def inspect(codex_home, project_root=None):
     feature = config.get("features", {}).get("default_mode_request_user_input")
     add(1, "default_mode_request_user_input", feature, feature is None,
         "未设置提问模式：是否开启 default_mode_request_user_input？")
-    scopes = []
+    skill_root = Path(__file__).resolve().parents[1]
+    snippet = (skill_root / "references" / "AGENTS-snippet.md").read_text(encoding="utf-8")
+    expected_authorization = _authorization_block(snippet)
+    scopes, stale_scopes = [], []
     for scope, path in (("global", home / "AGENTS.md"), ("project", root / "AGENTS.md" if root else None)):
         if path:
             store.safe_path(path)
             text = path.read_text(encoding="utf-8") if path.exists() else ""
-            if START_MARKER in text and END_MARKER in text:
+            state = authorization_state(text, expected_authorization)
+            if state == "current":
                 scopes.append(scope)
-    add(2, "delegation", scopes or None, not scopes, "未发现托管长期授权：全局、项目或不安装？")
+            elif state in ("stale", "malformed"):
+                stale_scopes.append(scope)
+    current_delegation = {"current": scopes, "stale": stale_scopes} if stale_scopes else (scopes or None)
+    question = (
+        "托管长期授权内容已过期或损坏：请选择全局、项目或不安装以刷新。"
+        if stale_scopes else "未发现托管长期授权：全局、项目或不安装？"
+    )
+    add(2, "delegation", current_delegation, bool(stale_scopes) or not scopes, question)
     mode = routing.get("routing_mode")
     add(3, "routing_mode", mode, mode not in ("adaptive", "luna_only"), "路由策略：luna_only（极致经济）还是 adaptive（自动能力路由）？")
     cap_layers = []
