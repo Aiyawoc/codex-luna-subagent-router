@@ -166,9 +166,17 @@ class MainTurnTests(Sandbox):
     def test_root_roundtrip_and_exact_model(self):
         self.assertEqual(self.hook(),{})
         self.add([ctx(),event(),terminal()]);out=self.hook('Stop')
-        self.assertIn('主 Agent · Astra high',out['systemMessage']);self.assertIn('总量 45k',out['systemMessage'])
+        self.assertIn('主 Agent · Astra high',out['systemMessage']);self.assertIn('输入 42k（缓存 30k 71%） · 输出 3k',out['systemMessage'])
         self.assertNotIn('decision',out);self.assertTrue(out['continue'])
         self.assertEqual(self.row()['main_snapshot']['counts'],counter())
+
+    def test_stop_summary_is_compact_with_blank_lines(self):
+        self.hook();self.add([ctx(),event(),terminal()]);out=self.hook('Stop')
+        text=out['systemMessage']
+        self.assertIn('本轮 Token 用量\n\n主 Agent · Astra high\n输入 42k（缓存 30k 71%） · 输出 3k\n\n完整度：完整 1 · 待确认 0 · 部分 0 · 不可用 0',text)
+        self.assertNotIn('完整快照',text)
+        self.assertNotIn('本轮已知合计',text)
+        self.assertNotIn('总量 ',text)
 
     def test_two_turns_not_session_cumulative(self):
         self.hook();self.add([ctx(),event(),terminal()]);self.hook('Stop')
@@ -186,7 +194,7 @@ class MainTurnTests(Sandbox):
         self.hook('Stop');self.assertEqual(path.read_bytes(),stop)
 
     def test_stop_before_terminal_is_waiting_then_recheck(self):
-        self.hook();self.add([ctx(),event()]);out=self.hook('Stop');self.assertIn('待确认',out['systemMessage'])
+        self.hook();self.add([ctx(),event()]);out=self.hook('Stop');self.assertIn('待确认 1',out['systemMessage']);self.assertNotIn('未读到结束事件',out['systemMessage'])
         self.add([terminal()]);self.hook('Stop')
         self.assertEqual(self.row()['main_snapshot']['status'],'complete')
 
@@ -220,7 +228,7 @@ class MainTurnTests(Sandbox):
         usage.hook(start,self.upath)
         self.transcript();stop=self.hook_payload();stop['turn_id']='child-turn-999';usage.hook(stop,self.upath)
         self.add([ctx(),activity(),event(),terminal()]);out=self.hook('Stop')
-        self.assertIn('本轮已知合计（含缓存） | 总量 90k',out['systemMessage'])
+        self.assertIn('本轮合计\n输入 84k（缓存 60k 71%） · 输出 6k',out['systemMessage'])
         self.assertEqual(len(self.row()['child_snapshots']),1)
 
     def test_parent_activity_can_recover_child_association(self):

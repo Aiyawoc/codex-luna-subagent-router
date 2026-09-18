@@ -246,9 +246,9 @@ class TurnRecoveryTests(TurnFixture):
         self.hook(); self.add([ctx(),event(),terminal()]); self.hook('Stop')
         row = self.row(); row['excluded_children'] = 1
         summary = turns.report(row)
-        self.assertIn('尚未关联', summary)
-        combined = next(line for line in summary.splitlines() if line.startswith('本轮已知合计'))
-        self.assertNotIn('完整快照', combined)
+        self.assertIn('未关联线程：1（未计入）', summary)
+        self.assertIn('完整度：完整 1 · 待确认 0 · 部分 0 · 不可用 0', summary)
+        self.assertNotIn('完整快照', summary)
 
     def test_unflushed_header_keeps_locator_for_later_recheck(self):
         self.main_path.unlink();self.hook()
