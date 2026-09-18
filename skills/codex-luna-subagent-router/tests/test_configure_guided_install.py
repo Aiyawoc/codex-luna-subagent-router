@@ -9,12 +9,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import inspect_guided_install as setup  # noqa: E402
+
 from configure_guided_install import (  # noqa: E402
     ConfigurationError,
     END_MARKER,
     LEGACY_AUTHORIZATION_V1_0,
     REQUEST_USER_INPUT_FEATURE,
     START_MARKER,
+    authorization_state,
     configure,
     merge_authorization,
     merge_request_user_input_feature,
@@ -62,6 +65,32 @@ class GuidedInstallTests(unittest.TestCase):
         second = self.run_configure(delegation="global")
         self.assertEqual(second["delegation"]["action"], "unchanged")
         self.assertEqual(target.read_text(encoding="utf-8"), original)
+
+    def test_inventory_flags_stale_managed_authorization(self) -> None:
+        first = self.run_configure(delegation="global")
+        target = Path(first["delegation"]["path"])
+        current = setup.inspect(self.codex_home)
+        self.assertNotIn(2, current["pending_questions"])
+
+        target.write_text(
+            target.read_text(encoding="utf-8").replace(
+                "## Agent Router 自动委派授权",
+                "## 旧版 Router 自动委派授权",
+            ),
+            encoding="utf-8",
+        )
+        stale = setup.inspect(self.codex_home)
+        self.assertIn(2, stale["pending_questions"])
+        question = next(item for item in stale["questions"] if item["number"] == 2)
+        self.assertEqual(question["current"]["stale"], ["global"])
+        self.assertIn("过期", question["question"])
+
+    def test_authorization_state_distinguishes_current_stale_and_malformed(self) -> None:
+        managed = "<!-- codex-luna-subagent-router:delegation-authorization:start -->\nnew\n<!-- codex-luna-subagent-router:delegation-authorization:end -->"
+        self.assertEqual(authorization_state("", managed), "missing")
+        self.assertEqual(authorization_state(managed, managed), "current")
+        self.assertEqual(authorization_state(managed.replace("new", "old"), managed), "stale")
+        self.assertEqual(authorization_state(managed + "\n" + managed, managed), "malformed")
 
     def test_exact_v1_authorization_is_migrated(self) -> None:
         target = self.codex_home / "AGENTS.md"
