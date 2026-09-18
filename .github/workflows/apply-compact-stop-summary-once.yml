@@ -131,14 +131,16 @@ jobs:
 
           recovery_path = Path("skills/codex-luna-subagent-router/tests/test_usage_recovery.py")
           recovery = recovery_path.read_text(encoding="utf-8")
-          old_recovery = """        self.assertIn('尚未关联', summary)
-        combined = next(line for line in summary.splitlines() if line.startswith('本轮已知合计'))
-        self.assertNotIn('完整快照', combined)
-"""
-          new_recovery = """        self.assertIn('未关联线程：1（未计入）', summary)
-        self.assertIn('完整度：完整 1 · 待确认 0 · 部分 0 · 不可用 0', summary)
-        self.assertNotIn('完整快照', summary)
-"""
+          old_recovery = (
+              "        self.assertIn('尚未关联', summary)\n"
+              "        combined = next(line for line in summary.splitlines() if line.startswith('本轮已知合计'))\n"
+              "        self.assertNotIn('完整快照', combined)\n"
+          )
+          new_recovery = (
+              "        self.assertIn('未关联线程：1（未计入）', summary)\n"
+              "        self.assertIn('完整度：完整 1 · 待确认 0 · 部分 0 · 不可用 0', summary)\n"
+              "        self.assertNotIn('完整快照', summary)\n"
+          )
           if old_recovery not in recovery:
               raise SystemExit("usage recovery assertion block not found")
           recovery_path.write_text(recovery.replace(old_recovery, new_recovery, 1), encoding="utf-8")
