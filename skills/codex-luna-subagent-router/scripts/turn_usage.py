@@ -177,7 +177,15 @@ def begin(payload, upath, sid, root):
                     sealed["end_cursor"] = cursor
                 for agent, member in sealed["members"].items():
                     newer = baselines.get(agent)
-                    if newer and newer["locator"] == member["locator"] and newer["cursor"]:
+                    if not newer or not newer["cursor"]:
+                        continue
+                    # The usage ledger is keyed by the exact parent+child identity. If the
+                    # turn member was registered before the child transcript existed, adopt
+                    # that exact child's later locator instead of losing a healthy sibling
+                    # when the parent turn is sealed without a normal Stop hook.
+                    if member["locator"] is None and newer["locator"] is not None:
+                        member["locator"] = newer["locator"]
+                    if newer["locator"] == member["locator"]:
                         member["end_cursor"] = newer["cursor"]
                 to_recheck = old["turn_id"]
             save(path, sealed, old)
@@ -221,6 +229,100 @@ def register_child(payload, upath, sid, root):
         else:
             row["members"][agent]["active"] = True
         save(path, row, old)
+
+
+def _preserve_snapshot(previous, current):
+    if previous["status"] != "unavailable" and (
+        current["status"] == "unavailable"
+        or current["counts"]["total_tokens"] < previous["counts"]["total_tokens"]
+    ):
+        return dict(previous, status="partial", terminal_observed=False,
+                    reasons=sorted(set(previous["reasons"]) | set(current["reasons"]) | {"stale_previous_snapshot"}))
+    return current
+
+
+def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
+    """Persist one exact child stop boundary without changing sibling state."""
+    session = usage._id(payload.get("session_id"))
+    agent = usage._id(payload.get("agent_id"))
+    if child is None:
+        children, _ = usage.load_latest(upath)
+        child = children.get(usage.usage_id(agent, session))
+    if child is None or child["parent_id"] != session or child["scope_id"] != sid:
+        return None
+
+    target = payload.get("agent_transcript_path")
+    locator = child.get("locator")
+    if target:
+        try:
+            observed = usage.locator_for(target, store.codex_home(), root)
+        except (OSError, ValueError, TypeError, KeyError):
+            return None
+        if locator is not None and observed != locator:
+            return None
+        locator = observed
+    elif locator is not None:
+        target = usage.locator_path(child, store.codex_home(), root)
+
+    boundary = _boundary(target, agent, root) if target else None
+    path = ledger_path(upath)
+    sealed_identity = None
+    sealed_member = None
+    saved = None
+
+    with store.locked(path, timeout=0.4):
+        latest = load(path)
+        candidates = []
+        for identity, candidate in latest.items():
+            member = candidate["members"].get(agent)
+            if (candidate["session_id"] == session and candidate["scope_id"] == sid
+                    and member is not None and member["active"]
+                    and member.get("end_cursor") is None):
+                candidates.append((identity, candidate))
+        if len(candidates) != 1:
+            return None
+
+        identity, old = candidates[0]
+        row = copy.deepcopy(old)
+        member = row["members"][agent]
+        if member["locator"] is not None and locator is not None and member["locator"] != locator:
+            return None
+        if member["locator"] is None and locator is not None:
+            member["locator"] = locator
+        if boundary is not None and locator is not None and member["locator"] == locator:
+            member["end_cursor"] = boundary
+        saved = save(path, row, old)
+
+        # If the parent turn was already sealed before this SubagentStop arrived,
+        # recover only this exact child. Do not rescan or mutate any sibling.
+        if (saved["phase"] == "sealed" and member.get("end_cursor") is not None and target
+                and (member["fresh"] or member["cursor"] is not None)):
+            sealed_identity = identity
+            sealed_member = copy.deepcopy(saved["members"][agent])
+
+    if sealed_identity is None:
+        return saved
+
+    try:
+        snapshot = read_usage(Path(target), agent, session, codex_home=store.codex_home(),
+            project_root=root, cursor=sealed_member["cursor"], end_cursor=sealed_member["end_cursor"],
+            cache_ledger=upath, max_seconds=max(0.01, max_seconds))
+    except (OSError, ValueError, TypeError, KeyError):
+        return saved
+
+    with store.locked(path, timeout=0.4):
+        latest = load(path)
+        old = latest.get(sealed_identity)
+        if old is None:
+            return saved
+        current = old["members"].get(agent)
+        if (current is None or current.get("locator") != sealed_member["locator"]
+                or current.get("end_cursor") != sealed_member["end_cursor"]):
+            return old
+        row = copy.deepcopy(old)
+        previous = row["child_snapshots"].get(agent, empty("transcript_unavailable"))
+        row["child_snapshots"][agent] = _preserve_snapshot(previous, snapshot)
+        return save(path, row, old)
 
 
 def _activate_discovered(row, children, discovered, session):
@@ -327,14 +429,10 @@ def finish(payload, upath, sid, root, *, mark_stopped=True, refresh_sealed=False
             else:
                 snap = empty("transcript_unavailable")
             row["child_snapshots"][agent] = snap
-        def preserve(previous, current):
-            if previous["status"] != "unavailable" and (current["status"] == "unavailable" or current["counts"]["total_tokens"] < previous["counts"]["total_tokens"]):
-                return dict(previous, status="partial", terminal_observed=False,
-                            reasons=sorted(set(previous["reasons"]) | set(current["reasons"]) | {"stale_previous_snapshot"}))
-            return current
-        row["main_snapshot"] = preserve(old["main_snapshot"], row["main_snapshot"])
+        row["main_snapshot"] = _preserve_snapshot(old["main_snapshot"], row["main_snapshot"])
         for agent, previous in old["child_snapshots"].items():
-            row["child_snapshots"][agent] = preserve(previous, row["child_snapshots"].get(agent, empty("transcript_unavailable")))
+            row["child_snapshots"][agent] = _preserve_snapshot(
+                previous, row["child_snapshots"].get(agent, empty("transcript_unavailable")))
         if mark_stopped and row["phase"] != "sealed":
             row["phase"] = "stopped"
         row["reader_version"] = READER_VERSION
