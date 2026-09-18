@@ -1,6 +1,6 @@
 # Contributing
 
-感谢你帮助改进 Codex Luna SubAgent Router。
+感谢你帮助改进 Agent Router。
 
 ## 提交问题
 

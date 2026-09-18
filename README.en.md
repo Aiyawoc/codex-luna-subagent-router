@@ -1,10 +1,10 @@
-# Codex Cost-Aware SubAgent Router
+# Agent Router
 
 [简体中文](README.md) | **English**
 
 **Keep the Lead model selected by the user, and delegate suitable subtasks to lower-cost Workers that are still sufficient for the job.**
 
-A cost-first SubAgent routing Skill for Codex. It can choose **Luna / Sol / Astra + reasoning effort** per task, plan a whole workload, run independent Workers concurrently, calibrate routing from verified outcomes, and optionally track main/child token usage.
+**Agent Router** is a cost-first SubAgent routing Skill for Codex. It can choose **Luna / Sol / Astra + reasoning effort** per task, plan a whole workload, run independent Workers concurrently, calibrate routing from verified outcomes, and optionally track main/child token usage.
 
 Current stable release: [**v2.6.4**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.4) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
@@ -48,7 +48,7 @@ The Router does not switch the user's Lead model. It decides whether to delegate
 You can paste this into Codex:
 
 ```text
-Install or upgrade Codex Luna SubAgent Router to stable v2.6.4:
+Install or upgrade Agent Router (Skill ID: `$codex-luna-subagent-router`) to stable v2.6.4:
 https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.6.4
 
 Detect the operating system and CPU architecture first, then download the matching
@@ -110,7 +110,7 @@ The installer preserves existing routing settings, explicit `off/false`, outcome
 After installation, you can simply tell Codex:
 
 ```text
-Check the Codex Luna SubAgent Router installation and complete any remaining guided setup questions.
+Check the Agent Router (`$codex-luna-subagent-router`) installation and complete any remaining guided setup questions.
 ```
 
 The Router guides delegation authorization, routing mode, concurrency, calibration, and token accounting. Settings that the user explicitly disabled are not silently re-enabled.

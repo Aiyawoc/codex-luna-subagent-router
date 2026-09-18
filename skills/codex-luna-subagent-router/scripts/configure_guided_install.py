@@ -226,6 +226,21 @@ def _read_optional_regular_file(path: Path) -> str | None:
     return path.read_text(encoding="utf-8")
 
 
+def authorization_state(existing: str, managed_block: str) -> str:
+    """Classify the managed AGENTS block without changing user content."""
+    starts = existing.count(START_MARKER)
+    ends = existing.count(END_MARKER)
+    if starts == 0 and ends == 0:
+        return "missing"
+    if starts != 1 or ends != 1:
+        return "malformed"
+    start = existing.index(START_MARKER)
+    if existing.index(END_MARKER) < start:
+        return "malformed"
+    end = existing.index(END_MARKER, start) + len(END_MARKER)
+    return "current" if existing[start:end] == managed_block else "stale"
+
+
 def merge_authorization(existing: str, managed_block: str) -> tuple[str, str]:
     starts = existing.count(START_MARKER)
     ends = existing.count(END_MARKER)
