@@ -14,6 +14,8 @@ advisor = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
 spec.loader.exec_module(advisor)
 
+import plan_work
+
 
 def axes(**overrides: str) -> dict[str, str]:
     value = {
@@ -77,6 +79,8 @@ class StaticAdvisorTests(unittest.TestCase):
             )
         self.assertEqual(result["model"], "gpt-5.6-luna")
         self.assertEqual(result["route_direction"], "down")
+        self.assertEqual(result["delegation_trigger"], "cheaper_sufficient_worker")
+        self.assertIsNone(result["lead_only_reason"])
 
     def test_micro_task_stays_with_lead(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -96,6 +100,8 @@ class StaticAdvisorTests(unittest.TestCase):
                 scope="project-a",
             )
         self.assertEqual(result["decision"], "lead_only")
+        self.assertIsNone(result["delegation_trigger"])
+        self.assertIn("startup cost", result["lead_only_reason"])
 
     def test_sol_max_lead_does_not_treat_sol_high_as_higher_reasoning(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -115,6 +121,79 @@ class StaticAdvisorTests(unittest.TestCase):
             )
         self.assertEqual((result["model"], result["effort"]), ("gpt-5.6-sol", "high"))
         self.assertEqual(result["decision"], "lead_only")
+        self.assertIsNone(result["delegation_trigger"])
+        self.assertIn("delegation benefit", result["lead_only_reason"])
+
+
+class PlanningDelegationTests(unittest.TestCase):
+    def test_independent_same_tier_siblings_are_delegated_for_parallel_ownership(self) -> None:
+        payload = {
+            "version": 1,
+            "tasks": [
+                {
+                    "task_id": "debug-one",
+                    "task_family": "cross-module-debug",
+                    "axes": axes(),
+                    "read_paths": ["src/a.py"],
+                    "write_paths": ["src/a_fix.py"],
+                },
+                {
+                    "task_id": "debug-two",
+                    "task_family": "cross-module-debug",
+                    "axes": axes(),
+                    "read_paths": ["src/b.py"],
+                    "write_paths": ["src/b_fix.py"],
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            result = plan_work.plan_work(
+                payload,
+                lead_model="gpt-5.6-sol",
+                lead_effort="high",
+                calibration="off",
+                registry=Path(temp) / "outcomes.jsonl",
+                scope="project-a",
+                routing_mode="adaptive",
+                max_workers=3,
+                open_workers=0,
+            )
+        self.assertEqual([d["decision"] for d in result["decisions"]], ["delegate", "delegate"])
+        self.assertEqual(
+            [d["delegation_trigger"] for d in result["decisions"]],
+            ["parallel_independent_sibling", "parallel_independent_sibling"],
+        )
+        self.assertEqual(result["ready_worker_ids"], ["debug-one", "debug-two"])
+
+    def test_single_same_tier_task_can_still_remain_with_lead(self) -> None:
+        payload = {
+            "version": 1,
+            "tasks": [
+                {
+                    "task_id": "debug-only",
+                    "task_family": "cross-module-debug",
+                    "axes": axes(),
+                    "read_paths": ["src/a.py"],
+                    "write_paths": ["src/a_fix.py"],
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            result = plan_work.plan_work(
+                payload,
+                lead_model="gpt-5.6-sol",
+                lead_effort="high",
+                calibration="off",
+                registry=Path(temp) / "outcomes.jsonl",
+                scope="project-a",
+                routing_mode="adaptive",
+                max_workers=3,
+                open_workers=0,
+            )
+        decision = result["decisions"][0]
+        self.assertEqual(decision["decision"], "lead_only")
+        self.assertIsNone(decision["delegation_trigger"])
+        self.assertIn("no clear delegation benefit", decision["lead_only_reason"])
 
 
 class RegistryTests(unittest.TestCase):

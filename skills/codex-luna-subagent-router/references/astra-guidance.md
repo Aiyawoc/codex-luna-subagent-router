@@ -4,6 +4,8 @@
 
 ## Astra Lead（包括 high）
 
+Astra 自身能力强不构成 `lead_only` 理由。对任何非 micro 的复杂、多阶段或跨模块任务，先做一次 Delegation Opportunity Scan：主动找 evidence/scout、独立 sibling、第二条根因分析路径、独立 verifier、context-isolation 这五类可独立拥有的工作单元；命中后再使用 route_advisor.py plan 统一评估。
+
 多目标先列全部可独立下放候选，使用 route_advisor.py plan 统一评估。普通实现/扫描用 Luna 是正常向下路由；高歧义跨模块 debug/因果分析选 Sol，不能把所有 Worker 都标签化为 Luna。
 
 相同条件的两个 bounded 任务应按相同规则分配。共享上下文的小任务可合并给一个 Worker；独立且有净收益可同波安排 2～3 个，再 wait。不要为了占满容量创建 Worker，也不要把一个高级 Worker 的升级默认值误套到向下委派。

@@ -130,21 +130,66 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         ancestor_cache[tid] = result
         return result
     ancestry = {tid: ancestors(tid) for tid in by_id}
+    ownership = {
+        tid: {key: normalized_paths(task.get(key, [])) for key in ("write_paths", "read_paths")}
+        for tid, task in by_id.items()
+    }
+
+    def has_independent_peer(tid):
+        task = by_id[tid]
+        if task["axes"]["task_scope"] == "micro" or task.get("retain_reason") or tid in completed or tid in in_progress:
+            return False
+        for peer_id, peer in by_id.items():
+            if peer_id == tid or peer["axes"]["task_scope"] == "micro" or peer.get("retain_reason") or peer_id in completed or peer_id in in_progress:
+                continue
+            if peer_id in ancestry[tid] or tid in ancestry[peer_id]:
+                continue
+            if not conflict(ownership[tid], ownership[peer_id]):
+                return True
+        return False
+
     for tid, t in by_id.items():
         rec = advisor.recommend(task_family=t["task_family"], axes=t["axes"], lead_model=lead_model, lead_effort=lead_effort,
                                 calibration=calibration if routing_mode == "adaptive" else "off", registry=registry, scope=scope)
         retained = t.get("retain_reason")
         decision, reason = rec["decision"], rec["selection_reason"]
+        trigger = rec.get("delegation_trigger")
+        lead_only_reason = rec.get("lead_only_reason")
         if routing_mode == "luna_only" and rec["model"] != "gpt-5.6-luna":
-            decision, reason = "lead_only", "luna_only capability boundary"
+            decision, reason, trigger, lead_only_reason = "lead_only", "luna_only capability boundary", None, "luna_only capability boundary"
         elif t.get("independent_review") and t["axes"]["task_scope"] != "micro" and rec.get("history_rule") != "verified-failure-exhausted":
-            decision, reason = "delegate", "explicit bounded independent review"
+            decision, reason, trigger, lead_only_reason = "delegate", "explicit bounded independent review", "independent_review", None
+        elif (
+            decision == "lead_only"
+            and rec["route_direction"] == "same"
+            and t["axes"]["task_scope"] != "micro"
+            and rec.get("history_rule") != "verified-failure-exhausted"
+            and has_independent_peer(tid)
+        ):
+            decision, reason, trigger, lead_only_reason = (
+                "delegate",
+                "independent sibling can run in parallel; ownership benefit exceeds startup cost",
+                "parallel_independent_sibling",
+                None,
+            )
         if tid in in_progress:
-            decision, reason = "wait", "already_running"
+            decision, reason, trigger, lead_only_reason = "wait", "already_running", None, None
         elif retained or tid in completed:
-            decision, reason = "lead_only", retained or "already_completed"
-        item = dict(task_id=tid, decision=decision, reason=reason, model=rec["model"], effort=rec["effort"],
-                    agent_profile=rec["agent_profile"], minimum_capability=rec["minimum_capability"], route_direction=rec["route_direction"], history_rule=rec["history_rule"])
+            reason = retained or "already_completed"
+            decision, trigger, lead_only_reason = "lead_only", None, reason
+        item = dict(
+            task_id=tid,
+            decision=decision,
+            reason=reason,
+            delegation_trigger=trigger,
+            lead_only_reason=lead_only_reason,
+            model=rec["model"],
+            effort=rec["effort"],
+            agent_profile=rec["agent_profile"],
+            minimum_capability=rec["minimum_capability"],
+            route_direction=rec["route_direction"],
+            history_rule=rec["history_rule"],
+        )
         decisions.append(item)
         if decision != "delegate":
             continue
@@ -169,11 +214,9 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
     retained_work = [d["task_id"] for d in decisions if d["decision"] != "delegate" and d["task_id"] not in completed]
     def retained_conflict(group):
         for tid in retained_work:
-            task = by_id[tid]
-            ownership = {key: normalized_paths(task.get(key, [])) for key in ("write_paths", "read_paths")}
             # An explicit dependency can order a future Lead action after this Worker.
             follows_worker = tid not in in_progress and any(i in ancestry[tid] for i in group["task_ids"])
-            if not follows_worker and conflict(group, ownership):
+            if not follows_worker and conflict(group, ownership[tid]):
                 return True
         return False
     planned, remaining, waves = set(completed), list(groups), []

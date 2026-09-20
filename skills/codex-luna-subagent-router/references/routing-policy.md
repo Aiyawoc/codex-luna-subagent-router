@@ -4,6 +4,8 @@
 
 ExpectedCost = 首次模型成本 + 失败/重试成本 + 上下文复制成本 + Lead 集成/验证成本。
 
+委派比较的是**边际净收益**：避免的 Lead 工作 + 并行推进价值 + 上下文隔离价值 + 独立证据/复核价值 − Worker startup/交接/整合成本。只要该值为正且边界允许，就可以委派；不要求 Worker 收益必须“明显大于”全部开销。证据不足时仍保守留在 Lead。
+
 不内置固定美元价。相对层级为 `luna < sol < astra`：Luna 经济、Sol 中等、Astra 专家。Terra 不再进入新自动路由，仅保留旧 RoutePlan 解析兼容。
 
 ## Capability Gap 与确定性 Advisor

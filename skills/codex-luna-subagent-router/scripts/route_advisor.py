@@ -175,26 +175,27 @@ def _route_direction(lead_model, worker_model):
 
 
 def _decide_dispatch(rec, axes, lead_model, lead_effort):
+    """Return decision, human reason, and a stable positive delegation trigger."""
     if axes["task_scope"] == "micro":
-        return "lead_only", "micro task startup cost exceeds delegation value"
+        return "lead_only", "micro task startup cost exceeds delegation value", None
     direction = _route_direction(lead_model, rec["model"])
     if direction == "up":
-        return "delegate", "capability gap exceeds current Lead tier"
+        return "delegate", "capability gap exceeds current Lead tier", "capability_gap"
     if direction == "down":
-        return "delegate", "bounded work can use a cheaper sufficient Worker"
+        return "delegate", "bounded work can use a cheaper sufficient Worker", "cheaper_sufficient_worker"
     if direction == "unknown":
-        return "lead_only", "unknown Lead cost/capability; require an explicit scoped delegation decision"
+        return "lead_only", "unknown Lead cost/capability; require an explicit scoped delegation decision", None
     # Canonicalize the Sol Lead alias for effort comparisons.
     if TIER_BY_MODEL[lead_model] == TIER_BY_MODEL[rec["model"]]:
         if lead_effort in EFFORT_RANK and EFFORT_RANK[rec["effort"]] > EFFORT_RANK[lead_effort]:
-            return "delegate", "same-tier Worker needs higher reasoning than the current Lead"
+            return "delegate", "same-tier Worker needs higher reasoning than the current Lead", "same_tier_reasoning_gap"
         if rec["effort"] == lead_effort:
             if axes["context_volume"] == "high" and axes["task_kind"] in ("scan", "research", "verification"):
-                return "delegate", "context isolation is worth same-tier Worker startup cost"
-            return "lead_only", "same model and effort provide no clear delegation benefit"
+                return "delegate", "context isolation is worth same-tier Worker startup cost", "context_isolation"
+            return "lead_only", "same model and effort provide no clear delegation benefit", None
         if axes["context_volume"] == "high" or axes["task_kind"] in ("scan", "research", "verification"):
-            return "delegate", "cheaper same-tier effort plus context isolation has expected-cost benefit"
-    return "lead_only", "same-tier delegation benefit is too small"
+            return "delegate", "cheaper same-tier effort plus context isolation has expected-cost benefit", "same_tier_cost_and_context"
+    return "lead_only", "same-tier delegation benefit is too small", None
 
 
 def recommend(*, task_family, axes, lead_model, lead_effort, calibration, registry, scope, now=None):
@@ -215,10 +216,17 @@ def recommend(*, task_family, axes, lead_model, lead_effort, calibration, regist
     else:
         result.update(history_rule="calibration-off", history_basis="verified outcome calibration is disabled", avoid_combos=[])
     if result.get("history_rule") == "verified-failure-exhausted":
-        result.update(route_direction="none", selection_reason=result["history_basis"])
+        reason = result["history_basis"]
+        result.update(route_direction="none", selection_reason=reason, delegation_trigger=None, lead_only_reason=reason)
         return result
-    decision, reason = _decide_dispatch(result, axes, lead_model, lead_effort)
-    result.update(decision=decision, route_direction=_route_direction(lead_model, result["model"]), selection_reason=reason)
+    decision, reason, trigger = _decide_dispatch(result, axes, lead_model, lead_effort)
+    result.update(
+        decision=decision,
+        route_direction=_route_direction(lead_model, result["model"]),
+        selection_reason=reason,
+        delegation_trigger=trigger,
+        lead_only_reason=reason if decision == "lead_only" else None,
+    )
     return result
 
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — 主动委派机会扫描
+
+- 在复杂、多阶段、跨模块任务得出 `lead_only` 前新增 Delegation Opportunity Scan：主动寻找 evidence/scout、独立 sibling、第二条根因分析路径、独立 verifier 与 context-isolation 五类可独立拥有的工作单元。
+- 将委派门槛从“明显收益”收敛为“正的边际净收益”，明确 Worker startup、上下文复制与 Lead 集成成本已经计入比较；“Lead 自己能做”不再是充分的 `lead_only` 理由。
+- `route_advisor recommend` 新增 `delegation_trigger` / `lead_only_reason`，让委派与不委派都可审计。
+- planner 对无依赖、无读写冲突的同层 sibling 增加并行所有权收益：即使单个 sibling 单独看是 same-tier `lead_only`，整组规划也可下放并同波执行。
+- 保留 micro、关键路径、不可交接上下文、权限/外部副作用、并发上限和“一个 Worker 足够就不多开”等成本保护，不引入 Worker 配额。
+
+
 ## 2.6.6 — Visualize 文档与 SubAgent Token 边界隔离（2026-09-18）
 
 - README 中英文新增 **@Visualize** 配合用法，提供数据简报 Dashboard、Token/缓存趋势、RoutePlan/Worker DAG 和路由决策解释四组可直接复制的提示词；Agent Router 继续作为路由与统计事实来源，Visualize 只负责展示。
