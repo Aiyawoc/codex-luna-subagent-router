@@ -2,6 +2,20 @@
 
 目标是减少昂贵 Lead 的总工作量，不是凑 Worker 数。Astra high 主要派 Luna 本身不是错误；当实际子目标需要复杂因果推理时，必须按能力选 Sol，不能仅凭实现/扫描标签降档。
 
+## Delegation Opportunity Scan
+
+在规划 `lead_only | delegate` 之前，先问“有没有一个 Worker 可以独立拥有结果”，而不是先问“Lead 能不能自己做”。对非 micro 任务按下面五类机会扫描：
+
+1. **Evidence / scout**：代码搜索、调用链、历史实现、日志、文档或 API 调研，可单独返回证据集合。
+2. **Parallel sibling**：两个以上无依赖、无读写冲突的子目标，可让 Worker 独立推进；planner 对同 tier 的独立 sibling 也允许因并行所有权产生正收益。
+3. **Independent analysis**：根因不确定、候选假设 >= 2、需要第二条推理路径时，分出窄范围 analyst，不与 Lead 共用结论。
+4. **Independent verification**：修改完成后，可独立检查遗漏调用点、回归风险、测试覆盖或关键 invariant；这类任务不得与实现 Worker 合并。
+5. **Context isolation**：高容量 scan/research/verification 会污染 Lead 上下文时，隔离本身就是委派收益。
+
+命中任一且不存在 `critical_path / context_not_transferable / permission_boundary / external_side_effect` 阻断，就应形成候选交给 planner。复杂、多阶段、跨模块工作如果最终仍 0 Worker，内部必须保留具体 `lead_only_reason`；“我自己可以完成”不是有效理由。
+
+这不是配额：简单串行任务可以 0 Worker；一个 Worker 足够时不创建第二个；并发仍受 3 和运行时上限约束。目标是把原来的“只有明显收益才派”收敛为“边际净收益为正即可派”。
+
 ## 一次覆盖全部候选
 
 多任务先执行：
