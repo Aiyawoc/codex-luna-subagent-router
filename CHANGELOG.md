@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 主动委派机会扫描
+## 2.6.7 — 主动委派机会扫描（2026-09-20）
 
 - 在复杂、多阶段、跨模块任务得出 `lead_only` 前新增 Delegation Opportunity Scan：主动寻找 evidence/scout、独立 sibling、第二条根因分析路径、独立 verifier 与 context-isolation 五类可独立拥有的工作单元。
 - 将委派门槛从“明显收益”收敛为“正的边际净收益”，明确 Worker startup、上下文复制与 Lead 集成成本已经计入比较；“Lead 自己能做”不再是充分的 `lead_only` 理由。
