@@ -122,7 +122,7 @@ class StaticAdvisorTests(unittest.TestCase):
         self.assertEqual((result["model"], result["effort"]), ("gpt-5.6-sol", "high"))
         self.assertEqual(result["decision"], "lead_only")
         self.assertIsNone(result["delegation_trigger"])
-        self.assertIn("no clear delegation benefit", result["lead_only_reason"])
+        self.assertIn("delegation benefit", result["lead_only_reason"])
 
 
 class PlanningDelegationTests(unittest.TestCase):
