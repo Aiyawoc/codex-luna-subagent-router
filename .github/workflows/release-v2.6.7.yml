@@ -1,0 +1,97 @@
+name: Publish v2.6.7 (one-shot)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v2.6.7.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7b59e58c457d069df0857faf662aa1299b466442
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify exact release target
+        id: check
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "7b59e58c457d069df0857faf662aa1299b466442" ]]
+          VERSION=$(cat skills/codex-luna-subagent-router/VERSION)
+          [[ "$VERSION" == "2.6.7" ]]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify manifest and regressions
+        run: |
+          python tools/verify_manifest.py
+          python -m unittest discover -s skills/codex-luna-subagent-router/tests -v
+
+  packages:
+    needs: authorize
+    uses: ./.github/workflows/portable-runtime.yml
+    with:
+      ref: 7b59e58c457d069df0857faf662aa1299b466442
+    permissions:
+      contents: read
+
+  publish:
+    needs: [authorize, packages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7b59e58c457d069df0857faf662aa1299b466442
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: portable-*
+          path: packages
+          merge-multiple: true
+      - name: Verify all release archives
+        shell: python
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+        run: |
+          import hashlib, os
+          from pathlib import Path
+          root = Path('packages')
+          names = [f"router-{os.environ['VERSION']}-{target}.{ext}" for target, ext in
+                   [('windows-x64','zip'),('windows-arm64','zip'),('macos-x64','tar.gz'),('macos-arm64','tar.gz')]]
+          assert {p.name for p in root.iterdir()} == set(names + [n+'.sha256' for n in names])
+          lines = []
+          for name in names:
+              line = (root / (name+'.sha256')).read_text().strip()
+              digest, recorded_name = line.split('  ',1)
+              assert recorded_name == name
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest() == digest
+              lines.append(line)
+          (root/'SHA256SUMS').write_text('\n'.join(lines)+'\n')
+      - name: Publish v2.6.7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v2.6.7 >/dev/null 2>&1; then
+            echo 'v2.6.7 already exists; refusing to mutate it.' >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v2.6.7" >/dev/null 2>&1; then
+            echo 'v2.6.7 tag already exists; refusing to move it.' >&2
+            exit 1
+          fi
+          gh release create v2.6.7 --target 7b59e58c457d069df0857faf662aa1299b466442 --title v2.6.7 --draft \
+            --notes "Agent Router v2.6.7: proactive delegation opportunity scan. Complete platform packages with pinned private CPython. See CHANGELOG.md and the portable-runtime guide."
+          gh release upload v2.6.7 packages/*
+          gh release edit v2.6.7 --draft=false
