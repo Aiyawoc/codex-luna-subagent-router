@@ -29,17 +29,11 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 ## 整组任务规划
 
-非 micro 任务在得出 `lead_only` 前，先做一次轻量 **Delegation Opportunity Scan**：检查是否存在可独立拥有的 (1) 证据收集/代码扫描，(2) 互不依赖的 sibling 子问题，(3) 根因不确定时的独立分析路径，(4) 修改后的独立验证/回归检查，或 (5) 值得隔离上下文的高容量工作。命中任一且不存在关键路径、不可交接上下文、权限或外部副作用阻断时，先把它形成候选任务再规划。
+非 micro 在 `lead_only` 前先读 `work-planning.md` 做 Delegation Opportunity Scan；发现可独立拥有且边际净收益为正的工作就列为候选，“Lead 自己能做”不是理由。
 
-存在多个可下放子目标时，先用 `route_advisor.py plan` 一次评估整组任务，而不是只挑第一个。输入见 `examples/work-plan.json`，策略见 `references/work-planning.md`。
+多个候选用 `route_advisor.py plan` 整组评估。共享上下文可合并；独立任务在容量内同波创建再 wait。复杂任务若最终 0 Worker，内部保留具体 `lead_only_reason`；不设 Worker 配额。
 
-共享上下文的小任务可合并给一个 Worker；独立且有**正的边际净收益**的任务应在有效容量内同波创建，再 wait。净收益已经覆盖 Worker startup、上下文复制和 Lead 集成成本，不要求收益“大幅”领先才允许委派。不要把“默认一个高级 Worker”误解成“最多一个 Luna Worker”。
-
-复杂、多阶段、跨模块任务若 Opportunity Scan 后仍为 0 Worker，Lead 必须形成具体 `lead_only_reason`；“Lead 自己能做”或“创建 Worker 有开销”不能单独作为理由。该要求用于防止强 Lead 因自身能力高而跳过本可独立下放的工作，不是 Worker 配额。
-
-Astra/Sol Lead 不为保持忙碌而亲自完成已适合廉价 Worker 的同类工作；它负责统筹、关键判断、集成和验收。确有关键路径、上下文无法交接、权限或外部副作用原因时可保留，说明原因。已派遣目标不要重复实现。
-
-不强制开满或混用模型；规划不证明 spawn。
+Astra/Sol Lead 不重复已适合廉价 Worker 的工作；关键路径、不可交接上下文、权限或外部副作用可留 Lead。已派目标不要重复实现；不强制开满或混用模型，规划不证明 spawn。
 
 ## 采集闭环
 
