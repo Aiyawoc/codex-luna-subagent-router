@@ -98,7 +98,7 @@ class ReleaseIntegrationTests(unittest.TestCase):
 
     def test_pending_rejects_undeclared_journal_fields(self):
         value = dict(scope_id='global', task_family='bounded-review', axes=task('worker-one')['axes'],
-                     model='gpt-5.6-luna', effort='high', route_binding='installed_profile')
+                     model='gpt-6-luna', effort='high', route_binding='installed_profile')
         receipt = store.begin(self.registry, value, 'request-worker-one')
         receipt['undeclared_text'] = 'Synthetic unrelated content'
         store.receipts_path(self.registry).write_text(json.dumps(receipt) + '\n')
@@ -110,7 +110,7 @@ class ReleaseIntegrationTests(unittest.TestCase):
 
     def test_observed_metadata_cannot_store_multiline_content(self):
         value = dict(scope_id='global', task_family='bounded-review', axes=task('worker-one')['axes'],
-                     model='gpt-5.6-luna', effort='high', route_binding='installed_profile')
+                     model='gpt-6-luna', effort='high', route_binding='installed_profile')
         receipt = store.begin(self.registry, value, 'request-worker-one')
         with self.assertRaises(store.StoreError):
             store.finalize(self.registry, receipt['receipt_id'], 'partial', 'Unknown identity.', observed_model='text\nnot-a-model')
