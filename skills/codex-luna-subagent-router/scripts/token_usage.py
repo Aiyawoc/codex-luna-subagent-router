@@ -101,7 +101,10 @@ REASON_LABELS.update({
     "receipt_scope_attribution": "按 outcome receipt 归属项目范围",
 })
 
-MODEL_NAMES = {"gpt-5.6-luna": "Luna", "gpt-5.6-sol": "Sol", "gpt-6-astra": "Astra"}
+MODEL_NAMES = {
+    "gpt-6-luna": "Luna", "gpt-6-sol": "Sol", "gpt-6-astra": "Astra",
+    "gpt-5.6-luna": "Luna", "gpt-5.6-sol": "Sol",
+}
 
 
 def model_label(snapshot, fallback=None):
