@@ -38,7 +38,7 @@ def meta(**overrides):
     return dict(type="session_meta", timestamp=T1, payload=dict(id=AGENT, parent_thread_id=PARENT, timestamp=T1, cli_version="fixture", **overrides))
 
 
-def context(timestamp=T1, model="gpt-5.6-sol", effort="high", **extra):
+def context(timestamp=T1, model="gpt-6-sol", effort="high", **extra):
     return dict(timestamp=timestamp, type="turn_context", payload=dict(turn_id="turn-001", model=model, effort=effort), **extra)
 
 
@@ -47,7 +47,7 @@ def end(timestamp=T3):
 
 
 def receipt_metadata(scope="global"):
-    return dict(scope_id=scope, task_family="bounded-review", axes={"task_kind":"review", "task_scope":"bounded", "reasoning_depth":"deep", "verifiability":"yes", "failure_cost":"medium", "context_volume":"medium"}, model="gpt-5.6-sol", effort="high", route_binding="installed_profile")
+    return dict(scope_id=scope, task_family="bounded-review", axes={"task_kind":"review", "task_scope":"bounded", "reasoning_depth":"deep", "verifiability":"yes", "failure_cost":"medium", "context_volume":"medium"}, model="gpt-6-sol", effort="high", route_binding="installed_profile")
 
 
 class Sandbox(unittest.TestCase):
@@ -101,7 +101,7 @@ class FormatterTests(unittest.TestCase):
         self.assertNotIn("75k", text)
 
     def test_hook_summary_is_compact_and_multiline(self):
-        snapshot = dict(counts=counter(), status="complete", model="gpt-5.6-sol", effort="high", reasons=[])
+        snapshot = dict(counts=counter(), status="complete", model="gpt-6-sol", effort="high", reasons=[])
         self.assertEqual(
             usage.hook_summary(snapshot),
             "Sol high\n\n输入 42k（缓存 30k 71%） · 输出 3k",
@@ -116,7 +116,7 @@ class ReaderTests(Sandbox):
         s = self.read()
         self.assertEqual(s["status"], "complete")
         self.assertEqual(s["counts"], counter())
-        self.assertEqual((s["model"], s["effort"]), ("gpt-5.6-sol", "high"))
+        self.assertEqual((s["model"], s["effort"]), ("gpt-6-sol", "high"))
 
     def test_duplicate_totals_and_multiple_calls_not_summed_twice(self):
         first, last = counter(), counter(1000, 500, 200, 100)
