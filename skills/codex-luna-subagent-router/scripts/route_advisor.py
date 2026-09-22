@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import sys
 from collections import Counter
@@ -42,6 +43,21 @@ FAMILY_RE = store.FAMILY_RE
 default_registry_path = store.default_registry_path
 scope_id = store.scope_id
 append_record = store.append_record
+
+
+def _planning_observation_error_code(exc):
+    code = getattr(exc, "errno", None)
+    if isinstance(exc, PermissionError) or code in (errno.EACCES, errno.EPERM):
+        return "permission_denied"
+    if isinstance(exc, FileNotFoundError) or code == errno.ENOENT:
+        return "state_unavailable"
+    if isinstance(exc, store.StoreError) and "lock" in str(exc).lower():
+        return "lock_failed"
+    if isinstance(exc, OSError):
+        return "io_error"
+    if isinstance(exc, (ValueError, TypeError, KeyError)):
+        return "invalid_observation"
+    return "unknown"
 
 
 def _route(model, effort):
@@ -389,8 +405,9 @@ def main(argv=None):
             try:
                 import planning_store
                 planning_store.append(planning_store.default_path(path), planning_store.from_plan(output, scope))
-            except (ValueError, OSError, TypeError, KeyError):
+            except (ValueError, OSError, TypeError, KeyError) as exc:
                 output["planning_observation_error"] = "planning telemetry unavailable; production plan unchanged"
+                output["planning_observation_error_code"] = _planning_observation_error_code(exc)
         else:
             output = stats(path, scope)
             import token_usage as usage

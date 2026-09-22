@@ -14,9 +14,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import decision_store  # noqa: E402
 import planning_store  # noqa: E402
 import report  # noqa: E402
+import route_advisor  # noqa: E402
 
 
 class V270ObservabilityTests(unittest.TestCase):
+    def test_planning_error_codes_are_bounded_and_non_sensitive(self):
+        self.assertEqual(route_advisor._planning_observation_error_code(PermissionError(1, "secret path")), "permission_denied")
+        self.assertEqual(route_advisor._planning_observation_error_code(FileNotFoundError(2, "missing")), "state_unavailable")
+        self.assertEqual(route_advisor._planning_observation_error_code(route_advisor.AdvisorError("registry lock busy")), "lock_failed")
+        self.assertEqual(route_advisor._planning_observation_error_code(ValueError("bad payload")), "invalid_observation")
+
     def test_planning_store_keeps_counts_not_task_content(self):
         plan = {
             "routing_mode": "adaptive",
