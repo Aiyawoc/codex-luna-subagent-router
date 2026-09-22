@@ -72,7 +72,7 @@ def main():
         # No shell Python/Bash on PATH; native entry performs initial install and upgrade.
         saved=rpath.read_bytes()
         (home/'hooks.json').write_text('{"hooks":{}}')
-        ledger=home/'state/codex-luna-subagent-router/usage.jsonl';ledger.parent.mkdir(parents=True)
+        ledger=home/'state/codex-luna-subagent-router/usage.jsonl';ledger.parent.mkdir(parents=True,exist_ok=True)
         ledger.write_text('historical-data-must-not-change\n')
         for _ in range(2):
             execute([*launcher(root),'install','--global'],project,env)
