@@ -32,7 +32,7 @@ def task(task_id: str, *, read: str, write: str | None = None, axis_overrides=No
 
 
 class ExecutionShapeTests(unittest.TestCase):
-    def run_plan(self, tasks, *, lead_model="gpt-5.6-sol", lead_effort="high"):
+    def run_plan(self, tasks, *, lead_model="gpt-6-sol", lead_effort="high"):
         with tempfile.TemporaryDirectory() as temp:
             return plan_work(
                 {"version": 1, "tasks": tasks},
