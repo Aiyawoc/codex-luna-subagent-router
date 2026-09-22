@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.7.0-alpha.1 — Execution Efficiency + Optional Decision Shadow（2026-09-22）
+
+- 新增 Execution Shape：在创建 Worker 前区分 `local_serial / local_parallel_tools / subagent`，让低成本独立只读证据优先留在 Lead 原生并行工具中，避免无必要的 Worker startup/context。
+- 新增 Worker Materialization Gate：spawn acknowledgement 不再等于 Worker 已存在；只有真实 Materialized 的 PendingInit/Running Worker 才计入并发与 outcome/usage 事实。
+- 新增 Runtime Health Lease：新 runtime 首只真实 Worker 兼作健康探针，确认后同波剩余 sibling 恢复并发；普通质量失败不等于 runtime 故障。
+- 新增冻结的 v2.6.7 planner baseline、Router Arena 与 5,000 个固定 seed planner invariant fuzz cases。
+- 新增可选 Grounded Decision Shadow，支持 Jev、generic HTTP 与 jev-codex-router `/ask` compatible provider；2.7.0 Alpha 中只记录 typed evidence/confidence，不改变生产 route/plan。
+- routing schema 升至 2.1；已有 2.0 配置字段级保留迁移，不丢 calibration、token accounting、自定义字段或显式 Decision 配置。
+- `router report` 新增脱敏 Execution Shape / planning / runtime health / Decision Shadow 观测。
+- 本 Alpha 已通过 Linux/macOS/Windows CI、Router Arena、5000-case fuzz、完整 Manifest 与 macOS/Windows x64/ARM64 Portable Runtime；真实 Sol/Astra Host 验收仍在进行，因此保持 Pre-release。
+
+
 ## 2.6.7 — 主动委派机会扫描（2026-09-20）
 
 - 在复杂、多阶段、跨模块任务得出 `lead_only` 前新增 Delegation Opportunity Scan：主动寻找 evidence/scout、独立 sibling、第二条根因分析路径、独立 verifier 与 context-isolation 五类可独立拥有的工作单元。
