@@ -28,7 +28,7 @@ luna_only 自动 Worker 只允许 gpt-6-luna，low/medium/high/xhigh/max 选最�
 
 adaptive 自动候选仅 gpt-6-luna / gpt-6-sol / gpt-6-astra。已安装 profiles：Luna 五档、Sol high/xhigh、Astra high/xhigh/max。
 
-`gpt-5.6` alias 不用于自动 installed profile / RoutePlan / spawn。未预装组合只有 live spawn 精确支持 model+effort 才允许；不能验证时 lead_only，不静默继承。用户本轮明确覆盖可记录，但不能越过平台/权限边界。
+旧 `gpt-5.6` alias 不用于自动 installed profile / RoutePlan / spawn。未预装组合只有 live spawn 精确支持 model+effort 才允许；不能验证时 lead_only，不静默继承。用户本轮明确覆盖可记录，但不能越过平台/权限边界。
 
 ## Max 跨层下限
 
