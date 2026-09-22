@@ -43,14 +43,14 @@ def activity(agent=AGENT, kind="started", stamp=T2):
 
 class DisplayTests(unittest.TestCase):
     def test_observed_luna_replaces_default(self):
-        s=dict(model="gpt-5.6-luna",effort="high",status="complete",counts=counter(),reasons=[])
+        s=dict(model="gpt-6-luna",effort="high",status="complete",counts=counter(),reasons=[])
         self.assertEqual(usage.model_label(s,"default"),"Luna high")
         self.assertIn("Luna high",usage.summary(s))
 
     def test_no_identity_guess_from_role(self):
         s=reader.empty("no_usage")
         self.assertEqual(usage.model_label(s,"luna_max"),"模型未核实 · luna_max")
-        s["model"]="gpt-5.6-luna"
+        s["model"]="gpt-6-luna"
         self.assertEqual(usage.model_label(s),"Luna 强度未知")
 
     def test_multi_model_not_false_single_route(self):
@@ -58,7 +58,7 @@ class DisplayTests(unittest.TestCase):
         self.assertEqual(usage.model_label(s),"多模型/强度")
 
     def test_reported_three_reasons_remain_visible(self):
-        s=dict(status="partial",counts=counter(),model="gpt-5.6-luna",effort="high",
+        s=dict(status="partial",counts=counter(),model="gpt-6-luna",effort="high",
                reasons=["missing_baseline","non_usage_counter","terminal_not_observed"])
         text=usage.summary(s)
         for label in ("Luna high","缺少起始基线","已排除非用量计数","未读到结束事件"):
@@ -412,7 +412,7 @@ class ReleaseContractTests(unittest.TestCase):
 
     def test_user_numeric_fixture_preserves_known_total_and_warnings(self):
         def snap(i,c,o,r):
-            return dict(status='partial',model='gpt-5.6-luna',effort='high',
+            return dict(status='partial',model='gpt-6-luna',effort='high',
                 counts=counter(i,c,o,r),reasons=['missing_baseline','non_usage_counter','terminal_not_observed'])
         rows=[snap(9522324,8983040,31729,11080),snap(9552106,9188608,45162,22386)]
         total=usage.aggregate_snapshots(rows)
