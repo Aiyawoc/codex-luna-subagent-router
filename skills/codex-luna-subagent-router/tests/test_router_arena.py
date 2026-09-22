@@ -6,13 +6,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 ARENA = ROOT / "benchmarks" / "router_arena.py"
-spec = importlib.util.spec_from_file_location("router_arena", ARENA)
-arena = importlib.util.module_from_spec(spec)
-assert spec and spec.loader
-spec.loader.exec_module(arena)
+if ARENA.is_file():
+    spec = importlib.util.spec_from_file_location("router_arena", ARENA)
+    arena = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(arena)
+else:
+    arena = None
 
 
 class RouterArenaTests(unittest.TestCase):
+    @unittest.skipUnless(arena is not None, "source-only Router Arena is outside the portable Skill package")
     def test_frozen_baseline_and_v270_targets_pass(self):
         result = arena.audit()
         self.assertTrue(result["passed"], result)
