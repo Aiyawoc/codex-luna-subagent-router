@@ -14,7 +14,7 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
 
 - `luna_only`：自动 Worker 只用 Luna；能力不足由 Lead 接管。
-- `adaptive`：Luna → `gpt-5.6-sol` → GPT-6 Astra；经济、中等、专家三层。Terra 不参与新自动路由。
+- `adaptive`：`gpt-6-luna` → `gpt-6-sol` → `gpt-6-astra`；经济、中等、专家三层。Terra 不参与新自动路由。
 - Sol 不得用 `gpt-5.6` alias 做自动 spawn；精确绑定不可证明时 `lead_only`，不静默替换。
 
 ## Adaptive Capability Gap Gate + Advisor
