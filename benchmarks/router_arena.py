@@ -81,6 +81,7 @@ def audit(fixture=DEFAULT_FIXTURE):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", nargs="?", choices=("route-audit",), default="route-audit")
     parser.add_argument("--fixture", type=Path, default=DEFAULT_FIXTURE)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
