@@ -16,6 +16,18 @@
 
 这不是配额：简单串行任务可以 0 Worker；一个 Worker 足够时不创建第二个；并发仍受 3 和运行时上限约束。目标是把原来的“只有明显收益才派”收敛为“边际净收益为正即可派”。
 
+## Execution Shape：先选执行形态，再选 Worker 路由
+
+v2.7 起，“可并行”不再自动等于“应该创建 SubAgent”。planner 对每个候选先区分：
+
+- `local_serial`：micro、关键路径、共享状态或转交成本高于收益，由 Lead 串行完成。
+- `local_parallel_tools`：至少两个彼此独立、只读、可验证、非 high failure cost、非 deep/high-context 的 scan / verification / leaf 任务。由 Lead 在同一推理上下文中使用原生并行工具调用，不创建新模型上下文。
+- `subagent`：需要独立 reasoning ownership、capability gap、context isolation、independent review 或真正独立实现的工作。
+
+`local_parallel_tools` 只优化工具级并行，不把深度分析、独立复核或高上下文扫描偷回 Lead。单个只读 scan 仍可因廉价 Worker 路由收益而委派；只有形成至少两个合格的本地并行候选时才启用该形态。
+
+plan 输出新增 `execution_shape` / `execution_reason`，并列出 `local_parallel_task_ids`、`local_serial_task_ids`。只有 `execution_shape=subagent` 且 `decision=delegate` 的任务进入 Worker groups / planned_waves，不消耗不必要的 Worker slot。
+
 ## 一次覆盖全部候选
 
 多任务先执行：

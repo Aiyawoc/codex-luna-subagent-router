@@ -135,6 +135,38 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         for tid, task in by_id.items()
     }
 
+    def local_tool_candidate(tid):
+        """Cheap read-only evidence work can stay in the Lead without a new model context."""
+        task = by_id[tid]
+        axes = task["axes"]
+        return (
+            tid not in completed
+            and tid not in in_progress
+            and not task.get("retain_reason")
+            and not task.get("independent_review")
+            and not ownership[tid]["write_paths"]
+            and bool(ownership[tid]["read_paths"])
+            and graph[tid].issubset(completed)
+            and axes["task_scope"] != "micro"
+            and axes["task_kind"] in ("scan", "verification", "leaf")
+            and axes["reasoning_depth"] in ("shallow", "medium")
+            and axes["verifiability"] == "yes"
+            and axes["failure_cost"] != "high"
+            and axes["context_volume"] != "high"
+        )
+
+    def has_local_tool_peer(tid):
+        if not local_tool_candidate(tid):
+            return False
+        for peer_id in by_id:
+            if peer_id == tid or not local_tool_candidate(peer_id):
+                continue
+            if peer_id in ancestry[tid] or tid in ancestry[peer_id]:
+                continue
+            if not conflict(ownership[tid], ownership[peer_id]):
+                return True
+        return False
+
     def has_independent_peer(tid):
         task = by_id[tid]
         if task["axes"]["task_scope"] == "micro" or task.get("retain_reason") or tid in completed or tid in in_progress:
@@ -155,10 +187,21 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         decision, reason = rec["decision"], rec["selection_reason"]
         trigger = rec.get("delegation_trigger")
         lead_only_reason = rec.get("lead_only_reason")
+        execution_shape, execution_reason = ("subagent", reason) if decision == "delegate" else ("local_serial", reason)
         if routing_mode == "luna_only" and rec["model"] != "gpt-5.6-luna":
             decision, reason, trigger, lead_only_reason = "lead_only", "luna_only capability boundary", None, "luna_only capability boundary"
+            execution_shape, execution_reason = "local_serial", reason
         elif t.get("independent_review") and t["axes"]["task_scope"] != "micro" and rec.get("history_rule") != "verified-failure-exhausted":
             decision, reason, trigger, lead_only_reason = "delegate", "explicit bounded independent review", "independent_review", None
+            execution_shape, execution_reason = "subagent", reason
+        elif (
+            has_local_tool_peer(tid)
+            and rec["route_direction"] != "up"
+            and rec.get("history_rule") not in ("verified-failure-escalation", "verified-failure-exhausted")
+        ):
+            reason = "independent read-only evidence can run as Lead parallel tools; Worker startup/context cost is unnecessary"
+            decision, trigger, lead_only_reason = "lead_only", None, reason
+            execution_shape, execution_reason = "local_parallel_tools", reason
         elif (
             decision == "lead_only"
             and rec["route_direction"] == "same"
@@ -172,17 +215,24 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
                 "parallel_independent_sibling",
                 None,
             )
+            execution_shape, execution_reason = "subagent", reason
         if tid in in_progress:
             decision, reason, trigger, lead_only_reason = "wait", "already_running", None, None
+            execution_shape, execution_reason = "subagent", reason
         elif retained or tid in completed:
             reason = retained or "already_completed"
             decision, trigger, lead_only_reason = "lead_only", None, reason
+            execution_shape, execution_reason = "local_serial", reason
+        elif decision == "delegate":
+            execution_shape, execution_reason = "subagent", reason
         item = dict(
             task_id=tid,
             decision=decision,
             reason=reason,
             delegation_trigger=trigger,
             lead_only_reason=lead_only_reason,
+            execution_shape=execution_shape,
+            execution_reason=execution_reason,
             model=rec["model"],
             effort=rec["effort"],
             agent_profile=rec["agent_profile"],
@@ -237,8 +287,14 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
             planned.update(g["task_ids"])
             remaining.remove(g)
     now_ids = waves[0][:max(0, limit - open_workers)] if waves else []
+    local_parallel = [d["task_id"] for d in decisions if d["decision"] == "lead_only" and d["execution_shape"] == "local_parallel_tools"]
+    local_serial = [
+        d["task_id"] for d in decisions
+        if d["decision"] == "lead_only" and d["execution_shape"] == "local_serial" and d["reason"] != "already_completed"
+    ]
     return dict(version=1, routing_mode=routing_mode, lead_model=lead_model, lead_effort=lead_effort,
                 effective_wave_limit=limit, open_workers=open_workers, open_workers_semantics="pending_or_running_only", decisions=decisions, workers=groups,
+                local_parallel_task_ids=local_parallel, local_serial_task_ids=local_serial,
                 planned_waves=waves, ready_worker_ids=now_ids,
                 blocked_worker_ids=[g["worker_id"] for g in remaining],
-                instruction="Preflight exact routes, authority and runtime status. open_workers counts PendingInit/Running only, never historical Completed agents. Spawn all ready independent Workers before waiting. If runtime returns an agent thread limit, refresh statuses before fallback; do not relabel it model overload. No spawn is performed by this planner.")
+                instruction="Run local_parallel_task_ids with independent Lead-native tool concurrency; do not spawn Workers for them. Run local_serial_task_ids in the Lead. Preflight exact routes, authority and runtime status before SubAgents. open_workers counts PendingInit/Running only, never historical Completed agents. Spawn all ready independent Workers before waiting. If runtime returns an agent thread limit, refresh statuses before fallback; do not relabel it model overload. No spawn is performed by this planner.")
