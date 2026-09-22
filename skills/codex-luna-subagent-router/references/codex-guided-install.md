@@ -32,7 +32,7 @@ v2.6.0 的私有 Python / hook 命令变化也纳入第 6 项审查。所有脚�
 
 luna_only：极致经济，自动 Worker 只用 Luna；不足由 Lead 接管。
 
-adaptive：Luna → Sol → Astra。普通实现/扫描优先 Luna，高歧义多步因果分析选 Sol，专家级架构反证再选 Astra。主 Agent 不切换，支持向上与向下路由，先 Capability Gap 再成本门。Sol 精确 ID 是 gpt-5.6-sol，不用 gpt-5.6 alias。当前层 max 向上时上层 effort 至少 medium。
+adaptive：Luna → Sol → Astra。普通实现/扫描优先 Luna，高歧义多步因果分析选 Sol，专家级架构反证再选 Astra。主 Agent 不切换，支持向上与向下路由，先 Capability Gap 再成本门。Sol 精确 ID 是 gpt-6-sol；旧 gpt-5.6 alias 不用于自动 Worker。当前层 max 向上时上层 effort 至少 medium。
 
 用户级 $CODEX_HOME/codex-luna-subagent-router/routing.json；项目级 <repo>/.codex/codex-luna-subagent-router/routing.json 优先。
 
