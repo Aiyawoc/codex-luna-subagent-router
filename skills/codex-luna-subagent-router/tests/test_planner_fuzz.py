@@ -52,7 +52,7 @@ class PlannerFuzzTests(unittest.TestCase):
                 health = ("unknown", "healthy", "degraded")[index % 3]
                 result = plan_work.plan_work(
                     {"version": 1, "tasks": tasks},
-                    lead_model="gpt-5.6-sol",
+                    lead_model="gpt-6-sol",
                     lead_effort="high",
                     calibration="off",
                     registry=registry,
