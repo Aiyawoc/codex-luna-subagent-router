@@ -45,7 +45,7 @@ class MaterializationGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             return plan_work.plan_work(
                 payload(),
-                lead_model="gpt-5.6-sol",
+                lead_model="gpt-6-sol",
                 lead_effort="high",
                 calibration="off",
                 registry=Path(temp) / "outcomes.jsonl",
@@ -89,7 +89,7 @@ class MaterializationGateTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "runtime-health"):
                 plan_work.plan_work(
                     payload(),
-                    lead_model="gpt-5.6-sol",
+                    lead_model="gpt-6-sol",
                     lead_effort="high",
                     calibration="off",
                     registry=Path(temp) / "outcomes.jsonl",
