@@ -31,13 +31,13 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 非 micro 在 `lead_only` 前先读 `work-planning.md` 做 Delegation Opportunity Scan；发现可独立拥有且边际净收益为正的工作就列为候选，“Lead 自己能做”不是理由。
 
-多个候选用 `route_advisor.py plan` 整组评估。共享上下文可合并；独立任务在容量内同波创建再 wait。复杂任务若最终 0 Worker，内部保留具体 `lead_only_reason`；不设 Worker 配额。
+多个候选用 `route_advisor.py plan` 整组评估并生成 RoutePlan 2.1。共享上下文可合并；独立任务同波创建再 wait。复杂任务若最终 0 Worker，保留具体 `lead_only_reason`；不设 Worker 配额。
 
 Astra/Sol Lead 不重复已适合廉价 Worker 的工作；关键路径、不可交接上下文、权限或外部副作用可留 Lead。已派目标不要重复实现；不强制开满或混用模型，规划不证明 spawn。
 
 ## 采集闭环
 
-仅 `adaptive + evidence_calibration=conservative` 使用。实际派遣前 `begin` 固化 scope、六轴、请求路由与 task ID 的哈希回执；返回 `receipt_id`。从项目目录调用，自动识别 Git 根；非 Git 项目传 `--project-root`。
+仅 `adaptive + evidence_calibration=conservative` 使用。Worker Materialized 后 `begin` 固化 scope、六轴、请求路由与 task ID 的哈希回执；未创建成功的 spawn 不留 pending receipt。
 
 验收后、close 前调用 `finalize`。未知身份、环境阻塞、取消、early stop 或 Lead 实质返工只能 `partial`；可观察到精确 model+effort 且通过相关验收才 `verified_pass`。明确质量失败且身份已知才 `verified_fail`。profile 名称不等于实际身份；不得伪造证据凑样本。
 
@@ -58,8 +58,8 @@ Astra/Sol Lead 不重复已适合廉价 Worker 的工作；关键路径、不可
 1. 推断目标与验收；仅实质歧义提问。必须有本轮或适用 AGENTS 长期委派授权。
 2. 路由后按 `work-planning.md` 先选 `local_serial / local_parallel_tools / subagent`；只有 subagent 进入 exact model+effort、写入范围和容量预检。
 3. spawn acknowledgement 不等于成功。只把 Host 可再次确认的 Materialized `PendingInit/Running` 计入并发；runtime health 未知时首只真实 Worker 兼作探针，成功后重规划放行同波。失败保留 thread limit / overload / auth/MCP/model 等原始分类。
-4. 确定委派后读 `task-packet.md` 与 `lifecycle-and-context.md`；conservative 的 `begin` 在 Materialized 后执行。按 Evidence reuse 复用有效证据；Worker 不创建下级、不做最终不可逆动作。
-5. Worker 以 `TASK_ACK <task_id>` 回传有效信息；Lead 去重综合，不原样转贴日志。同波等待仍必要 Worker；失去价值时 early stop，验收/记录后允许 runtime 回收。
+4. 确定要派遣后读 `task-packet.md` 与 `lifecycle-and-context.md`；conservative 的 `begin` 在 Materialized 后执行。按 Evidence reuse 复用有效证据；Worker 不创建下级、不做最终不可逆动作。
+5. Worker 以 `TASK_ACK <task_id>` 回传有效信息；Lead 去重综合 Worker 证据，不原样转贴日志。同波等待仍必要 Worker；失去价值时 early stop，验收/记录后允许 runtime 回收。
 
 每子任务最多 2 attempt；capability-gap 默认 1 个窄而高价值高级 Worker。每波最多 `min(3, Codex显式上限)`，扣除当前 PendingInit/Running，不扣历史 Completed；同波禁止重叠写入/未解决依赖。
 
