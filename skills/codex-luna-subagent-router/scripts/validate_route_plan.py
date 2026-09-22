@@ -33,28 +33,28 @@ ALLOWED_FAILURE_COSTS = ("low", "medium", "high")
 CAPABILITY_LEVELS = ("luna", "terra", "sol", "astra")
 CAPABILITY_RANK = {name: index for index, name in enumerate(CAPABILITY_LEVELS)}
 ADAPTIVE_MODELS = (
-    "gpt-5.6-luna",
+    "gpt-6-luna",
     "gpt-5.6-terra",
-    "gpt-5.6-sol",
+    "gpt-6-sol",
     "gpt-6-astra",
 )
 MODEL_CAPABILITY = {
-    "gpt-5.6-luna": "luna",
+    "gpt-6-luna": "luna",
     "gpt-5.6-terra": "terra",
-    "gpt-5.6-sol": "sol",
+    "gpt-6-sol": "sol",
     "gpt-5.6": "sol",  # Lead/API alias only; not an automatic Worker route.
     "gpt-6-astra": "astra",
 }
 PROFILE_BY_ROUTE = {
-    ("gpt-5.6-luna", "low"): "luna_low",
-    ("gpt-5.6-luna", "medium"): "luna_medium",
-    ("gpt-5.6-luna", "high"): "luna_high",
-    ("gpt-5.6-luna", "xhigh"): "luna_xhigh",
-    ("gpt-5.6-luna", "max"): "luna_max",
+    ("gpt-6-luna", "low"): "luna_low",
+    ("gpt-6-luna", "medium"): "luna_medium",
+    ("gpt-6-luna", "high"): "luna_high",
+    ("gpt-6-luna", "xhigh"): "luna_xhigh",
+    ("gpt-6-luna", "max"): "luna_max",
     ("gpt-5.6-terra", "medium"): "terra_medium",
     ("gpt-5.6-terra", "high"): "terra_high",
-    ("gpt-5.6-sol", "high"): "sol_high",
-    ("gpt-5.6-sol", "xhigh"): "sol_xhigh",
+    ("gpt-6-sol", "high"): "sol_high",
+    ("gpt-6-sol", "xhigh"): "sol_xhigh",
     ("gpt-6-astra", "high"): "astra_high",
     ("gpt-6-astra", "xhigh"): "astra_xhigh",
     ("gpt-6-astra", "max"): "astra_max",
@@ -79,9 +79,9 @@ DIRECTION_LABEL = {
     "same": "同层",
 }
 MODEL_LABEL = {
-    "gpt-5.6-luna": "gpt-5.6-luna",
+    "gpt-6-luna": "gpt-6-luna",
     "gpt-5.6-terra": "gpt-5.6-terra",
-    "gpt-5.6-sol": "gpt-5.6-sol (Sol)",
+    "gpt-6-sol": "gpt-6-sol (Sol)",
     "gpt-5.6": "gpt-5.6 (Sol alias)",
     "gpt-6-astra": "gpt-6-astra",
 }
@@ -327,8 +327,8 @@ def validate_plan(data: Any) -> list[str]:
         else:
             if worker.get("override_source") not in {None, ""}:
                 errors.append(f"{path}.override_source: must be null without an override")
-            if routing_mode == "luna_only" and model != "gpt-5.6-luna":
-                errors.append(f'{path}.model: luna_only mode requires "gpt-5.6-luna" unless user explicitly overrides')
+            if routing_mode == "luna_only" and model != "gpt-6-luna":
+                errors.append(f'{path}.model: luna_only mode requires "gpt-6-luna" unless user explicitly overrides')
             if routing_mode == "adaptive" and model not in ADAPTIVE_MODELS:
                 errors.append(f"{path}.model: adaptive mode must use an approved built-in model")
 
