@@ -320,7 +320,9 @@ def _parser():
     sub.add_argument("--lead-effort", choices=LEAD_EFFORTS, required=True)
     sub.add_argument("--calibration", choices=CALIBRATION_MODES)
     sub.add_argument("--max-workers", type=int, default=3)
-    sub.add_argument("--open-workers", type=int, required=True, help="Current PendingInit/Running Worker count only; completed historical agents do not count.")
+    sub.add_argument("--open-workers", type=int, required=True, help="Current materialized PendingInit/Running Worker count only; spawn acknowledgements and completed historical agents do not count.")
+    sub.add_argument("--runtime-health", choices=("unknown", "healthy", "degraded"), default="unknown",
+                     help="unknown probes one real Worker first; healthy releases the ready wave; degraded holds new spawns.")
     return p
 
 
@@ -383,7 +385,7 @@ def main(argv=None):
             output = query_records(path, scope=scope, task_family=args.task_family, axes=_axes_from_args(args))
         elif args.command == "plan":
             from plan_work import plan_work
-            output = plan_work(json.loads(args.request.read_text(encoding="utf-8")), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root)
+            output = plan_work(json.loads(args.request.read_text(encoding="utf-8")), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root, runtime_health=args.runtime_health)
         else:
             output = stats(path, scope)
             import token_usage as usage

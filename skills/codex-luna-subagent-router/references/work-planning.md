@@ -53,6 +53,8 @@ plan 输出新增 `execution_shape` / `execution_reason`，并列出 `local_para
 
 有效容量取 Skill 3、`--max-workers`、有效 routing.json 的 max_concurrent_workers、用户级/项目级 Codex 配置上限的最小值。`--open-workers N` 现在必须显式提供，并且只填运行时 `PendingInit` / `Running` 的 Worker 数；历史 `Completed` / `Errored` / `Interrupted` / `Shutdown` 不作为累计总数扣槽位。支持 `list_agents` 时先读取真实状态，不能数 UI 历史卡片。
 
+若 runtime health 是 unknown，planner 的 `ready_worker_ids` 只放行 `health_probe_worker_id`；确认其 Materialized 后重跑 planner 为 healthy，剩余 dependency-ready sibling 才恢复并发。已有 materialized `open_workers > 0` 时 unknown 会按已有 health evidence 处理。degraded 会把当前候选列入 `runtime_blocked_worker_ids` 并停止新 spawn。
+
 若 spawn 返回 `agent thread limit reached`，先刷新状态并按 lifecycle-and-context.md 做容量恢复/条件复用；不要把线程上限改写成“模型满载”。真正的 `server overloaded` 才按模型/服务端过载处理。
 
 “一个高级 Worker”保护的是向上升级，不限制 Astra 向下派多个 Luna/Sol。不能为了缩短 elapsed time 就机械开满，也不强制出现某一模型。

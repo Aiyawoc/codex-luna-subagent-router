@@ -59,7 +59,7 @@ def conflict(a, b):
     return any(overlap(x, y) for x in a["write_paths"] for y in b["write_paths"] + b["read_paths"]) or any(overlap(x, y) for x in b["write_paths"] for y in a["read_paths"])
 
 
-def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope, routing_mode="adaptive", max_workers=3, open_workers=0, project_root=None):
+def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope, routing_mode="adaptive", max_workers=3, open_workers=0, project_root=None, runtime_health="healthy"):
     if not isinstance(payload, dict) or set(payload) - {"version", "tasks", "completed_task_ids", "in_progress_task_ids"} or payload.get("version") != 1:
         raise advisor.AdvisorError("plan requires version=1 and a task list")
     tasks = payload.get("tasks")
@@ -68,7 +68,9 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
     if routing_mode not in ("adaptive", "luna_only"):
         raise advisor.AdvisorError("invalid routing_mode")
     if not isinstance(open_workers, int) or isinstance(open_workers, bool) or open_workers < 0:
-        raise advisor.AdvisorError("open-workers must be the current PendingInit/Running Worker count")
+        raise advisor.AdvisorError("open-workers must be the current materialized PendingInit/Running Worker count")
+    if runtime_health not in ("unknown", "healthy", "degraded"):
+        raise advisor.AdvisorError("runtime-health must be unknown, healthy, or degraded")
     limit = session_limit(max_workers, project_root)
     by_id, decisions, groups = {}, [], []
     allowed = {"task_id", "task_family", "axes", "depends_on", "write_paths", "read_paths", "batch_key", "retain_reason", "independent_review"}
@@ -286,15 +288,36 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         for g in wave:
             planned.update(g["task_ids"])
             remaining.remove(g)
-    now_ids = waves[0][:max(0, limit - open_workers)] if waves else []
+    capacity = max(0, limit - open_workers)
+    candidate_now = waves[0][:capacity] if waves else []
+    effective_runtime_health = "healthy" if runtime_health == "unknown" and open_workers > 0 else runtime_health
+    health_probe_worker_id = None
+    runtime_blocked_worker_ids = []
+    if effective_runtime_health == "unknown" and candidate_now:
+        health_probe_worker_id = candidate_now[0]
+        now_ids = candidate_now[:1]
+        runtime_blocked_worker_ids = candidate_now[1:]
+        runtime_health_action = "probe_first_real_worker"
+    elif effective_runtime_health == "degraded":
+        now_ids = []
+        runtime_blocked_worker_ids = candidate_now
+        runtime_health_action = "hold_new_spawns"
+    else:
+        now_ids = candidate_now
+        runtime_health_action = "use_ready_wave"
     local_parallel = [d["task_id"] for d in decisions if d["decision"] == "lead_only" and d["execution_shape"] == "local_parallel_tools"]
     local_serial = [
         d["task_id"] for d in decisions
         if d["decision"] == "lead_only" and d["execution_shape"] == "local_serial" and d["reason"] != "already_completed"
     ]
     return dict(version=1, routing_mode=routing_mode, lead_model=lead_model, lead_effort=lead_effort,
-                effective_wave_limit=limit, open_workers=open_workers, open_workers_semantics="pending_or_running_only", decisions=decisions, workers=groups,
+                effective_wave_limit=limit, open_workers=open_workers,
+                open_workers_semantics="materialized_pendinginit_or_running_only",
+                runtime_health=runtime_health, effective_runtime_health=effective_runtime_health,
+                runtime_health_action=runtime_health_action, health_probe_worker_id=health_probe_worker_id,
+                runtime_blocked_worker_ids=runtime_blocked_worker_ids,
+                decisions=decisions, workers=groups,
                 local_parallel_task_ids=local_parallel, local_serial_task_ids=local_serial,
                 planned_waves=waves, ready_worker_ids=now_ids,
                 blocked_worker_ids=[g["worker_id"] for g in remaining],
-                instruction="Run local_parallel_task_ids with independent Lead-native tool concurrency; do not spawn Workers for them. Run local_serial_task_ids in the Lead. Preflight exact routes, authority and runtime status before SubAgents. open_workers counts PendingInit/Running only, never historical Completed agents. Spawn all ready independent Workers before waiting. If runtime returns an agent thread limit, refresh statuses before fallback; do not relabel it model overload. No spawn is performed by this planner.")
+                instruction="Run local_parallel_task_ids with independent Lead-native tool concurrency; do not spawn Workers for them. Run local_serial_task_ids in the Lead. Only materialized PendingInit/Running Workers count in open_workers. If runtime health is unknown, spawn only health_probe_worker_id, confirm it materialized with host-visible identity/status, then re-plan as healthy before spawning the rest of the wave. Do not begin an outcome receipt for a spawn acknowledgement alone. A degraded runtime holds new spawns until the original failure is resolved. Preserve thread-limit/server-overload/auth/MCP/model errors separately. No spawn is performed by this planner.")

@@ -4,7 +4,21 @@
 
 ## 运行时容量：并发不是累计总数
 
-`有效 SubAgent 上限 = 3` 表示同时占用的 spawned-agent 上限，不是整个对话最多创建 3 个；canonical `[agents]` 直接写 3，旧 V2 internal 表示则含 primary、对应写 4。派遣前在支持 `list_agents` 的 Surface 读取真实状态：`PendingInit` / `Running` 才计入 `open_workers`；`Completed` / `Errored` / `Interrupted` / `Shutdown` 是历史或可回收状态，不能因为列表里仍显示就按总数扣槽位。
+`有效 SubAgent 上限 = 3` 表示同时占用的 spawned-agent 上限，不是整个对话最多创建 3 个；canonical `[agents]` 直接写 3，旧 V2 internal 表示则含 primary、对应写 4。派遣前在支持 `list_agents` 的 Surface 读取真实状态：只有**已经 Materialized** 且状态为 `PendingInit` / `Running` 的 Worker 才计入 `open_workers`；spawn 工具只返回 acknowledgement/临时 ID 但无法再次由 Host 读取确认时，不算 Materialized。`Completed` / `Errored` / `Interrupted` / `Shutdown` 是历史或可回收状态，不能因为列表里仍显示就按总数扣槽位。
+
+### Materialization Gate
+
+fresh spawn 使用以下状态：
+
+```text
+Requested → SpawnAcknowledged → Materialized → Running → terminal
+```
+
+Materialized 的优先证据是：spawn 返回正式 runtime ID，并且 Host 的 `list_agents` / read/status 能再次看到该 ID 与真实状态。Surface 无 read/list 能力时只能使用该 Surface 能提供的最强 runtime evidence，并明确记为较弱来源，不能把 profile 名称、自然语言 ACK 或 UI 空壳当成强验证。
+
+runtime health 未知且一个 wave 有多个 Worker 时，第一只**真实任务**兼作健康探针；它 Materialized 后才放行同波剩余 Worker。当前 session 已有 materialized PendingInit/Running Worker 即可视为已有 health evidence，不重复串行探针。materialization/runtime 初始化失败会使 health 降级；普通质量失败不会。
+
+只有 Materialized 后才执行 conservative outcome `begin`、绑定 usage identity，并把 Worker 计入 active/open。未 Materialized 的 spawn 不制造 pending outcome receipt。
 
 不要把任何创建失败都写成“模型满载”。至少区分：
 
@@ -32,7 +46,7 @@ Codex V2 可能自动卸载可回收的 Completed resident；Skill 不通过无�
 
 ## 派遣登记
 
-conservative 下，在实际 spawn 前 begin 固化回执与 scope。不要由 Worker 自己判定自己的成功；Lead 完成验收后 finalize。一个合并 Worker 只记一个回执，不能靠多个子检查放大样本数。
+conservative 下，先完成 spawn + Materialization Gate，再用原 task_id、scope、六轴和请求路由执行 begin。这样 runtime/MCP/auth 创建失败不会污染模型质量校准，也不会留下未创建 Worker 的 pending receipt。不要由 Worker 自己判定自己的成功；Lead 完成验收后 finalize。一个合并 Worker 只记一个回执，不能靠多个子检查放大样本数。
 
 ## Wait 与 synthesis
 
