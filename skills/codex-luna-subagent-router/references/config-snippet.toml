@@ -18,3 +18,9 @@ max_concurrent_threads_per_session = 3
 # 可选实验性 Default 模式提问开关；只有用户明确选择后由安装器写入。
 # [features]
 # default_mode_request_user_input = true
+
+# Agent Router 的 routing.json 独立存放在：
+#   ~/.codex/codex-luna-subagent-router/routing.json
+# 或项目 .codex/codex-luna-subagent-router/routing.json。
+# v2.7 Core Execution Shape / Materialization Gate / Runtime Health Lease
+# 由 routing.json 2.1 管理；Decision Engine 默认关闭，必须显式 opt-in。

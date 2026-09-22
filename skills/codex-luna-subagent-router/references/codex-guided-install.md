@@ -1,6 +1,6 @@
 # Agent Router · Codex 引导安装与升级
 
-安装、升级是线性任务，不创建 Worker。v2.6.0 交付开发版（正式 Release 发布前仅使用明确选择的 PR 产物）。
+安装、升级是线性任务，不创建 Worker。v2.7.0 的 Core Optimization 不依赖 Decision Engine；正式 Release 前仅使用明确选择的 PR/分支产物。
 
 ## 必须全量更新
 
@@ -87,6 +87,30 @@ on / off（缺失需明确询问；未选择前运行时 off），保留已有�
 
 更新会保留 usage.jsonl；启用后至少用一个真实 Worker 验证。停止时未刷盘可先 partial；finalize 再核对。完整用法和允许路径见 token-accounting.md。
 
+## v2.7 Core Optimization 与可选 Decision Shadow
+
+v2.7 的 `Execution Shape / Materialization Gate / Runtime Health Lease` 属于核心路由行为，新建 routing.json 时默认启用。已有 schema 2.0 配置通过 guided configure 升级为 2.1 时采用**字段级保留迁移**：保留 evidence calibration、token accounting、用户扩展字段和已明确的 Decision 设置，只补 v2.7 缺失默认值；未知/非托管 schema 仍需明确确认后才能替换。
+
+Decision Engine 不新增强制第 7 个安装问题，缺失始终等价于 off。用户明确要启用 Shadow 时再运行：
+
+```bash
+./bin/router configure_decision_engine --scope user \
+  --provider jev --api-key-env TYPESAFE_API_KEY --json
+```
+
+兼容本地 `jev-codex-router /ask`：
+
+```bash
+./bin/router configure_decision_engine --scope user \
+  --provider jev_ask --endpoint http://127.0.0.1:4319/ask --json
+```
+
+项目级加 `--scope project --project-root /repo`。远程 endpoint 必须 HTTPS；明文 HTTP 只允许 loopback。v2.7.0 只有 `shadow` 模式：Decision 结果可记录但不得改变 model、effort、Worker 数或 plan。关闭：
+
+```bash
+./bin/router configure_decision_engine --scope user --provider off --disable --json
+```
+
 ## 应用配置
 
 ```bash
@@ -107,7 +131,8 @@ on / off（缺失需明确询问；未选择前运行时 off），保留已有�
 /path/to/skill/bin/router route_advisor stats --json
 /path/to/skill/bin/router route_advisor stats --current-scope --json
 /path/to/skill/bin/router route_advisor plan /path/to/work-plan.json \
-  --lead-model gpt-6-astra --lead-effort high
+  --lead-model gpt-6-astra --lead-effort high \
+  --open-workers 0 --runtime-health unknown
 ```
 
 stats 默认全部 scope；query 保留精确 family/六轴查询。详情：outcome-collection.md、work-planning.md。Luna 五档、Sol high/xhigh、Astra high/xhigh/max profiles 不变，RoutePlan 2.1 不变。
@@ -142,3 +167,12 @@ cat VERSION
 - Q4 inventory 识别 canonical、portable、显式 legacy V2 与 backend-ambiguous legacy 配置；只有语义可靠时才结束 pending。
 - planner 与 Q4 使用同一有效值解释：新版 `[agents] = N` 直接表示 N 个 SubAgent；旧 V2 internal value = N+1（包含 primary）。冲突配置直接报错，不取任意一边。
 - `configure_subagent_limit.py --schema auto` 对已有 canonical 保持原样；未知 Host 的新配置使用 portable fallback，不调用外部 CLI。
+
+## v2.7 额外验收
+
+- 两个低/中上下文、只读、可验证的独立 scan 应输出 `local_parallel_tools`，不创建 Worker。
+- deep debug、high-context scan、independent review 仍应保持 `subagent`。
+- runtime health=unknown 且首波有多个 Worker 时只放行 `health_probe_worker_id`；确认 Materialized 后以 healthy 重规划，剩余 sibling 同波并发。
+- 未 Materialized 的 spawn 不计 `open_workers`，也不执行 conservative outcome `begin`。
+- `python benchmarks/router_arena.py route-audit` 必须通过；CI 同时运行 >=5000 个固定 seed planner invariant cases。
+- `bin/router report` 的“执行规划”只汇总脱敏计数；Decision Shadow 关闭时对应记录为 0，不影响 Core。
