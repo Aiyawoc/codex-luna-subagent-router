@@ -18,7 +18,7 @@ import outcome_store as s
 from plan_work import plan_work
 
 NOW = datetime(2026, 9, 14, tzinfo=timezone.utc)
-LUNA, SOL, ASTRA = 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-6-astra'
+LUNA, SOL, ASTRA = 'gpt-6-luna', 'gpt-6-sol', 'gpt-6-astra'
 
 
 def axes(**kw):
@@ -57,6 +57,15 @@ class TempCase(unittest.TestCase):
 
 
 class ReceiptTests(TempCase):
+    def test_legacy_gpt56_outcome_remains_readable_but_cannot_start_new_receipt(self):
+        legacy_row=legacy(model='gpt-5.6-luna',effort='high')
+        s.validate_record(legacy_row)
+        self.path.write_text(json.dumps(legacy_row)+'\n')
+        self.assertEqual(a.stats(self.path,now=NOW)['total_outcomes'],1)
+        legacy_metadata=metadata(model='gpt-5.6-luna',effort='high')
+        with self.assertRaisesRegex(s.StoreError,'bundled route'):
+            s.begin(self.path,legacy_metadata,'legacy-route-not-new-01',NOW)
+
     def test_new_receipts_and_records_use_installed_product_version(self):
         expected = (SCRIPTS.parent / 'VERSION').read_text(encoding='utf-8').strip()
         receipt = s.begin(self.path, metadata(), 'version-source-worker-01', NOW)
