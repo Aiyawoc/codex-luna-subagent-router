@@ -4,19 +4,22 @@
 
 ## 口径 / Scope
 
-这不是 Astra 与 Luna 的实测 A/B 测试。输入是维护者提供的两个 Luna high `partial` 用量快照，只有匿名数字，没有个人路径、项目名、会话／线程 ID 或提示词。按两张价格表对同量 token 重新估值，可以解释“下放为什么可能降低成本”，不能证明“这些任务已节省多少钱”。
+这不是 Astra 与 Luna 的实测 A/B 测试。输入是维护者在 2026-09-15 提供的两个 **GPT-5.6 Luna high** `partial` 用量快照，只有匿名数字，没有个人路径、项目名、会话／线程 ID 或提示词。按两张价格表对同量 token 重新估值，可以解释“下放为什么可能降低成本”，不能证明“这些任务已节省多少钱”。
 
-This is not an executed Astra-versus-Luna experiment. It uses two maintainer-provided, partial Luna high snapshots containing anonymous counts only. Repricing fixed quantities explains potential price differences, not realized task savings.
+This is not an executed Astra-versus-Luna experiment. It uses two maintainer-provided, historical **GPT-5.6 Luna high** partial snapshots containing anonymous counts only. Repricing fixed quantities explains potential price differences, not realized task savings.
 
 Source dataset: [examples/cost-comparison.json](examples/cost-comparison.json). Both READMEs and the chart use this dataset. The example uses values supplied on 2026-09-15, not an independently audited usage export.
 
 ## 单价来源 / Rate sources
 
+> v2.7 current automatic routing uses `gpt-6-luna / gpt-6-sol / gpt-6-astra`. This page intentionally preserves the 2026-09-15 GPT-5.6 Luna fixture and its then-applicable rate card as historical evidence; do not use it as a current GPT-6 cost claim.
+
+
 Checked 2026-09-15. USD per 1,000,000 Standard short-context text tokens:
 
 | Model | Uncached input | Cached input | Output | Official source |
 |---|---:|---:|---:|---|
-| Luna | 0.20 | 0.02 | 1.20 | [Model page](https://developers.openai.com/api/docs/models/gpt-5.6-luna) |
+| GPT-5.6 Luna | 0.20 | 0.02 | 1.20 | [Model page](https://developers.openai.com/api/docs/models/gpt-5.6-luna) |
 | Astra | 10.00 | 1.00 | 50.00 | [Model page](https://developers.openai.com/api/docs/models/gpt-6-astra) |
 
 这些基础价来自官方资料，但本例的费用仍然是**假设性估值**。模型页另有缓存写入和长上下文等规则；汇总数据没有每请求上下文长度、cache-write 数量或服务档位。不能把未知项默认为实际 0，不能把会话累计 token 当成每请求长度。正式账单须使用适用计费渠道和逐请求明细。
