@@ -467,6 +467,13 @@ def attach(path, registry, agent_id, parent_id, receipt_id):
         lifetime = latest.get(uid)
         if lifetime is None:
             raise store.StoreError("usage identity not registered")
+        legacy_owners = [(key, row) for key, row in latest.items() if row.get("receipt_id") == receipt_id]
+        if any(key != uid for key, _ in legacy_owners):
+            raise store.StoreError("receipt is already bound to another attempt")
+        # A legacy exact binding has no immutable per-attempt baseline. Keep it readable
+        # without rewriting history into the new journal.
+        if legacy_owners and not bindings_path(path).exists():
+            return lifetime
         with store.locked(bpath, timeout=0.4):
             bindings, binding_invalid = _load_bindings(path)
             if binding_invalid:
@@ -479,10 +486,13 @@ def attach(path, registry, agent_id, parent_id, receipt_id):
             previous = sorted((row for row in bindings if row["usage_id"] == uid),
                               key=lambda row: store.parse_time(row["bound_at"]))
             baseline = previous[-1]["lifetime_snapshot"] if previous else None
+            if baseline is None and lifetime.get("receipt_id") not in (None, receipt_id):
+                interval = empty("receipt_baseline_missing")
+            else:
+                interval = _receipt_delta(lifetime["snapshot"], baseline)
             binding = dict(schema_version=BINDING_VERSION, receipt_id=receipt_id, usage_id=uid,
                            agent_id=agent_id, parent_id=parent_id, scope_id=receipt["scope_id"],
-                           bound_at=store.timestamp(),
-                           snapshot=_receipt_delta(lifetime["snapshot"], baseline),
+                           bound_at=store.timestamp(), snapshot=interval,
                            lifetime_snapshot=_clone_snapshot(lifetime["snapshot"]))
             _validate_binding(binding)
             store.write_line(bpath, binding)

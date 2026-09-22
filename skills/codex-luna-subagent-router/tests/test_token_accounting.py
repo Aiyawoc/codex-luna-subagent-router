@@ -305,6 +305,30 @@ class LedgerAndHooksTests(Sandbox):
         linked=usage.for_receipt(self.upath,receipt["receipt_id"])
         self.assertEqual(linked["snapshot"]["counts"],counter())
 
+    def test_legacy_receipt_cannot_rebind_to_different_worker(self):
+        receipt=store.begin(self.registry,receipt_metadata(),"test-worker-legacy-owner")
+        self.transcript();row=self.collect()
+        with store.locked(self.upath,timeout=0.4):
+            usage._write(self.upath,dict(row,receipt_id=receipt["receipt_id"]),row)
+        usage.register(self.upath,"child-worker-002",PARENT,"global")
+        with self.assertRaisesRegex(ValueError,"already bound"):
+            usage.attach(self.upath,self.registry,"child-worker-002",PARENT,receipt["receipt_id"])
+
+    def test_legacy_reused_worker_without_frozen_baseline_never_claims_cumulative_delta(self):
+        first=store.begin(self.registry,receipt_metadata(),"test-worker-legacy-first")
+        self.transcript();row=self.collect()
+        with store.locked(self.upath,timeout=0.4):
+            usage._write(self.upath,dict(row,receipt_id=first["receipt_id"]),row)
+        second=store.begin(self.registry,receipt_metadata(),"test-worker-legacy-second")
+        total={k:v*2 for k,v in counter().items()}
+        self.transcript([meta(),context(),event(),end(),context(T3),event(total,counter(),T3),end(T4)])
+        self.collect()
+        linked=usage.attach(self.upath,self.registry,AGENT,PARENT,second["receipt_id"])
+        self.assertEqual(linked["snapshot"]["status"],"unavailable")
+        self.assertIn("receipt_baseline_missing",linked["snapshot"]["reasons"])
+        self.assertIsNone(linked["snapshot"]["counts"]["total_tokens"])
+        self.assertEqual(usage.statistics(self.upath)["known_usage"]["counts"],total)
+
     def test_binding_different_attempt_or_scope_rejected(self):
         r=store.begin(self.registry,receipt_metadata(),"test-worker-0001")
         self.transcript();self.collect();usage.attach(self.upath,self.registry,AGENT,PARENT,r["receipt_id"])
