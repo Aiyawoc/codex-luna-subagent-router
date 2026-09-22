@@ -133,9 +133,14 @@ class GuidedInstallTests(unittest.TestCase):
         result = self.run_configure(routing_scope="user", routing_mode="luna_only")
         target = Path(result["routing_config"]["path"])
         data = json.loads(target.read_text(encoding="utf-8"))
-        self.assertEqual(data["schema_version"], "2.0")
+        self.assertEqual(data["schema_version"], "2.1")
         self.assertEqual(data["routing_mode"], "luna_only")
         self.assertEqual(data["max_concurrent_workers"], 3)
+        self.assertTrue(data["execution_policy"]["prefer_local_parallel_tools"])
+        self.assertTrue(data["execution_policy"]["materialization_gate"])
+        self.assertTrue(data["execution_policy"]["runtime_health_lease"])
+        self.assertFalse(data["decision_engine"]["enabled"])
+        self.assertEqual(data["decision_engine"]["provider"], "off")
 
     def test_adaptive_project_config(self) -> None:
         result = self.run_configure(
