@@ -124,7 +124,7 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
     # Hold one config transaction lock to serialize this helper; never alter trust storage.
     with store.locked(routing_path, timeout=0.4) if not dry_run else _noop():
         data = read_json(routing_path)
-        if data.get("schema_version") != "2.0" or data.get("routing_mode") not in ("adaptive", "luna_only"):
+        if data.get("schema_version") not in ("2.0", "2.1") or data.get("routing_mode") not in ("adaptive", "luna_only"):
             raise ConfigurationError("run guided routing setup first")
         if data.get("token_accounting", "off") not in ("on", "off"):
             raise ConfigurationError("unknown existing token_accounting")
