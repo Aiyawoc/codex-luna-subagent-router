@@ -178,6 +178,53 @@ class GuidedInstallTests(unittest.TestCase):
         self.assertEqual(backup.read_text(encoding="utf-8"), original)
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["routing_mode"], "luna_only")
 
+    def test_v20_upgrade_preserves_existing_feature_settings(self) -> None:
+        target = self.codex_home / "codex-luna-subagent-router" / "routing.json"
+        target.parent.mkdir(parents=True)
+        existing = {
+            "schema_version": "2.0",
+            "routing_mode": "adaptive",
+            "evidence_calibration": "conservative",
+            "token_accounting": "on",
+            "token_accounting_scope": "main_and_subagents",
+            "token_accounting_collection": "manual",
+            "custom_extension": {"keep": True},
+        }
+        target.write_text(json.dumps(existing, ensure_ascii=False) + "\n", encoding="utf-8")
+        result = self.run_configure(routing_scope="user", routing_mode="adaptive")
+        self.assertEqual(result["routing_config"]["action"], "migrated_v2")
+        data = json.loads(target.read_text(encoding="utf-8"))
+        self.assertEqual(data["schema_version"], "2.1")
+        self.assertEqual(data["evidence_calibration"], "conservative")
+        self.assertEqual(data["token_accounting_scope"], "main_and_subagents")
+        self.assertEqual(data["token_accounting_collection"], "manual")
+        self.assertEqual(data["custom_extension"], {"keep": True})
+        self.assertTrue(data["execution_policy"]["prefer_local_parallel_tools"])
+        self.assertFalse(data["decision_engine"]["enabled"])
+
+    def test_v21_reconfigure_preserves_explicit_decision_opt_in(self) -> None:
+        target = self.codex_home / "codex-luna-subagent-router" / "routing.json"
+        target.parent.mkdir(parents=True)
+        existing = {
+            "schema_version": "2.1",
+            "routing_mode": "adaptive",
+            "decision_engine": {
+                "enabled": True,
+                "mode": "shadow",
+                "provider": "jev_ask",
+                "endpoint": "http://127.0.0.1:4319/ask",
+                "timeout_ms": 900,
+            },
+        }
+        target.write_text(json.dumps(existing, ensure_ascii=False) + "\n", encoding="utf-8")
+        result = self.run_configure(routing_scope="user", routing_mode="adaptive")
+        self.assertEqual(result["routing_config"]["action"], "updated_v21_defaults")
+        data = json.loads(target.read_text(encoding="utf-8"))
+        self.assertTrue(data["decision_engine"]["enabled"])
+        self.assertEqual(data["decision_engine"]["provider"], "jev_ask")
+        self.assertEqual(data["decision_engine"]["timeout_ms"], 900)
+        self.assertTrue(data["execution_policy"]["materialization_gate"])
+
     def test_unknown_existing_routing_requires_confirmation(self) -> None:
         target = self.codex_home / "codex-luna-subagent-router" / "routing.json"
         target.parent.mkdir(parents=True)

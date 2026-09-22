@@ -323,6 +323,30 @@ def _is_legacy_v1_routing(data: dict[str, Any]) -> bool:
     )
 
 
+def _upgrade_v2_routing(data: dict[str, Any], routing_mode: str) -> dict[str, Any] | None:
+    """Upgrade managed v2.0/v2.1 configs without discarding user-selected feature fields."""
+    if data.get("schema_version") not in ("2.0", "2.1"):
+        return None
+    if data.get("routing_mode") not in ROUTING_MODES:
+        raise ConfigurationError("existing v2 routing config has an invalid routing_mode")
+    defaults = build_routing_config(routing_mode)
+    merged = json.loads(json.dumps(data))
+    merged["schema_version"] = "2.1"
+    merged["routing_mode"] = routing_mode
+    for key in ("cost_objective", "context_budget_policy", "result_budget_policy", "max_concurrent_workers"):
+        merged.setdefault(key, defaults[key])
+    for section in ("execution_policy", "decision_engine"):
+        current = merged.get(section)
+        if current is None:
+            merged[section] = dict(defaults[section])
+        elif not isinstance(current, dict):
+            raise ConfigurationError(f"existing v2 routing config {section} must be an object")
+        else:
+            for key, value in defaults[section].items():
+                current.setdefault(key, value)
+    return merged
+
+
 def _write_text_atomic(path: Path, text: str) -> None:
     _read_optional_regular_file(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -429,16 +453,25 @@ def configure(
                     pending_writes.append((backup_path, existing))
                 pending_writes.append((routing_path, rendered))
                 action = "migrated_v1"
-            elif replace_routing:
-                action = "updated"
-                pending_writes.append((routing_path, rendered))
-            elif dry_run:
-                action = "replace_requires_confirmation"
             else:
-                raise ConfigurationError(
-                    f"routing config already exists with different content: {routing_path}; "
-                    "review it and pass --replace-routing only after user confirmation"
-                )
+                upgraded = _upgrade_v2_routing(existing_data, routing_mode)
+                if upgraded is not None:
+                    upgraded_rendered = json.dumps(upgraded, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+                    if upgraded_rendered == existing:
+                        action = "unchanged"
+                    else:
+                        action = "migrated_v2" if existing_data.get("schema_version") == "2.0" else "updated_v21_defaults"
+                        pending_writes.append((routing_path, upgraded_rendered))
+                elif replace_routing:
+                    action = "updated"
+                    pending_writes.append((routing_path, rendered))
+                elif dry_run:
+                    action = "replace_requires_confirmation"
+                else:
+                    raise ConfigurationError(
+                        f"routing config already exists with different content: {routing_path}; "
+                        "review it and pass --replace-routing only after user confirmation"
+                    )
 
         result["routing_config"].update({"action": action, "path": str(routing_path)})
 
