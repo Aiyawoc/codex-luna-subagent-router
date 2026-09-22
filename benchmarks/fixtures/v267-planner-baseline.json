@@ -2,8 +2,9 @@
   "schema_version": 1,
   "router_baseline": "2.6.7",
   "lead": {
-    "model": "gpt-5.6-sol",
-    "effort": "high"
+    "model": "gpt-6-sol",
+    "effort": "high",
+    "historical_v267_model": "gpt-5.6-sol"
   },
   "cases": [
     {
@@ -21,7 +22,9 @@
             "failure_cost": "low",
             "context_volume": "low"
           },
-          "read_paths": ["src/a.py"],
+          "read_paths": [
+            "src/a.py"
+          ],
           "write_paths": []
         },
         {
@@ -35,17 +38,31 @@
             "failure_cost": "low",
             "context_volume": "low"
           },
-          "read_paths": ["src/b.py"],
+          "read_paths": [
+            "src/b.py"
+          ],
           "write_paths": []
         }
       ],
       "v267_expected": {
-        "decisions": ["delegate", "delegate"],
-        "models": ["gpt-5.6-luna", "gpt-5.6-luna"],
-        "ready_worker_ids": ["scan-one", "scan-two"]
+        "decisions": [
+          "delegate",
+          "delegate"
+        ],
+        "models": [
+          "gpt-5.6-luna",
+          "gpt-5.6-luna"
+        ],
+        "ready_worker_ids": [
+          "scan-one",
+          "scan-two"
+        ]
       },
       "v270_target": {
-        "execution_shapes": ["local_parallel_tools", "local_parallel_tools"],
+        "execution_shapes": [
+          "local_parallel_tools",
+          "local_parallel_tools"
+        ],
         "ready_worker_ids": []
       }
     },
@@ -64,8 +81,12 @@
             "failure_cost": "medium",
             "context_volume": "medium"
           },
-          "read_paths": ["src/a.py"],
-          "write_paths": ["src/a_fix.py"]
+          "read_paths": [
+            "src/a.py"
+          ],
+          "write_paths": [
+            "src/a_fix.py"
+          ]
         },
         {
           "task_id": "debug-two",
@@ -78,18 +99,37 @@
             "failure_cost": "medium",
             "context_volume": "medium"
           },
-          "read_paths": ["src/b.py"],
-          "write_paths": ["src/b_fix.py"]
+          "read_paths": [
+            "src/b.py"
+          ],
+          "write_paths": [
+            "src/b_fix.py"
+          ]
         }
       ],
       "v267_expected": {
-        "decisions": ["delegate", "delegate"],
-        "delegation_triggers": ["parallel_independent_sibling", "parallel_independent_sibling"],
-        "ready_worker_ids": ["debug-one", "debug-two"]
+        "decisions": [
+          "delegate",
+          "delegate"
+        ],
+        "delegation_triggers": [
+          "parallel_independent_sibling",
+          "parallel_independent_sibling"
+        ],
+        "ready_worker_ids": [
+          "debug-one",
+          "debug-two"
+        ]
       },
       "v270_target": {
-        "execution_shapes": ["subagent", "subagent"],
-        "ready_worker_ids": ["debug-one", "debug-two"]
+        "execution_shapes": [
+          "subagent",
+          "subagent"
+        ],
+        "ready_worker_ids": [
+          "debug-one",
+          "debug-two"
+        ]
       }
     },
     {
@@ -107,16 +147,24 @@
             "failure_cost": "low",
             "context_volume": "low"
           },
-          "read_paths": ["src/a.py"],
-          "write_paths": ["src/a.py"]
+          "read_paths": [
+            "src/a.py"
+          ],
+          "write_paths": [
+            "src/a.py"
+          ]
         }
       ],
       "v267_expected": {
-        "decisions": ["lead_only"],
+        "decisions": [
+          "lead_only"
+        ],
         "ready_worker_ids": []
       },
       "v270_target": {
-        "execution_shapes": ["local_serial"],
+        "execution_shapes": [
+          "local_serial"
+        ],
         "ready_worker_ids": []
       }
     }
