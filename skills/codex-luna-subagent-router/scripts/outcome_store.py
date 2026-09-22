@@ -107,7 +107,7 @@ def effective_config(root=None):
     return {"routing_mode": "luna_only", "evidence_calibration": "off"}
 
 
-def check_metadata(data):
+def check_metadata(data, *, allow_legacy=False):
     if not isinstance(data.get("task_family"), str) or not FAMILY_RE.fullmatch(data["task_family"]):
         raise StoreError("task_family must be a non-sensitive lowercase hyphen-case label")
     axes = data.get("axes")
