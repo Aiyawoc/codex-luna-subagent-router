@@ -25,10 +25,15 @@ AXES = {
     "context_volume": ("low", "medium", "high"),
 }
 PAIRS = tuple((model, effort) for model, efforts in (
-    ("gpt-5.6-luna", ("low", "medium", "high", "xhigh", "max")),
-    ("gpt-5.6-sol", ("high", "xhigh")),
+    ("gpt-6-luna", ("low", "medium", "high", "xhigh", "max")),
+    ("gpt-6-sol", ("high", "xhigh")),
     ("gpt-6-astra", ("high", "xhigh", "max")),
 ) for effort in efforts)
+LEGACY_PAIRS = tuple((model, effort) for model, efforts in (
+    ("gpt-5.6-luna", ("low", "medium", "high", "xhigh", "max")),
+    ("gpt-5.6-sol", ("high", "xhigh")),
+) for effort in efforts)
+KNOWN_PAIRS = frozenset(PAIRS) | frozenset(LEGACY_PAIRS)
 FAMILY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
 BASE_FIELDS = {"recorded_at", "scope_id", "task_family", "axes", "model", "effort", "outcome", "verification_summary", "policy_version", "router_version", "identity_verified", "route_binding"}
 EXTRA_FIELDS = {"receipt_id", "observed_model", "observed_effort", "identity_source", "completion_reason"}
@@ -115,7 +120,8 @@ def check_metadata(data, *, allow_legacy=False):
         raise StoreError("axes must contain exactly the six classification fields")
     if any(not isinstance(axes[k], str) or axes[k] not in choices for k, choices in AXES.items()):
         raise StoreError("invalid classification value")
-    if (data.get("model"), data.get("effort")) not in PAIRS:
+    valid_pairs = KNOWN_PAIRS if allow_legacy else frozenset(PAIRS)
+    if (data.get("model"), data.get("effort")) not in valid_pairs:
         raise StoreError("record model/effort must match a bundled route")
     if data.get("route_binding") not in ("installed_profile", "live_spawn"):
         raise StoreError("invalid route_binding")
@@ -128,7 +134,7 @@ def validate_record(data):
         raise StoreError("record must be an object")
     if set(data) - BASE_FIELDS - EXTRA_FIELDS:
         raise StoreError("unsupported record fields")
-    check_metadata(data)
+    check_metadata(data, allow_legacy=True)
     if data.get("outcome") not in ("verified_pass", "verified_fail", "partial"):
         raise StoreError("invalid outcome")
     if not isinstance(data.get("identity_verified"), bool):
@@ -288,7 +294,7 @@ RECEIPT_FIELDS = {"scope_id", "task_family", "axes", "model", "effort", "route_b
 def validate_receipt(receipt):
     if not isinstance(receipt, dict) or set(receipt) != RECEIPT_FIELDS:
         raise StoreError("receipt must contain only its declared metadata")
-    check_metadata(receipt)
+    check_metadata(receipt, allow_legacy=True)
     if not isinstance(receipt["receipt_id"], str) or not re.fullmatch(r"[0-9a-f]{32}", receipt["receipt_id"]):
         raise StoreError("invalid receipt_id")
     parse_time(receipt["began_at"])
@@ -329,7 +335,7 @@ def _finalize_unlocked(path, rid, outcome, summary, *, observed_model=None, obse
     receipt = validate_receipt(matched[0])
     if receipt.get("policy_version") != POLICY_VERSION:
         raise StoreError("receipt policy changed; do not attribute old work to a new policy")
-    check_metadata(receipt)
+    check_metadata(receipt, allow_legacy=True)
     if outcome not in ("verified_pass", "verified_fail", "partial") or completion_reason not in REASONS:
         raise StoreError("invalid outcome or completion reason")
     verified = identity_source in ("runtime_metadata", "spawn_response") and (observed_model, observed_effort) == (receipt["model"], receipt["effort"])
