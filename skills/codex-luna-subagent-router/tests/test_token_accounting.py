@@ -296,6 +296,15 @@ class LedgerAndHooksTests(Sandbox):
         self.assertEqual(scoped["workers"][0]["scope_attribution"],"receipt")
         self.assertEqual(usage.statistics(self.upath,scope="global")["observed_subagents"],0)
 
+    def test_legacy_single_receipt_row_remains_readable_without_binding_journal(self):
+        receipt=store.begin(self.registry,receipt_metadata(),"test-worker-legacy")
+        self.transcript();row=self.collect()
+        with store.locked(self.upath,timeout=0.4):
+            usage._write(self.upath,dict(row,receipt_id=receipt["receipt_id"]),row)
+        self.assertFalse(usage.bindings_path(self.upath).exists())
+        linked=usage.for_receipt(self.upath,receipt["receipt_id"])
+        self.assertEqual(linked["snapshot"]["counts"],counter())
+
     def test_binding_different_attempt_or_scope_rejected(self):
         r=store.begin(self.registry,receipt_metadata(),"test-worker-0001")
         self.transcript();self.collect();usage.attach(self.upath,self.registry,AGENT,PARENT,r["receipt_id"])
