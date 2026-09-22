@@ -28,6 +28,10 @@ v2.7 起，“可并行”不再自动等于“应该创建 SubAgent”。planne
 
 plan 输出新增 `execution_shape` / `execution_reason`，并列出 `local_parallel_task_ids`、`local_serial_task_ids`。只有 `execution_shape=subagent` 且 `decision=delegate` 的任务进入 Worker groups / planned_waves，不消耗不必要的 Worker slot。
 
+## 可选 Grounded Decision Shadow
+
+如果有效 `routing.json` 明确启用 `decision_engine.enabled=true` 且 `mode=shadow`，在 Minimum Evidence Pass 后按 `references/decision-layer.md` 运行 bounded checkpoint/decision。Shadow 结果只做观测证据，**不得覆盖本文件的 Execution Shape、route_advisor 或 plan_work 生产结果**；provider 不可用时直接继续 Core Planner。
+
 ## 一次覆盖全部候选
 
 多任务先执行：
