@@ -46,8 +46,8 @@ def _read_routing(path: Path) -> dict[str, Any]:
         raise ConfigurationError(f"routing config is not valid JSON: {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise ConfigurationError("routing config root must be an object")
-    if value.get("schema_version") != "2.0":
-        raise ConfigurationError("evidence calibration helper supports routing schema 2.0 only")
+    if value.get("schema_version") not in ("2.0", "2.1"):
+        raise ConfigurationError("evidence calibration helper supports routing schema 2.0/2.1 only")
     if value.get("routing_mode") not in {"luna_only", "adaptive"}:
         raise ConfigurationError("routing config has an unsupported routing_mode")
     return value
