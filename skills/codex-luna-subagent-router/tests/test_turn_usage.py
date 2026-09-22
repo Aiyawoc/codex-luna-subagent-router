@@ -303,6 +303,32 @@ class MainTurnTests(Sandbox):
         self.add([ctx(),activity(kind='interacted'),event(),terminal()]);self.hook('Stop')
         self.assertEqual(self.row()['child_snapshots'][AGENT]['counts'],counter())
 
+    def test_missing_reuse_baseline_never_expands_sealed_old_turn(self):
+        self.hook()
+        usage.hook(self.hook_payload('SubagentStart'),self.upath)
+        self.transcript([meta(),context(),event()])
+        self.collect()
+        self.add([ctx(),activity(),event(),terminal()]);self.hook('Stop')
+        before=self.row()['child_snapshots'][AGENT]
+        self.assertEqual(before['counts'],counter())
+        missing=self.path.with_suffix('.missing')
+        self.path.rename(missing)
+        self.hook(turn=TURN2)
+        missing.rename(self.path)
+        start=self.hook_payload('SubagentStart');start['turn_id']='child-turn-reuse'
+        usage.hook(start,self.upath)
+        total={k:v*2 for k,v in counter().items()}
+        self.add([context(T3),event(total,counter(),T3),end(T4)],self.path);self.collect()
+        self.add([ctx(TURN2,T3),activity(kind='interacted',stamp=T3),event(total,counter(),T3),terminal(TURN2,T4)])
+        self.hook('Stop',TURN2)
+        old=self.row()['child_snapshots'][AGENT]
+        current=self.row(TURN2)['child_snapshots'][AGENT]
+        self.assertEqual(old['counts'],counter())
+        self.assertNotEqual(old['counts'],total)
+        self.assertIn('historical_child_end_missing',old['reasons'])
+        self.assertIn('child_baseline_missing',current['reasons'])
+        self.assertIsNone(current['counts']['total_tokens'])
+
     def test_preview_does_not_stop_turn_and_is_labeled_prefinal(self):
         self.hook();self.add([ctx(),event()])
         row=turns.preview(self.upath,'global',self.project)

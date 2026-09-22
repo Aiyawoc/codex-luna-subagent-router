@@ -26,6 +26,8 @@ VERSION = "2.6.1"
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 ROW_FIELDS = {"schema_version", "usage_id", "agent_id", "parent_id", "agent_type", "scope_id", "started_at", "updated_at", "receipt_id", "snapshot", "locator"}
 SNAPSHOT_FIELDS = {"status", "source", "counts", "reasons", "usage_events", "last_usage_at", "model", "effort", "terminal_observed", "bytes_read"}
+BINDING_VERSION = "1.0"
+BINDING_FIELDS = {"schema_version", "receipt_id", "usage_id", "agent_id", "parent_id", "scope_id", "bound_at", "snapshot", "lifetime_snapshot"}
 
 
 def default_usage_path(registry=None) -> Path:
@@ -94,6 +96,9 @@ REASON_LABELS.update({
     "main_turn_baseline_missing": "旧记录缺少日志定位或开始基线，待复核",
     "invalid_interval_boundary": "开始与结束区间不一致",
     "transcript_read_failed": "读取日志发生错误",
+    "receipt_baseline_missing": "缺少前一任务的 Worker 用量基线",
+    "receipt_baseline_partial": "前一任务基线不完整，本次区间按已知计数计算",
+    "receipt_scope_attribution": "按 outcome receipt 归属项目范围",
 })
 
 MODEL_NAMES = {"gpt-5.6-luna": "Luna", "gpt-5.6-sol": "Sol", "gpt-6-astra": "Astra"}
@@ -350,6 +355,105 @@ def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, sourc
         return _write(path, row, old)
 
 
+def bindings_path(path):
+    path = Path(path)
+    return path.with_name(path.stem + ".bindings.jsonl")
+
+
+def _validate_binding(row):
+    if not isinstance(row, dict) or set(row) != BINDING_FIELDS or row.get("schema_version") != BINDING_VERSION:
+        raise store.StoreError("invalid usage receipt binding")
+    for key in ("receipt_id", "usage_id", "agent_id", "parent_id", "scope_id"):
+        _id(row[key])
+    if not re.fullmatch(r"[0-9a-f]{32}", row["receipt_id"]):
+        raise store.StoreError("invalid receipt binding id")
+    if row["usage_id"] != usage_id(row["agent_id"], row["parent_id"]):
+        raise store.StoreError("invalid receipt binding usage identity")
+    if not re.fullmatch(r"(?:global|project-[a-zA-Z0-9-]{1,64})", row["scope_id"]):
+        raise store.StoreError("invalid receipt binding scope")
+    store.parse_time(row["bound_at"])
+    for key in ("snapshot", "lifetime_snapshot"):
+        fake = _new(row["agent_id"], row["parent_id"], row["scope_id"])
+        fake["snapshot"] = row[key]
+        validate_row(fake)
+    return row
+
+
+def _load_bindings(path):
+    rows, invalid = store.load_lines(bindings_path(path))
+    found, conflicts = {}, set()
+    for row in rows:
+        try:
+            _validate_binding(row)
+        except (ValueError, TypeError, KeyError):
+            invalid += 1
+            continue
+        rid = row["receipt_id"]
+        old = found.get(rid)
+        if old is None:
+            found[rid] = row
+        elif old != row:
+            conflicts.add(rid)
+    for rid in conflicts:
+        found.pop(rid, None)
+    return list(found.values()), invalid + len(conflicts)
+
+
+def _clone_snapshot(snapshot):
+    return json.loads(json.dumps(snapshot))
+
+
+def _receipt_delta(current, baseline):
+    if baseline is None:
+        return _clone_snapshot(current)
+    if current["status"] == "unavailable" or baseline["status"] == "unavailable":
+        return empty("receipt_baseline_missing")
+    counts = {}
+    for field in FIELDS:
+        now, before = current["counts"][field], baseline["counts"][field]
+        if now is None or before is None:
+            counts[field] = None
+        elif now < before:
+            return empty("counter_reset")
+        else:
+            counts[field] = now - before
+    if any(counts[key] is None for key in ("total_tokens", "input_tokens", "output_tokens")):
+        return empty("receipt_baseline_missing")
+    result = _clone_snapshot(current)
+    result["counts"] = counts
+    result["usage_events"] = max(0, current["usage_events"] - baseline["usage_events"])
+    result["bytes_read"] = max(0, current["bytes_read"] - baseline["bytes_read"])
+    result["status"] = "complete" if current["status"] == baseline["status"] == "complete" else "partial"
+    reasons = set(current["reasons"]) | set(baseline["reasons"])
+    if result["status"] != "complete":
+        reasons.add("receipt_baseline_partial")
+    result["reasons"] = sorted(reasons)
+    return result
+
+
+def _binding_view(lifetime, binding):
+    return dict(lifetime, scope_id=binding["scope_id"], receipt_id=binding["receipt_id"],
+                snapshot=_clone_snapshot(binding["snapshot"]))
+
+
+def _combine_binding_snapshots(rows):
+    snapshots = [row["snapshot"] for row in rows]
+    aggregate = aggregate_snapshots(snapshots)
+    first = snapshots[0]
+    routes = {(snap.get("model"), snap.get("effort")) for snap in snapshots}
+    reasons = set().union(*(snap.get("reasons", []) for snap in snapshots))
+    reasons.add("receipt_scope_attribution")
+    if len(routes) > 1:
+        reasons.add("multiple_model_routes")
+    model, effort = next(iter(routes)) if len(routes) == 1 else (None, None)
+    return dict(status=aggregate["status"], source=first["source"], counts=aggregate["counts"],
+                reasons=sorted(reasons), usage_events=sum(s["usage_events"] for s in snapshots),
+                last_usage_at=max((s["last_usage_at"] for s in snapshots if s["last_usage_at"]), default=None),
+                model=model, effort=effort,
+                terminal_observed=all(s["terminal_observed"] for s in snapshots),
+                bytes_read=sum(s["bytes_read"] for s in snapshots))
+
+
 def attach(path, registry, agent_id, parent_id, receipt_id):
     uid = usage_id(agent_id, parent_id)
     rows, invalid = store.load_lines(store.receipts_path(registry))
@@ -357,18 +461,48 @@ def attach(path, registry, agent_id, parent_id, receipt_id):
     if invalid or len(matches) != 1:
         raise store.StoreError("missing or ambiguous outcome receipt")
     receipt = store.validate_receipt(matches[0])
+    bpath = bindings_path(path)
     with store.locked(path, timeout=0.4):
         latest, _ = load_latest(path)
-        row = latest.get(uid)
-        if row is None or row["scope_id"] != receipt["scope_id"]:
-            raise store.StoreError("usage identity or scope not registered")
-        if row["receipt_id"] not in (None, receipt_id) or any(r["receipt_id"] == receipt_id and k != uid for k, r in latest.items()):
-            raise store.StoreError("receipt is already bound to another attempt")
-        return _write(path, dict(row, receipt_id=receipt_id), row)
+        lifetime = latest.get(uid)
+        if lifetime is None:
+            raise store.StoreError("usage identity not registered")
+        with store.locked(bpath, timeout=0.4):
+            bindings, binding_invalid = _load_bindings(path)
+            if binding_invalid:
+                raise store.StoreError("usage receipt bindings are malformed")
+            existing = next((row for row in bindings if row["receipt_id"] == receipt_id), None)
+            if existing:
+                if existing["usage_id"] != uid or existing["scope_id"] != receipt["scope_id"]:
+                    raise store.StoreError("receipt is already bound to another attempt")
+                return _binding_view(lifetime, existing)
+            previous = sorted((row for row in bindings if row["usage_id"] == uid),
+                              key=lambda row: store.parse_time(row["bound_at"]))
+            baseline = previous[-1]["lifetime_snapshot"] if previous else None
+            binding = dict(schema_version=BINDING_VERSION, receipt_id=receipt_id, usage_id=uid,
+                           agent_id=agent_id, parent_id=parent_id, scope_id=receipt["scope_id"],
+                           bound_at=store.timestamp(),
+                           snapshot=_receipt_delta(lifetime["snapshot"], baseline),
+                           lifetime_snapshot=_clone_snapshot(lifetime["snapshot"]))
+            _validate_binding(binding)
+            store.write_line(bpath, binding)
+        # Preserve the legacy first receipt field for old readers, but never mutate it on Worker reuse.
+        if lifetime["receipt_id"] is None:
+            lifetime = _write(path, dict(lifetime, receipt_id=receipt_id), lifetime)
+        return _binding_view(lifetime, binding)
 
 
 def for_receipt(path, receipt_id):
+    bindings, invalid = _load_bindings(path)
+    if invalid:
+        raise store.StoreError("usage receipt bindings are malformed")
+    binding = next((row for row in bindings if row["receipt_id"] == receipt_id), None)
     latest, _ = load_latest(path)
+    if binding:
+        lifetime = latest.get(binding["usage_id"])
+        if lifetime is None:
+            raise store.StoreError("bound usage identity is missing")
+        return _binding_view(lifetime, binding)
     found = [r for r in latest.values() if r["receipt_id"] == receipt_id]
     if len(found) > 1:
         raise store.StoreError("ambiguous receipt usage")
@@ -387,8 +521,27 @@ def _sum(rows):
 def statistics(path=None, *, scope=None, parent_id=None, agent_id=None):
     path = Path(path or default_usage_path())
     latest, ledger_diagnostics = load_latest(path)
-    rows = [r for r in latest.values() if (scope is None or r["scope_id"] == scope)
-            and (parent_id is None or r["parent_id"] == parent_id) and (agent_id is None or r["agent_id"] == agent_id)]
+    bindings, invalid_bindings = _load_bindings(path)
+    by_usage = {}
+    for binding in bindings:
+        by_usage.setdefault(binding["usage_id"], []).append(binding)
+    rows = []
+    for lifetime in latest.values():
+        if parent_id is not None and lifetime["parent_id"] != parent_id:
+            continue
+        if agent_id is not None and lifetime["agent_id"] != agent_id:
+            continue
+        if scope is None:
+            rows.append(lifetime)
+            continue
+        matched = [row for row in by_usage.get(lifetime["usage_id"], []) if row["scope_id"] == scope]
+        if matched:
+            synthetic = dict(lifetime, scope_id=scope, receipt_id=None,
+                             snapshot=_combine_binding_snapshots(matched))
+            synthetic["scope_attribution"] = "receipt"
+            rows.append(synthetic)
+        elif not by_usage.get(lifetime["usage_id"]) and lifetime["scope_id"] == scope:
+            rows.append(lifetime)
     by_route = {}
     for r in rows:
         key = (r["snapshot"]["model"], r["snapshot"]["effort"])
@@ -398,8 +551,8 @@ def statistics(path=None, *, scope=None, parent_id=None, agent_id=None):
                 workers=[{**{k: v for k, v in r.items() if k != "locator"}, "summary": summary(r["snapshot"], model_label(r["snapshot"], r["agent_type"])),
                           "diagnostics": diagnostics.describe(r),
                           "display": {k: compact(v) for k, v in r["snapshot"]["counts"].items()}} for r in sorted(rows, key=lambda x: x["started_at"])],
-                **ledger_diagnostics, limitation="Known usage only; cache is a subset of input. Not billing, quota, or savings. Coverage excludes unobserved Workers.")
-
+                invalid_binding_rows=invalid_bindings,
+                **ledger_diagnostics, limitation="Known usage only; cache is a subset of input. Not billing, quota, or savings. Project scope prefers authoritative outcome-receipt attribution over child hook CWD.")
 
 def refresh(path, parent_id, sid, root, *, agent_id=None, limit=20, max_seconds=8.0, max_bytes=MAX_BYTES):
     _id(parent_id)

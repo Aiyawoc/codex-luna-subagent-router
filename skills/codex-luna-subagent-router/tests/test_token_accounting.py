@@ -270,6 +270,32 @@ class LedgerAndHooksTests(Sandbox):
         self.assertEqual(usage.for_receipt(self.upath,r["receipt_id"])["snapshot"]["counts"],counter())
         self.assertEqual(store.read_records(self.registry)[0][0]["outcome"],"partial")
 
+    def test_reused_worker_can_bind_sequential_receipts_as_intervals(self):
+        first=store.begin(self.registry,receipt_metadata(),"test-worker-0001")
+        self.transcript();self.collect()
+        usage.attach(self.upath,self.registry,AGENT,PARENT,first["receipt_id"])
+        second=store.begin(self.registry,receipt_metadata(),"test-worker-0002")
+        total={k:v*2 for k,v in counter().items()}
+        self.transcript([meta(),context(),event(),end(),context(T3),event(total,counter(),T3),end(T4)])
+        self.collect()
+        linked=usage.attach(self.upath,self.registry,AGENT,PARENT,second["receipt_id"])
+        self.assertEqual(usage.for_receipt(self.upath,first["receipt_id"])["snapshot"]["counts"],counter())
+        self.assertEqual(linked["snapshot"]["counts"],counter())
+        self.assertEqual(usage.for_receipt(self.upath,second["receipt_id"])["snapshot"]["counts"],counter())
+        self.assertEqual(usage.statistics(self.upath)["known_usage"]["counts"],total)
+
+    def test_receipt_scope_can_attribute_exact_worker_when_hook_cwd_differs(self):
+        project_scope="project-acceptance"
+        receipt=store.begin(self.registry,receipt_metadata(project_scope),"test-worker-0003")
+        self.transcript();self.collect()
+        linked=usage.attach(self.upath,self.registry,AGENT,PARENT,receipt["receipt_id"])
+        self.assertEqual(linked["scope_id"],project_scope)
+        scoped=usage.statistics(self.upath,scope=project_scope)
+        self.assertEqual(scoped["observed_subagents"],1)
+        self.assertEqual(scoped["known_usage"]["counts"],counter())
+        self.assertEqual(scoped["workers"][0]["scope_attribution"],"receipt")
+        self.assertEqual(usage.statistics(self.upath,scope="global")["observed_subagents"],0)
+
     def test_binding_different_attempt_or_scope_rejected(self):
         r=store.begin(self.registry,receipt_metadata(),"test-worker-0001")
         self.transcript();self.collect();usage.attach(self.upath,self.registry,AGENT,PARENT,r["receipt_id"])
