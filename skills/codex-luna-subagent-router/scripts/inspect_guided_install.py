@@ -98,9 +98,16 @@ def inspect(codex_home, project_root=None):
         needs = needs or set(hook_events) != set(tokens.EVENTS)
     add(6, "token_accounting", {"mode": token_mode, "scope": accounting_scope, "collection": collection, "current_hook_events": hook_events}, needs,
         "是否开启/升级主 Agent 与子 Agent 的 token 统计及完成摘要？同一选择包含 UserPromptSubmit、Stop、SubagentStart、SubagentStop；支持且经审查信任后安装，或选择手动采集/关闭。")
+    execution = routing.get("execution_policy")
+    if not isinstance(execution, dict):
+        execution = {"prefer_local_parallel_tools": True, "materialization_gate": True, "runtime_health_lease": True, "source": "v2.7_runtime_defaults"}
+    decision = routing.get("decision_engine")
+    if not isinstance(decision, dict):
+        decision = {"enabled": False, "mode": "shadow", "provider": "off", "source": "absent_default_off"}
     return dict(questions=items, pending_questions=[i["number"] for i in items if i["needs_question"]],
                 routing_source=str(rpath), read_only=True,
-                rule="Ask every applicable missing option explicitly; absent runtime defaults do not count as user answers. Preserve explicit off. No changes or hook trust are applied.")
+                optional_features={"execution_policy": execution, "decision_engine": decision},
+                rule="Ask every applicable missing option explicitly; absent runtime defaults do not count as user answers. Preserve explicit off. Decision Engine is optional opt-in and does not add a mandatory seventh question. No changes or hook trust are applied.")
 
 
 def main(argv=None):
