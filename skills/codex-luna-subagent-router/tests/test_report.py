@@ -14,7 +14,7 @@ import report
 import runtime_support
 
 
-def snap(status="complete", total=100, input_tokens=80, cached=60, output=20, model="gpt-5.6-luna", effort="high", reasons=None):
+def snap(status="complete", total=100, input_tokens=80, cached=60, output=20, model="gpt-6-luna", effort="high", reasons=None):
     return {
         "status": status,
         "source": "codex_rollout_v1",
@@ -53,7 +53,7 @@ def sample_data():
         "outcomes": {
             "registry": "/private/home/outcomes.jsonl", "scope": "project-demo", "total_outcomes": 2,
             "outcomes": {"verified_pass": 1, "partial": 1},
-            "by_model": [{"model": "gpt-5.6-luna", "effort": "high", "outcome": "verified_pass", "count": 1}],
+            "by_model": [{"model": "gpt-6-luna", "effort": "high", "outcome": "verified_pass", "count": 1}],
             "pending_count": 0, "available_recommendations": [], "sparse_buckets": 0,
         },
         "subagents": {
@@ -61,7 +61,7 @@ def sample_data():
             "known_usage": {"counts": snap()["counts"], "display": {}, "field_coverage": {}},
             "completeness": {"status": "complete", "counts": snap()["counts"], "reasons": [], "field_coverage": {},
                              "observed": 1, "complete": 1, "waiting": 0, "partial": 0, "unavailable": 0},
-            "by_model": [{"model": "gpt-5.6-luna", "effort": "high", "workers": 1, "counts": snap()["counts"],
+            "by_model": [{"model": "gpt-6-luna", "effort": "high", "workers": 1, "counts": snap()["counts"],
                           "display": {}, "field_coverage": {}}],
             "workers": [worker],
         },
