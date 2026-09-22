@@ -386,6 +386,11 @@ def main(argv=None):
         elif args.command == "plan":
             from plan_work import plan_work
             output = plan_work(json.loads(args.request.read_text(encoding="utf-8")), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root, runtime_health=args.runtime_health)
+            try:
+                import planning_store
+                planning_store.append(planning_store.default_path(path), planning_store.from_plan(output, scope))
+            except (ValueError, OSError, TypeError, KeyError):
+                output["planning_observation_error"] = "planning telemetry unavailable; production plan unchanged"
         else:
             output = stats(path, scope)
             import token_usage as usage

@@ -16,6 +16,8 @@ import outcome_store as store
 import route_advisor
 import token_usage
 import turn_usage
+import decision_store
+import planning_store
 
 REPORT_VERSION = "1.0"
 ROUTER_VERSION = store.ROUTER_VERSION
@@ -93,10 +95,29 @@ def collect(scope_id):
     outcomes = route_advisor.stats(registry, scope=scope_id)
     subagents = token_usage.statistics(usage_path, scope=scope_id)
     turns = turn_usage.statistics(usage_path, scope=scope_id)
+    planning = planning_store.statistics(planning_store.default_path(registry), scope=scope_id)
+    decision_rows, invalid_decisions = decision_store.read()
+    decision_rows = [row for row in decision_rows if scope_id is None or row["scope_id"] == scope_id]
+    decision_status = Counter(row["status"] for row in decision_rows)
+    decision_providers = Counter(row["provider"] for row in decision_rows)
+    latencies = sorted(row["latency_ms"] for row in decision_rows if type(row.get("latency_ms")) is int)
+    decisions = {
+        "records": len(decision_rows),
+        "statuses": dict(decision_status),
+        "providers": dict(decision_providers),
+        "available": decision_status.get("available", 0),
+        "unavailable": decision_status.get("unavailable", 0),
+        "with_confidence": sum(1 for row in decision_rows if row.get("confidence") is not None),
+        "median_latency_ms": latencies[len(latencies) // 2] if latencies else None,
+        "invalid_decision_rows": invalid_decisions,
+        "latest_recorded_at": max((row.get("recorded_at") for row in decision_rows), default=None),
+    }
     return {
         "outcomes": outcomes,
         "subagents": subagents,
         "turns": {"summary": _turn_summary(turns), "records": turns},
+        "planning": planning,
+        "decisions": decisions,
     }
 
 
@@ -165,6 +186,7 @@ def markdown(payload):
     """Fixed chat-first Markdown panel. brief.md and stdout intentionally share this exact layout."""
     data = payload["data"]
     outcomes, subagents, turns = data["outcomes"], data["subagents"], data["turns"]["summary"]
+    planning, decisions = data.get("planning", {}), data.get("decisions", {})
     known = subagents.get("known_usage", {}).get("counts", {})
     subcov = subagents.get("completeness", {})
     maincov = turns.get("main_completeness", {})
@@ -229,6 +251,27 @@ def markdown(payload):
         f"| ◐ partial | {outcome_counts.get('partial', 0)} |",
         f"| ⏳ pending receipt | {outcomes.get('pending_count', 0)} |",
         f"| 📐 可用校准建议 | {len(outcomes.get('available_recommendations', []))} |",
+        "",
+        "## 执行规划",
+        "",
+        "| 指标 | 当前值 |",
+        "|---|---:|",
+        f"| 规划次数 | {planning.get('plans', 0)} |",
+        f"| local_serial | {planning.get('execution_shapes', {}).get('local_serial', 0)} |",
+        f"| local_parallel_tools | {planning.get('execution_shapes', {}).get('local_parallel_tools', 0)} |",
+        f"| subagent | {planning.get('execution_shapes', {}).get('subagent', 0)} |",
+        f"| Planned Worker | {planning.get('planned_workers', 0)} |",
+        f"| Health probe | {planning.get('health_probes', 0)} |",
+        "",
+        "## Decision Shadow",
+        "",
+        "| 指标 | 当前值 |",
+        "|---|---:|",
+        f"| Shadow records | {decisions.get('records', 0)} |",
+        f"| Available | {decisions.get('available', 0)} |",
+        f"| Unavailable | {decisions.get('unavailable', 0)} |",
+        f"| 有 confidence | {decisions.get('with_confidence', 0)} |",
+        f"| 中位延迟 | {decisions.get('median_latency_ms') if decisions.get('median_latency_ms') is not None else '-'} ms |",
         "",
         "## ⚠️ 需要关注",
         "",
