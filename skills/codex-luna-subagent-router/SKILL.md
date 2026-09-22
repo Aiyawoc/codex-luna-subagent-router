@@ -56,11 +56,10 @@ Astra/Sol Lead 不重复已适合廉价 Worker 的工作；关键路径、不可
 ## 执行与边界
 
 1. 推断目标与验收；仅实质歧义提问。必须有本轮或适用 AGENTS 长期委派授权。
-2. 路由后先选 Execution Shape：可由 Lead 低成本并行完成的只读证据任务使用 `local_parallel_tools`，真正需要独立 reasoning/context/review 的任务才进入 SubAgent；再预检 exact model+effort、写入范围与真实容量并生成 RoutePlan 2.1。
-3. 支持 `list_agents` 时只把**已 Materialized** 的 PendingInit/Running 计入并发；spawn acknowledgement 本身不算 Worker 已创建，Completed 历史也不是累计总数。runtime health 未知时只创建第一只真实 Worker，确认 materialized 后重规划并放行剩余同波任务；已存在 materialized Worker 时可视为本 session health 已有证据。创建失败按原始错误区分 thread limit / server overload / auth/MCP/model/materialization timeout / unknown。
-4. 确定要派遣后读 `task-packet.md` 与 `lifecycle-and-context.md`；按 `Evidence reuse` 复用有效证据。同工作流且满足条件才复用 Completed Worker，否则 fresh。conservative 的 outcome `begin` 只在 Worker Materialized 后执行，不能给未创建成功的 spawn 留 pending receipt。Worker 不创建下级、不做最终不可逆动作。
-5. Worker 以 `TASK_ACK <task_id>` 回传人类可读的有效信息。Lead 去重综合 Worker 证据，不原样转贴 Worker 回复或日志。
-6. 同波等待仍必要 Worker；失去价值时 early stop。验收/记录后允许 runtime 回收；retry 前处理旧执行。
+2. 路由后按 `work-planning.md` 先选 `local_serial / local_parallel_tools / subagent`；只有 subagent 进入 exact model+effort、写入范围和容量预检。
+3. spawn acknowledgement 不等于成功。只把 Host 可再次确认的 Materialized `PendingInit/Running` 计入并发；runtime health 未知时首只真实 Worker 兼作探针，成功后重规划放行同波。失败保留 thread limit / overload / auth/MCP/model 等原始分类。
+4. 确定委派后读 `task-packet.md` 与 `lifecycle-and-context.md`；conservative 的 `begin` 在 Materialized 后执行。按 Evidence reuse 复用有效证据；Worker 不创建下级、不做最终不可逆动作。
+5. Worker 以 `TASK_ACK <task_id>` 回传有效信息；Lead 去重综合，不原样转贴日志。同波等待仍必要 Worker；失去价值时 early stop，验收/记录后允许 runtime 回收。
 
 每子任务最多 2 attempt；capability-gap 默认 1 个窄而高价值高级 Worker。每波最多 `min(3, Codex显式上限)`，扣除当前 PendingInit/Running，不扣历史 Completed；同波禁止重叠写入/未解决依赖。
 
