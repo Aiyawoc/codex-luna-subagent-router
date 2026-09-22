@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "router_baseline": "2.6.7",
+  "lead": {
+    "model": "gpt-5.6-sol",
+    "effort": "high"
+  },
+  "cases": [
+    {
+      "id": "parallel-read-scan",
+      "purpose": "Freeze the v2.6.7 behavior that two independent shallow read-only scans become Luna workers.",
+      "tasks": [
+        {
+          "task_id": "scan-one",
+          "task_family": "repo-scan",
+          "axes": {
+            "task_kind": "scan",
+            "task_scope": "bounded",
+            "reasoning_depth": "shallow",
+            "verifiability": "yes",
+            "failure_cost": "low",
+            "context_volume": "low"
+          },
+          "read_paths": ["src/a.py"],
+          "write_paths": []
+        },
+        {
+          "task_id": "scan-two",
+          "task_family": "repo-scan",
+          "axes": {
+            "task_kind": "scan",
+            "task_scope": "bounded",
+            "reasoning_depth": "shallow",
+            "verifiability": "yes",
+            "failure_cost": "low",
+            "context_volume": "low"
+          },
+          "read_paths": ["src/b.py"],
+          "write_paths": []
+        }
+      ],
+      "v267_expected": {
+        "decisions": ["delegate", "delegate"],
+        "models": ["gpt-5.6-luna", "gpt-5.6-luna"],
+        "ready_worker_ids": ["scan-one", "scan-two"]
+      },
+      "v270_target": {
+        "execution_shapes": ["local_parallel_tools", "local_parallel_tools"],
+        "ready_worker_ids": []
+      }
+    },
+    {
+      "id": "deep-debug-siblings",
+      "purpose": "Deep independent reasoning remains delegated after the execution-shape optimization.",
+      "tasks": [
+        {
+          "task_id": "debug-one",
+          "task_family": "cross-module-debug",
+          "axes": {
+            "task_kind": "debug",
+            "task_scope": "bounded",
+            "reasoning_depth": "deep",
+            "verifiability": "partial",
+            "failure_cost": "medium",
+            "context_volume": "medium"
+          },
+          "read_paths": ["src/a.py"],
+          "write_paths": ["src/a_fix.py"]
+        },
+        {
+          "task_id": "debug-two",
+          "task_family": "cross-module-debug",
+          "axes": {
+            "task_kind": "debug",
+            "task_scope": "bounded",
+            "reasoning_depth": "deep",
+            "verifiability": "partial",
+            "failure_cost": "medium",
+            "context_volume": "medium"
+          },
+          "read_paths": ["src/b.py"],
+          "write_paths": ["src/b_fix.py"]
+        }
+      ],
+      "v267_expected": {
+        "decisions": ["delegate", "delegate"],
+        "delegation_triggers": ["parallel_independent_sibling", "parallel_independent_sibling"],
+        "ready_worker_ids": ["debug-one", "debug-two"]
+      },
+      "v270_target": {
+        "execution_shapes": ["subagent", "subagent"],
+        "ready_worker_ids": ["debug-one", "debug-two"]
+      }
+    },
+    {
+      "id": "micro-known-edit",
+      "purpose": "Micro work continues to avoid worker startup.",
+      "tasks": [
+        {
+          "task_id": "micro-edit",
+          "task_family": "tiny-edit",
+          "axes": {
+            "task_kind": "leaf",
+            "task_scope": "micro",
+            "reasoning_depth": "shallow",
+            "verifiability": "yes",
+            "failure_cost": "low",
+            "context_volume": "low"
+          },
+          "read_paths": ["src/a.py"],
+          "write_paths": ["src/a.py"]
+        }
+      ],
+      "v267_expected": {
+        "decisions": ["lead_only"],
+        "ready_worker_ids": []
+      },
+      "v270_target": {
+        "execution_shapes": ["local_serial"],
+        "ready_worker_ids": []
+      }
+    }
+  ]
+}

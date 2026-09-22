@@ -51,6 +51,7 @@ a0423d01b653571f1ef8c4c9df41bddba014feb8bb9ebdd094191ce701eb6adf  skills/codex-l
 a7dd555892d3e06249d92c7789fcf59f94c2abe02c9f4096aaa9173cc1f69bc1  skills/codex-luna-subagent-router/bin/router.cmd
 4d287bb601dd87e3b97a5fff2de64bb7889fedd624e0e3ccef6ccdbb97eda32a  skills/codex-luna-subagent-router/bin/router.ps1
 3a4dcb781d969e52da4c44d0994132ab0864d00db3cc6300752f772bf4007c5d  skills/codex-luna-subagent-router/evals/cases.json
+8872f80a032c1668e180f2e793b23cf529f6471ff627a3eebb45f239e0e2d1bc  benchmarks/fixtures/v267-planner-baseline.json
 24314260b585a3804169f85275d2152ee357e1db6996c112c9cccebf2c0b554e  skills/codex-luna-subagent-router/examples/route-plan.valid.json
 894afc500d1f1e11020eada3860c61d8e3b69c80e1e5409790df7ba8b0dacff4  skills/codex-luna-subagent-router/examples/work-plan.json
 c672a4efed893caa80636f9144631b7b4d0ed744ddc571f312e00fb69e2e1720  skills/codex-luna-subagent-router/install.ps1
