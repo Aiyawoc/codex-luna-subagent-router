@@ -59,7 +59,7 @@ Astra/Sol Lead 不重复已适合廉价 Worker 的工作；关键路径、不可
 2. 路由后按 `work-planning.md` 先选 `local_serial / local_parallel_tools / subagent`；只有 subagent 进入 exact model+effort、写入范围和容量预检。
 3. spawn acknowledgement 不等于成功。只把 Host 可再次确认的 Materialized `PendingInit/Running` 计入并发；runtime health 未知时首只真实 Worker 兼作探针，成功后重规划放行同波。失败保留 thread limit / overload / auth/MCP/model 等原始分类。
 4. 确定要派遣后读 `task-packet.md` 与 `lifecycle-and-context.md`；conservative 的 `begin` 在 Materialized 后执行。按 Evidence reuse 复用有效证据；Worker 不创建下级、不做最终不可逆动作。
-5. Worker 以 `TASK_ACK <task_id>` 回传有效信息；Lead 去重综合 Worker 证据，不原样转贴日志。同波等待仍必要 Worker；失去价值时 early stop，验收/记录后允许 runtime 回收。
+5. Worker 以 `TASK_ACK <task_id>` 回传有效信息；Lead 去重综合 Worker 证据，不原样转贴 Worker 回复或日志。同波等待仍必要 Worker；失去价值时 early stop，验收/记录后允许 runtime 回收。
 
 每子任务最多 2 attempt；capability-gap 默认 1 个窄而高价值高级 Worker。每波最多 `min(3, Codex显式上限)`，扣除当前 PendingInit/Running，不扣历史 Completed；同波禁止重叠写入/未解决依赖。
 
