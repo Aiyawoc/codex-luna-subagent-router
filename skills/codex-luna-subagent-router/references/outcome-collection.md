@@ -25,7 +25,7 @@ stats 默认所有 scope，不需要六轴；显示模型/effort/outcome/scope �
   --task-family bounded-review \
   --task-kind review --task-scope bounded --reasoning-depth medium \
   --verifiability yes --failure-cost medium --context-volume medium \
-  --model gpt-5.6-luna --effort max --route-binding installed_profile
+  --model gpt-6-luna --effort max --route-binding installed_profile
 ```
 
 保存返回的 receipt_id，不要重复创造 ID。scope 自动识别命令 cwd 的 Git 顶层，不是 Skill 安装目录。非 Git 项目使用 `--project-root /repo`（在 begin 前）；`--global-scope` 明确无项目。全局安装/全局 Adaptive 不意味着全局 evidence。
@@ -47,7 +47,7 @@ stats 默认所有 scope，不需要六轴；显示模型/effort/outcome/scope �
 /path/to/skill/bin/router route_advisor finalize \
   --receipt-id RECEIPT_ID_FROM_BEGIN \
   --outcome verified_pass --completion-reason accepted \
-  --observed-model gpt-5.6-luna --observed-effort max \
+  --observed-model gpt-6-luna --observed-effort max \
   --identity-source runtime_metadata \
   --verification-summary "Targeted acceptance checks passed."
 ```
