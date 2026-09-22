@@ -4,7 +4,7 @@
 
 [agents]
 enabled = true
-default_subagent_model = "gpt-5.6-luna"
+default_subagent_model = "gpt-6-luna"
 
 # 现代 Host 的 canonical spawned-agent 并发上限，不包含主线程。
 # Host schema 未确认或需要兼容旧 V2 时，不要直接复制此字段；运行
