@@ -280,12 +280,28 @@ def build_routing_config(routing_mode: str) -> dict[str, Any]:
     if routing_mode not in ROUTING_MODES:
         raise ConfigurationError(f"routing_mode must be one of: {', '.join(ROUTING_MODES)}")
     return {
-        "schema_version": "2.0",
+        "schema_version": "2.1",
         "routing_mode": routing_mode,
         "cost_objective": "minimize_expected_total_cost",
         "context_budget_policy": "minimal_sufficient",
         "result_budget_policy": "concise_sufficient",
         "max_concurrent_workers": 3,
+        "execution_policy": {
+            "prefer_local_parallel_tools": True,
+            "materialization_gate": True,
+            "runtime_health_lease": True,
+        },
+        "decision_engine": {
+            "enabled": False,
+            "mode": "shadow",
+            "provider": "off",
+            "endpoint": None,
+            "api_key_env": None,
+            "timeout_ms": 800,
+            "confidence_high": 0.85,
+            "confidence_medium": 0.65,
+            "lease_enabled": True,
+        },
     }
 
 
