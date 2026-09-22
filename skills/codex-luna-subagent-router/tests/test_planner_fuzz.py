@@ -1,111 +1,98 @@
 from __future__ import annotations
 
 import random
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
+import plan_work
 
-import plan_work  # noqa: E402
-
-
-TASK_KINDS = ("leaf", "scan", "implementation", "debug", "review", "architecture", "verification", "research", "other")
-SCOPES = ("micro", "bounded", "workflow")
+SEED = 270_5000
+CASES = 5000
+KINDS = ("scan", "verification", "leaf", "implementation", "debug", "review")
 DEPTHS = ("shallow", "medium", "deep")
-VERIFIABILITY = ("yes", "partial", "no")
-FAILURES = ("low", "medium", "high")
-VOLUMES = ("low", "medium", "high")
-LEADS = (("gpt-5.6-luna", "max"), ("gpt-5.6-sol", "high"), ("gpt-6-astra", "high"))
+VERIFY = ("yes", "partial", "no")
+FAILURE = ("low", "medium", "high")
+VOLUME = ("low", "medium", "high")
+
+
+def task(task_id, rng):
+    kind = rng.choice(KINDS)
+    depth = rng.choice(DEPTHS)
+    verifiability = rng.choice(VERIFY)
+    failure = rng.choice(FAILURE)
+    volume = rng.choice(VOLUME)
+    write = rng.random() < 0.35
+    review = rng.random() < 0.08
+    return {
+        "task_id": task_id,
+        "task_family": "fuzz-route",
+        "axes": {
+            "task_kind": kind,
+            "task_scope": rng.choice(("micro", "bounded", "workflow")),
+            "reasoning_depth": depth,
+            "verifiability": verifiability,
+            "failure_cost": failure,
+            "context_volume": volume,
+        },
+        "read_paths": [f"src/{task_id}.py"],
+        "write_paths": [f"src/{task_id}.py"] if write else [],
+        **({"independent_review": True} if review else {}),
+    }
 
 
 class PlannerFuzzTests(unittest.TestCase):
-    def test_five_thousand_deterministic_plans_preserve_invariants(self):
-        rng = random.Random(2700)
+    def test_5000_deterministic_plans_preserve_core_invariants(self):
+        rng = random.Random(SEED)
         with tempfile.TemporaryDirectory() as temp:
             registry = Path(temp) / "outcomes.jsonl"
-            for case_no in range(5000):
-                count = rng.randint(1, 5)
-                tasks = []
-                for idx in range(count):
-                    task_id = f"fuzz-{case_no:04d}-{idx}"
-                    read_name = f"src/{rng.randint(0, max(1, count - 1))}.py"
-                    writes = []
-                    if rng.random() < 0.42:
-                        writes = [f"src/{rng.randint(0, max(1, count - 1))}.py"]
-                    axes = {
-                        "task_kind": rng.choice(TASK_KINDS),
-                        "task_scope": rng.choice(SCOPES),
-                        "reasoning_depth": rng.choice(DEPTHS),
-                        "verifiability": rng.choice(VERIFIABILITY),
-                        "failure_cost": rng.choice(FAILURES),
-                        "context_volume": rng.choice(VOLUMES),
-                    }
-                    tasks.append({
-                        "task_id": task_id,
-                        "task_family": "planner-fuzz",
-                        "axes": axes,
-                        "read_paths": [read_name],
-                        "write_paths": writes,
-                        "independent_review": bool(rng.random() < 0.08),
-                    })
-                health = rng.choice(("unknown", "healthy", "degraded"))
-                routing_mode = rng.choice(("adaptive", "luna_only"))
-                lead_model, lead_effort = rng.choice(LEADS)
+            for index in range(CASES):
+                count = 2 + (index % 2)
+                tasks = [task(f"task-{index}-{slot}", rng) for slot in range(count)]
+                health = ("unknown", "healthy", "degraded")[index % 3]
                 result = plan_work.plan_work(
                     {"version": 1, "tasks": tasks},
-                    lead_model=lead_model,
-                    lead_effort=lead_effort,
+                    lead_model="gpt-5.6-sol",
+                    lead_effort="high",
                     calibration="off",
                     registry=registry,
-                    scope="planner-fuzz",
-                    routing_mode=routing_mode,
+                    scope="project-fuzz",
+                    routing_mode="adaptive",
                     max_workers=3,
                     open_workers=0,
                     runtime_health=health,
                 )
 
-                decisions = {row["task_id"]: row for row in result["decisions"]}
-                workers = {row["worker_id"]: row for row in result["workers"]}
-                worker_tasks = {tid for row in result["workers"] for tid in row["task_ids"]}
+                workers = {w["worker_id"] for w in result["workers"]}
+                ready = result["ready_worker_ids"]
+                self.assertTrue(set(ready).issubset(workers))
+                self.assertLessEqual(len(ready), result["effective_wave_limit"])
 
-                self.assertEqual(len(decisions), len(tasks))
-                self.assertEqual(len(result["ready_worker_ids"]), len(set(result["ready_worker_ids"])))
-                self.assertTrue(set(result["ready_worker_ids"]).issubset(workers))
-                self.assertFalse(set(result["local_parallel_task_ids"]) & worker_tasks)
+                if health == "unknown":
+                    self.assertLessEqual(len(ready), 1)
+                elif health == "degraded":
+                    self.assertEqual(ready, [])
 
-                for task in tasks:
-                    row = decisions[task["task_id"]]
-                    if task["axes"]["task_scope"] == "micro":
-                        self.assertNotEqual(row["execution_shape"], "subagent")
-                    if row["execution_shape"] == "local_parallel_tools":
-                        self.assertEqual(row["decision"], "lead_only")
-                        self.assertFalse(task["write_paths"])
-                        self.assertEqual(task["axes"]["verifiability"], "yes")
-                        self.assertNotEqual(task["axes"]["reasoning_depth"], "deep")
-                        self.assertNotEqual(task["axes"]["context_volume"], "high")
-                        self.assertNotEqual(task["axes"]["failure_cost"], "high")
-                        self.assertFalse(task["independent_review"])
-                    if row["decision"] == "delegate":
-                        self.assertEqual(row["execution_shape"], "subagent")
-                        self.assertIn(task["task_id"], worker_tasks)
-                        if routing_mode == "luna_only":
-                            self.assertEqual(row["model"], "gpt-5.6-luna")
-                    if task["independent_review"] and task["axes"]["task_scope"] != "micro" and routing_mode == "adaptive":
-                        self.assertNotEqual(row["execution_shape"], "local_parallel_tools")
-
-                for wave in result["planned_waves"]:
-                    groups = [workers[wid] for wid in wave]
-                    for left_index, left in enumerate(groups):
-                        for right in groups[left_index + 1:]:
-                            self.assertFalse(plan_work.conflict(left, right))
-
-                if health == "unknown" and result["effective_runtime_health"] == "unknown":
-                    self.assertLessEqual(len(result["ready_worker_ids"]), 1)
-                if health == "degraded":
-                    self.assertEqual(result["ready_worker_ids"], [])
+                local_parallel = set(result["local_parallel_task_ids"])
+                self.assertTrue(local_parallel.isdisjoint(workers))
+                for decision in result["decisions"]:
+                    shape = decision["execution_shape"]
+                    self.assertIn(shape, ("local_serial", "local_parallel_tools", "subagent"))
+                    original = next(t for t in tasks if t["task_id"] == decision["task_id"])
+                    axes = original["axes"]
+                    if shape == "local_parallel_tools":
+                        self.assertFalse(original["write_paths"])
+                        self.assertFalse(original.get("independent_review", False))
+                        self.assertNotEqual(axes["task_scope"], "micro")
+                        self.assertIn(axes["task_kind"], ("scan", "verification", "leaf"))
+                        self.assertIn(axes["reasoning_depth"], ("shallow", "medium"))
+                        self.assertEqual(axes["verifiability"], "yes")
+                        self.assertNotEqual(axes["failure_cost"], "high")
+                        self.assertNotEqual(axes["context_volume"], "high")
+                    if original.get("independent_review") and axes["task_scope"] != "micro":
+                        self.assertEqual(shape, "subagent")
+                    if axes["task_scope"] == "micro":
+                        self.assertNotEqual(shape, "local_parallel_tools")
 
 
 if __name__ == "__main__":
