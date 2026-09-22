@@ -12,7 +12,7 @@ class ThreeTierRoutingTests(unittest.TestCase):
     def test_runtime_policy_uses_luna_sol_astra_only(self) -> None:
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         policy = (ROOT / "references" / "routing-policy.md").read_text(encoding="utf-8")
-        self.assertIn("Luna → `gpt-5.6-sol` → GPT-6 Astra", skill)
+        self.assertIn("`gpt-6-luna` → `gpt-6-sol` → `gpt-6-astra`", skill)
         self.assertIn("luna < sol < astra", policy)
         self.assertIn("Terra 不再进入新自动路由", policy)
         self.assertNotIn("Luna → Terra →", skill)
@@ -27,7 +27,7 @@ class ThreeTierRoutingTests(unittest.TestCase):
         cases = {case["id"]: case for case in data["cases"]}
         self.assertEqual(
             cases["three-tier-auto-models"]["expected_auto_models"],
-            ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-6-astra"],
+            ["gpt-6-luna", "gpt-6-sol", "gpt-6-astra"],
         )
         self.assertEqual(cases["luna-read-heavy-stays-luna"]["forbid_model"], "gpt-5.6-terra")
 
