@@ -190,7 +190,7 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         trigger = rec.get("delegation_trigger")
         lead_only_reason = rec.get("lead_only_reason")
         execution_shape, execution_reason = ("subagent", reason) if decision == "delegate" else ("local_serial", reason)
-        if routing_mode == "luna_only" and rec["model"] != "gpt-5.6-luna":
+        if routing_mode == "luna_only" and rec["model"] != "gpt-6-luna":
             decision, reason, trigger, lead_only_reason = "lead_only", "luna_only capability boundary", None, "luna_only capability boundary"
             execution_shape, execution_reason = "local_serial", reason
         elif t.get("independent_review") and t["axes"]["task_scope"] != "micro" and rec.get("history_rule") != "verified-failure-exhausted":
