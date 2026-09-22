@@ -39,7 +39,7 @@ class RuntimeContractTests(unittest.TestCase):
 
     def test_product_version_has_single_version_file_source(self):
         expected = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(expected, "2.6.7")
+        self.assertRegex(expected, r"^\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9.-]+)?$")
         self.assertEqual(runtime_support.skill_version(), expected)
         self.assertEqual(outcome_store.ROUTER_VERSION, expected)
         self.assertEqual(route_advisor.ROUTER_VERSION, expected)
