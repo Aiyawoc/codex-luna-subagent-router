@@ -1,5 +1,5 @@
 {
-  "purpose": "README placeholder: same observed token counts repriced at two model rate cards; not measured end-to-end savings.",
+  "purpose": "Historical 2026-09-15 GPT-5.6 Luna placeholder: same observed token counts repriced at two rate cards; not current GPT-6 routing or measured end-to-end savings.",
   "snapshot_date": "2026-09-15",
   "source": "Two user-provided partial token_usage.py stats snapshots. Personal paths, thread IDs, scope IDs and timestamps removed.",
   "currency": "USD",
