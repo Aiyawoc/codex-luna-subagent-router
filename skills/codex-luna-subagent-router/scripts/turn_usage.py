@@ -366,6 +366,74 @@ def _next_boundary(row, latest, agent=None):
     return None
 
 
+def _refresh_row(old, latest, payload, upath, sid, root, *, deadline,
+                 mark_stopped=True, refresh_sealed=False, max_bytes=MAX_BYTES):
+    """Refresh one registered turn in memory. The caller decides whether to persist it."""
+    if old["scope_id"] != sid:
+        raise TurnUsageError("scope_mismatch")
+    if old["phase"] == "sealed" and not refresh_sealed:
+        return old
+    row = copy.deepcopy(old)
+    target = payload.get("transcript_path") or _path(row["locator"], sid, root)
+    end_cursor = row.get("end_cursor")
+    if row["phase"] == "sealed" and end_cursor is None:
+        end_cursor = _next_boundary(row, latest)
+    discovered = set()
+    if target:
+        try:
+            loc = usage.locator_for(target, store.codex_home(), root)
+            if row["locator"] is not None and loc != row["locator"]:
+                raise TurnUsageError("transcript_locator_changed")
+        except (OSError, ValueError) as exc:
+            raise TurnUsageError("transcript_locator_changed") from exc
+        row["locator"] = loc
+        row["main_snapshot"] = read_usage(Path(target), row["session_id"], None,
+            codex_home=store.codex_home(), project_root=root, thread_kind="main",
+            turn_id=row["turn_id"], cursor=row["cursor"], end_cursor=end_cursor,
+            cache_ledger=upath, max_bytes=max_bytes, activity_out=discovered,
+            max_seconds=max(0.01, min(1.5, deadline-time.monotonic())))
+    else:
+        row["main_snapshot"] = empty("transcript_path_missing")
+    children, _ = usage.load_latest(upath)
+    _activate_discovered(row, children, discovered, row["session_id"])
+    row["child_snapshots"] = {}
+    for agent, member in row["members"].items():
+        child = children.get(usage.usage_id(agent, row["session_id"]))
+        child_target = usage.locator_path(child, store.codex_home(), root) if child and child["scope_id"] == sid else None
+        if not member["active"]:
+            continue
+        if child and child["scope_id"] == sid and member["locator"] is None:
+            member["locator"] = child["locator"]
+        if child and member["locator"] is not None and member["locator"] != child["locator"]:
+            row["child_snapshots"][agent] = empty("transcript_locator_changed")
+            continue
+        child_end = member.get("end_cursor")
+        if row["phase"] == "sealed" and child_end is None:
+            child_end = _next_boundary(row, latest, agent)
+        if row["phase"] == "sealed" and child_end is None:
+            snap = _note(old["child_snapshots"].get(agent, empty("historical_child_end_missing")), "historical_child_end_missing")
+        elif time.monotonic() >= deadline:
+            snap = empty("read_budget_exceeded")
+        elif member["cursor"] is None and not member["fresh"]:
+            snap = empty("child_baseline_missing")
+        elif child_target:
+            snap = read_usage(child_target, agent, row["session_id"], codex_home=store.codex_home(),
+                project_root=root, cursor=member["cursor"], end_cursor=child_end,
+                cache_ledger=upath, max_bytes=max_bytes,
+                max_seconds=max(0.01, deadline-time.monotonic()))
+        else:
+            snap = empty("transcript_unavailable")
+        row["child_snapshots"][agent] = snap
+    row["main_snapshot"] = _preserve_snapshot(old["main_snapshot"], row["main_snapshot"])
+    for agent, previous in old["child_snapshots"].items():
+        row["child_snapshots"][agent] = _preserve_snapshot(
+            previous, row["child_snapshots"].get(agent, empty("transcript_unavailable")))
+    if mark_stopped and row["phase"] != "sealed":
+        row["phase"] = "stopped"
+    row["reader_version"] = READER_VERSION
+    return row
+
+
 def finish(payload, upath, sid, root, *, mark_stopped=True, refresh_sealed=False,
            max_seconds=3.0, max_bytes=MAX_BYTES):
     session, turn = usage._id(payload.get("session_id")), usage._id(payload.get("turn_id"))
@@ -376,68 +444,10 @@ def finish(payload, upath, sid, root, *, mark_stopped=True, refresh_sealed=False
         old = latest.get((session, turn))
         if old is None:
             return None
-        if old["scope_id"] != sid:
-            raise TurnUsageError("scope_mismatch")
-        if old["phase"] == "sealed" and not refresh_sealed:
-            return old
-        row = copy.deepcopy(old)
-        target = payload.get("transcript_path") or _path(row["locator"], sid, root)
-        end_cursor = row.get("end_cursor")
-        if row["phase"] == "sealed" and end_cursor is None:
-            end_cursor = _next_boundary(row, latest)
-        discovered = set()
-        if target:
-            try:
-                loc = usage.locator_for(target, store.codex_home(), root)
-                if row["locator"] is not None and loc != row["locator"]:
-                    raise TurnUsageError("transcript_locator_changed")
-            except (OSError, ValueError) as exc:
-                raise TurnUsageError("transcript_locator_changed") from exc
-            row["locator"] = loc
-            row["main_snapshot"] = read_usage(Path(target), session, None, codex_home=store.codex_home(),
-                project_root=root, thread_kind="main", turn_id=turn, cursor=row["cursor"],
-                end_cursor=end_cursor, cache_ledger=upath, max_bytes=max_bytes, activity_out=discovered,
-                max_seconds=max(0.01, min(1.5, deadline-time.monotonic())))
-        else:
-            row["main_snapshot"] = empty("transcript_path_missing")
-        children, _ = usage.load_latest(upath)
-        _activate_discovered(row, children, discovered, session)
-        row["child_snapshots"] = {}
-        for agent, member in row["members"].items():
-            child = children.get(usage.usage_id(agent, session))
-            child_target = usage.locator_path(child, store.codex_home(), root) if child and child["scope_id"] == sid else None
-            if not member["active"]:
-                continue
-            if child and child["scope_id"] == sid and member["locator"] is None:
-                member["locator"] = child["locator"]
-            if child and member["locator"] is not None and member["locator"] != child["locator"]:
-                row["child_snapshots"][agent] = empty("transcript_locator_changed")
-                continue
-            child_end = member.get("end_cursor")
-            if row["phase"] == "sealed" and child_end is None:
-                child_end = _next_boundary(row, latest, agent)
-            if row["phase"] == "sealed" and child_end is None:
-                snap = _note(old["child_snapshots"].get(agent, empty("historical_child_end_missing")), "historical_child_end_missing")
-            elif time.monotonic() >= deadline:
-                snap = empty("read_budget_exceeded")
-            elif member["cursor"] is None and not member["fresh"]:
-                snap = empty("child_baseline_missing")
-            elif child_target:
-                snap = read_usage(child_target, agent, session, codex_home=store.codex_home(), project_root=root,
-                    cursor=member["cursor"], end_cursor=child_end, cache_ledger=upath, max_bytes=max_bytes,
-                    max_seconds=max(0.01, deadline-time.monotonic()))
-            else:
-                snap = empty("transcript_unavailable")
-            row["child_snapshots"][agent] = snap
-        row["main_snapshot"] = _preserve_snapshot(old["main_snapshot"], row["main_snapshot"])
-        for agent, previous in old["child_snapshots"].items():
-            row["child_snapshots"][agent] = _preserve_snapshot(
-                previous, row["child_snapshots"].get(agent, empty("transcript_unavailable")))
-        if mark_stopped and row["phase"] != "sealed":
-            row["phase"] = "stopped"
-        row["reader_version"] = READER_VERSION
+        row = _refresh_row(old, latest, payload, upath, sid, root, deadline=deadline,
+                           mark_stopped=mark_stopped, refresh_sealed=refresh_sealed,
+                           max_bytes=max_bytes)
         return save(path, row, old)
-
 
 def report(row, heading="本轮 Token 用量", *, include_context=False):
     snapshots = [row["main_snapshot"], *row["child_snapshots"].values()]
@@ -488,12 +498,14 @@ def preview(upath, sid, root, *, session=None, turn=None):
         raise TurnUsageError("ambiguous_active_turn")
     row = candidates[0]
     target = _path(row["locator"], sid, root)
-    refreshed = finish(dict(session_id=row["session_id"], turn_id=row["turn_id"],
-                            transcript_path=str(target) if target else None), upath, sid, root, mark_stopped=False)
-    if refreshed is None:
-        raise TurnUsageError("turn_not_registered")
-    return refreshed
-
+    # Preview is observational. Host hooks may own write access to the global state
+    # while a workspace-sandboxed Agent has read-only access, so never require a
+    # turn-ledger lock or persist a refreshed snapshot here.
+    return _refresh_row(
+        row, latest,
+        dict(session_id=row["session_id"], turn_id=row["turn_id"],
+             transcript_path=str(target) if target else None),
+        upath, sid, root, deadline=time.monotonic() + 3.0, mark_stopped=False)
 
 def _stop_recovery_row(payload, upath, sid, root):
     """Recover a missing UserPromptSubmit conservatively from exact persisted end boundaries."""
