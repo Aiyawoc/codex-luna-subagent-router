@@ -495,11 +495,83 @@ def preview(upath, sid, root, *, session=None, turn=None):
     return refreshed
 
 
+def _stop_recovery_row(payload, upath, sid, root):
+    """Recover a missing UserPromptSubmit conservatively from exact persisted end boundaries."""
+    session, turn = usage._id(payload.get("session_id")), usage._id(payload.get("turn_id"))
+    path = ledger_path(upath)
+    target = payload.get("transcript_path")
+    locator, end_cursor, location_reason = _start_location(target, session, root)
+    now = store.timestamp()
+    can_measure = False
+
+    with store.locked(path, timeout=0.4):
+        latest = load(path)
+        existing = latest.get((session, turn))
+        if existing is not None:
+            return existing, True
+
+        previous = sorted(
+            (row for row in latest.values()
+             if row["session_id"] == session and row["scope_id"] == sid
+             and row["turn_id"] != turn),
+            key=lambda row: store.parse_time(row["updated_at"]),
+        )
+        prior = previous[-1] if previous else None
+        start_cursor = None
+        members = {}
+
+        if prior is not None:
+            if prior["phase"] != "sealed":
+                sealed = copy.deepcopy(prior)
+                sealed["phase"] = "sealed"
+                save(path, sealed, prior)
+                prior = sealed
+            if prior.get("locator") == locator and prior.get("end_cursor") is not None:
+                start_cursor = prior["end_cursor"]
+                can_measure = True
+
+        children, _ = usage.load_latest(upath)
+        for child in children.values():
+            if child["parent_id"] != session or child["scope_id"] != sid or len(members) >= MAX_MEMBERS:
+                continue
+            agent = child["agent_id"]
+            child_locator = child.get("locator")
+            child_target = usage.locator_path(child, store.codex_home(), root) if child_locator else None
+            child_end = _boundary(child_target, agent, root) if child_target else None
+            prior_member = prior["members"].get(agent) if prior is not None else None
+            child_start = None
+            fresh = False
+            if prior_member is not None and prior_member.get("locator") == child_locator:
+                child_start = prior_member.get("end_cursor")
+            elif prior is not None:
+                fresh = store.parse_time(child["started_at"]) >= store.parse_time(prior["updated_at"])
+            member = dict(cursor=child_start, locator=child_locator, fresh=fresh, active=False)
+            if child_end is not None:
+                member["end_cursor"] = child_end
+            members[agent] = member
+
+        reason = "stop_recovered_previous_boundary" if can_measure else "stop_without_submit_baseline"
+        row = dict(
+            schema_version="1.1", session_id=session, turn_id=turn, scope_id=sid,
+            started_at=prior["updated_at"] if prior is not None else now,
+            updated_at=now, phase="started" if can_measure else "stopped",
+            locator=locator, cursor=start_cursor, end_cursor=end_cursor,
+            members=members, main_snapshot=empty("main_turn_baseline_missing"),
+            child_snapshots={}, excluded_children=0, reader_version=READER_VERSION,
+            boundary_reason=reason if location_reason is None else "stop_without_submit_baseline",
+        )
+        saved = save(path, row)
+    return saved, can_measure
+
+
 def handle_hook(payload, upath, sid, root):
     if payload["hook_event_name"] == "UserPromptSubmit":
         begin(payload, upath, sid, root)
         return {}
     row = finish(payload, upath, sid, root)
+    if row is None:
+        recovered, can_measure = _stop_recovery_row(payload, upath, sid, root)
+        row = finish(payload, upath, sid, root) if can_measure else recovered
     if row and "child_is_not_main" in row["main_snapshot"]["reasons"]:
         return {}
     return {"continue": True, "systemMessage": report(row) if row else

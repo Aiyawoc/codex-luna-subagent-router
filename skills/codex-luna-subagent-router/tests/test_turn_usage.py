@@ -204,6 +204,52 @@ class MainTurnTests(Sandbox):
         self.add([event(total,more,T3),terminal()]);self.hook('Stop')
         self.assertEqual(self.row()['main_snapshot']['counts']['output_tokens'],3300)
 
+    def test_stop_without_submit_registers_unknown_turn_and_end_boundary(self):
+        self.add([ctx(),event(),terminal()])
+        out=self.hook('Stop')
+        row=self.row()
+        self.assertEqual(row['phase'],'stopped')
+        self.assertEqual(row['boundary_reason'],'stop_without_submit_baseline')
+        self.assertIsNotNone(row.get('end_cursor'))
+        self.assertEqual(row['main_snapshot']['status'],'unavailable')
+        self.assertIn('main_turn_baseline_missing',row['main_snapshot']['reasons'])
+        self.assertIn('不可用',out['systemMessage'])
+
+    def test_second_stop_only_turn_uses_previous_exact_end_boundary(self):
+        self.add([ctx(),event(),terminal()])
+        self.hook('Stop')
+        total={k:v*2 for k,v in counter().items()}
+        self.add([ctx(TURN2,T3),event(total,counter(),T3),terminal(TURN2,T4)])
+        self.hook('Stop',TURN2)
+        first=self.row()
+        second=self.row(TURN2)
+        self.assertEqual(first['phase'],'sealed')
+        self.assertEqual(first['main_snapshot']['status'],'unavailable')
+        self.assertEqual(second['boundary_reason'],'stop_recovered_previous_boundary')
+        self.assertEqual(second['main_snapshot']['counts'],counter())
+
+    def test_stop_only_reused_child_uses_previous_child_end_boundary(self):
+        start=self.hook_payload('SubagentStart')
+        usage.hook(start,self.upath)
+        self.transcript()
+        usage.hook(self.hook_payload('SubagentStop'),self.upath)
+        self.add([ctx(),activity(),event(),terminal()])
+        self.hook('Stop')
+        first=self.row()
+        self.assertIn(AGENT,first['members'])
+        self.assertIsNotNone(first['members'][AGENT].get('end_cursor'))
+
+        total={k:v*2 for k,v in counter().items()}
+        self.add([context(T3),event(total,counter(),T3),end(T4)],self.path)
+        self.collect()
+        parent_total={k:v*2 for k,v in counter().items()}
+        self.add([ctx(TURN2,T3),activity(kind='interacted',stamp=T3),
+                  event(parent_total,counter(),T3),terminal(TURN2,T4)])
+        self.hook('Stop',TURN2)
+        second=self.row(TURN2)
+        self.assertEqual(second['child_snapshots'][AGENT]['counts'],counter())
+        self.assertNotIn('child_baseline_missing',second['child_snapshots'][AGENT]['reasons'])
+
     def test_missing_begin_not_lifetime_fallback(self):
         self.add([ctx(),event(),terminal()]);out=self.hook('Stop')
         self.assertIn('未登记本轮开始',out['systemMessage']);self.assertNotIn('45k',out['systemMessage'])
