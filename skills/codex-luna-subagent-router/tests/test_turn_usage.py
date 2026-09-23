@@ -42,6 +42,14 @@ def activity(agent=AGENT, kind="started", stamp=T2):
         type="sub_agent_activity", kind=kind, agent_thread_id=agent, agent_path="/root/worker"))
 
 
+def v2_activity(agent=AGENT, kind="interacted", turn=TURN, stamp=T2):
+    return dict(timestamp=stamp, type="event_msg", payload=dict(
+        type="item_completed", thread_id=PARENT, turn_id=turn,
+        item=dict(type="SubAgentActivity", id=f"subagent-{kind}-{turn}",
+                  kind=kind, agent_thread_id=agent, agent_path="/root/worker"),
+        started_at_ms=1, completed_at_ms=2))
+
+
 class DisplayTests(unittest.TestCase):
     def test_observed_luna_replaces_default(self):
         s=dict(model="gpt-6-luna",effort="high",status="complete",counts=counter(),reasons=[])
@@ -350,7 +358,7 @@ class MainTurnTests(Sandbox):
         self.assertIsNone(baseline.get("child_turn_id"))
 
         total={k:v*2 for k,v in counter().items()}
-        self.add([ctx(TURN2,T3),activity(kind="interacted",stamp=T3)],self.main_path)
+        self.add([ctx(TURN2,T3),v2_activity(kind="interacted",turn=TURN2,stamp=T3)],self.main_path)
         self.add([context(T3),event(total,counter(),T3),end(T4)],self.path)
         followup_stop=self.hook_payload("SubagentStop");followup_stop["turn_id"]="child-turn-b"
         followup_stop["transcript_path"]=str(self.main_path)
@@ -411,6 +419,11 @@ class MainTurnTests(Sandbox):
     def test_completion_only_activity_does_not_charge_old_child(self):
         self.transcript();self.collect();self.hook()
         self.add([ctx(),activity(kind='completed'),event(),terminal()]);self.hook('Stop')
+        self.assertEqual(self.row()['child_snapshots'],{})
+
+    def test_v2_completion_only_activity_does_not_charge_old_child(self):
+        self.transcript();self.collect();self.hook()
+        self.add([ctx(),v2_activity(kind='completed',turn=TURN),event(),terminal()]);self.hook('Stop')
         self.assertEqual(self.row()['child_snapshots'],{})
 
     def test_previous_child_lifetime_not_readded_next_turn(self):
