@@ -1,14 +1,31 @@
 # Agent Router v2.7.0 Release Candidate
 
-> **Pre-release:** `v2.7.0-rc.1`  
+> **Pre-release:** `v2.7.0-rc.2`  
 > **Stable release remains:** `v2.6.7`  
-> This Release Candidate is feature-frozen and intended only for the final two real-Host acceptance gates before v2.7.0 stable. v2.6.7 remains the recommended stable release until those gates pass.
+> This Release Candidate is feature-frozen. RC.1 closed the Sol Lead H3 gate; RC.2 fixes the cross-turn accounting evidence path and leaves only the real two-parent-turn Worker reuse gate before v2.7.0 stable. v2.6.7 remains the recommended stable release until that gate passes.
 
 Agent Router keeps the **Lead model selected by the user** and delegates only work that has positive expected value. v2.7 adds a new principle:
 
 > **Choose the cheapest execution shape before choosing a Worker model.**
 
-The Alpha therefore delivers useful optimization even when the optional Jev/Laya-style Decision Layer is completely disabled.
+The v2.7 Core therefore delivers useful optimization even when the optional Jev/Laya-style Decision Layer is completely disabled.
+
+---
+
+## RC.2 closure scope
+
+RC.1 real-Host acceptance proved the Sol Lead H3 fresh-wave transition. Gate 2 was not verifiable because the current Codex paginated child rollout inherited parent `SessionMeta` records that the Router incorrectly treated as conflicting child headers, and the old turn lacked safe public boundary diagnostics.
+
+RC.2 keeps routing and execution policy frozen and fixes only the accounting/observability path:
+
+- inherited parent `SessionMeta` rows before `subagent_history_start_ordinal` are ignored as inherited context while the first child `SessionMeta` remains canonical;
+- late `SubagentStop` boundary recovery is bound to the exact child hook `turn_id`;
+- finalize returns the frozen receipt interval after any Worker-lifetime refresh;
+- sanitized `child_boundaries` diagnostics show whether the exact reuse baseline/end boundary exists without exposing cursor material.
+
+**Only Gate 2 remains.** It must be tested across two real user parent turns: Turn A must end naturally before the user sends Turn B. One autonomous Agent run must not simulate both parent turns.
+
+See `docs/v2.7.0-rc2-acceptance.md`.
 
 ---
 
@@ -275,16 +292,16 @@ Unknown Token data remains unknown and is never converted to zero.
 
 ## Release Candidate installation
 
-Download the complete package matching your OS and CPU from the **v2.7.0-rc.1 pre-release**.
+Download the complete package matching your OS and CPU from the **v2.7.0-rc.2 pre-release**.
 
 `v2.7.0-alpha.1` remains a historical pre-GPT-6 comparison build and should not be used for current routing acceptance.
 
 | OS | CPU | Package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.7.0-rc.1-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.7.0-rc.1-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.7.0-rc.1-windows-x64.zip` |
-| Windows | ARM64 | `router-2.7.0-rc.1-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.7.0-rc.2-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.7.0-rc.2-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.7.0-rc.2-windows-x64.zip` |
+| Windows | ARM64 | `router-2.7.0-rc.2-windows-arm64.zip` |
 
 Each archive has an adjacent `.sha256`; the release also contains `SHA256SUMS`.
 
@@ -353,7 +370,7 @@ The following remains part of v2.7 acceptance work:
 - Decision Shadow calibration on real coding tasks;
 - measured Token/elapsed-time results from real sessions.
 
-Therefore this Alpha does **not** claim:
+Therefore this Release Candidate does **not** claim:
 
 - a fixed percentage of Token savings;
 - observed Codex quota savings;
@@ -369,7 +386,7 @@ See:
 
 ## Rollback
 
-If the Alpha behaves incorrectly in the real Host, reinstall the stable **v2.6.7** complete package.
+If the Release Candidate behaves incorrectly in the real Host, reinstall the stable **v2.6.7** complete package.
 
 Do not delete Outcome/Token ledgers simply to downgrade. The release/installer flow is designed to preserve user data and unrelated Agent configuration.
 
@@ -403,4 +420,4 @@ The final RC questions are:
 
 Use **v2.6.7** when stability is the priority.
 
-Use **v2.7.0-rc.1** only for the final two targeted Host gates. Keep the Alpha releases as historical comparison builds.
+Use **v2.7.0-rc.2** only for the final cross-turn Worker reuse gate. RC.1 and the Alpha releases remain historical comparison builds.

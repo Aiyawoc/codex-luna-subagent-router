@@ -135,6 +135,8 @@ SubagentStart 注册真实 agent_id 与父 session_id、scope。SubagentStop 只
 
 子线程首次 SubagentStart 仅在明确的 parent session/turn 能关联时进入本轮；已经存在的子线程在 UserPromptSubmit 保存自己的游标，本轮只计其新增区间。父子分别读取各自线程局部 token_count，不混入 App Server 聚合/账号用量；不明确的线程不并入合计。新请求封存旧轮次，旧 Stop 不吸收新轮次的 steering。快照晚到时应在下一请求前 collect 复核；v2.6.1 起可显式 refresh 已封存快照，但须保留原区间，尤其不能无终点扩大旧 child 用量。
 
+v2.7.0-rc.2 对当前 Codex paginated SubAgent rollout 增加显式兼容：文件第一条 child `SessionMeta` 是 canonical identity；在其 `subagent_history_start_ordinal` 之前的后续 `SessionMeta` 属于 inherited parent context，不作为 child identity 冲突。own-history ordinal 之后出现不同 identity 的 header 仍报告 `conflicting_session_headers`。同时，late `SubagentStop` 对 stopped/sealed parent turn 的 end-boundary 回填必须匹配该 turn 当时保存的 child hook `turn_id`；旧记录或缺失证据不猜归属。
+
 本轮汇总区间是“本轮起点到当前 Stop 快照”，不是整段会话累计，也不是每个并行任务的因果成本测量。显示已登记主/子线程的已知合计，未关联线程数量另提示；不保证所有 Worker/外部调用全覆盖。模型中途改变不能把全部用量标到一个模型。缓存命中包含在输入中，推理输出包含在输出中。
 
 ```bash

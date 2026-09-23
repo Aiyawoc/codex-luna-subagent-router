@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.7.0-rc.2 — Cross-turn accounting compatibility（2026-09-23）
+
+- 修复当前 Codex paginated SubAgent rollout 的继承历史兼容：child canonical `SessionMeta` 之后、`subagent_history_start_ordinal` 之前出现的父线程 inherited `SessionMeta` 不再误报 `conflicting_session_headers`；own-history 边界后的冲突 header 仍 fail-closed。
+- `SubagentStart/SubagentStop` 现在把 child hook `turn_id` 作为 late-stop ownership 证据；stopped/sealed 历史 parent turn 只有在 child turn 精确匹配时才允许补 end boundary，避免后续复用 Worker 的 EOF 被回填到旧 turn。
+- 修复 `route_advisor finalize` 的返回视图：usage refresh 可以更新 Worker lifetime，但 finalize JSON 重新读取 frozen receipt binding，返回 per-attempt interval，不再出现“持久化 interval、响应 lifetime”的口径不一致。
+- `turn_usage stats --json` 新增脱敏 `child_boundaries` 诊断，只暴露 child turn identity、baseline 类型、end boundary 是否已知与 active 状态；不暴露 cursor offset/hash、transcript 路径或正文。
+- RC.1 的 Sol Lead H3 fresh-wave 已在真实 Host PASS，不重复测试；RC.2 stable gate 只重测跨两个真实用户 parent turns 的同 Worker reuse / frozen-boundary 路径。
+- 不改变 Execution Shape、GPT-6 路由、Materialization Gate、Runtime Health、Decision Shadow authority、planning fallback 或 Token accounting 的保守 unknown/null 原则。
+
 ## 2.7.0-rc.1 — Stable release candidate（2026-09-23）
 
 - 功能冻结：RC 不新增路由、Execution Shape、Materialization、Decision Shadow 或 accounting 功能，仅做 stable 发布收口与最后真实 Host 验收。
