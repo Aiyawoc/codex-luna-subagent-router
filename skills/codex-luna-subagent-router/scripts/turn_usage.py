@@ -250,6 +250,31 @@ def _preserve_snapshot(previous, current):
     return current
 
 
+def _parent_interaction_confirms_reuse(payload, row, agent, upath, root, max_seconds):
+    """Confirm current-turn follow-up ownership from parent SubAgent activity.
+
+    Completed Worker follow-up turns do not emit a new SubagentStart hook. The
+    parent rollout does emit a structured Interacted activity before the reused
+    child turn completes, so that activity is the safe ownership proof for the
+    current started parent turn.
+    """
+    target = payload.get("transcript_path")
+    if not target or row["phase"] != "started" or row["cursor"] is None:
+        return False
+    try:
+        observed = usage.locator_for(target, store.codex_home(), root)
+        if row["locator"] is not None and observed != row["locator"]:
+            return False
+        discovered = set()
+        read_usage(Path(target), row["session_id"], None,
+            codex_home=store.codex_home(), project_root=root, thread_kind="main",
+            turn_id=row["turn_id"], cursor=row["cursor"], cache_ledger=upath,
+            max_seconds=max(0.01, min(0.4, max_seconds)), activity_out=discovered)
+        return agent in discovered
+    except (OSError, ValueError, TypeError, KeyError):
+        return False
+
+
 def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
     """Persist one exact child stop boundary without changing sibling state."""
     session = usage._id(payload.get("session_id"))
@@ -282,25 +307,63 @@ def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
     sealed_member = None
     saved = None
 
+    # Completed Worker follow-up does not emit SubagentStart. Select the exact
+    # current parent turn only when its structured parent rollout already records
+    # an Interacted activity for this Worker. Historical turns still require an
+    # exact stored child_turn_id match.
+    observed_latest = load(path)
+    candidates = []
+    for identity, candidate in observed_latest.items():
+        member = candidate["members"].get(agent)
+        if (candidate["session_id"] != session or candidate["scope_id"] != sid
+                or member is None or member.get("end_cursor") is not None):
+            continue
+        member_turn = member.get("child_turn_id")
+        exact_turn = member_turn is not None and stop_turn is not None and member_turn == stop_turn
+        current_registered = candidate["phase"] == "started" and member_turn is None and member["active"]
+        current_reuse = (
+            candidate["phase"] == "started"
+            and member_turn is None
+            and not member["active"]
+            and not member["fresh"]
+            and member["cursor"] is not None
+            and stop_turn is not None
+            and _parent_interaction_confirms_reuse(
+                payload, candidate, agent, upath, root, max_seconds
+            )
+        )
+        if exact_turn or current_registered or current_reuse:
+            candidates.append((identity, current_reuse))
+    if len(candidates) != 1:
+        return None
+
+    identity, reuse_without_start = candidates[0]
     with store.locked(path, timeout=0.4):
         latest = load(path)
-        candidates = []
-        for identity, candidate in latest.items():
-            member = candidate["members"].get(agent)
-            member_turn = member.get("child_turn_id") if member is not None else None
-            exact_turn = member_turn is not None and stop_turn is not None and member_turn == stop_turn
-            current_unbound = candidate["phase"] == "started" and member_turn is None
-            if (candidate["session_id"] == session and candidate["scope_id"] == sid
-                    and member is not None and member["active"]
-                    and member.get("end_cursor") is None
-                    and (exact_turn or current_unbound)):
-                candidates.append((identity, candidate))
-        if len(candidates) != 1:
+        old = latest.get(identity)
+        if old is None:
+            return None
+        current = old["members"].get(agent)
+        if current is None or current.get("end_cursor") is not None:
+            return None
+        current_turn = current.get("child_turn_id")
+        exact_turn = current_turn is not None and stop_turn is not None and current_turn == stop_turn
+        current_registered = old["phase"] == "started" and current_turn is None and current["active"]
+        current_reuse = (
+            reuse_without_start
+            and old["phase"] == "started"
+            and current_turn is None
+            and not current["active"]
+            and not current["fresh"]
+            and current["cursor"] is not None
+        )
+        if not (exact_turn or current_registered or current_reuse):
             return None
 
-        identity, old = candidates[0]
         row = copy.deepcopy(old)
         member = row["members"][agent]
+        if current_reuse:
+            member["active"] = True
         if member.get("child_turn_id") is None and stop_turn is not None:
             member["child_turn_id"] = stop_turn
         if member["locator"] is not None and locator is not None and member["locator"] != locator:
