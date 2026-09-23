@@ -192,6 +192,31 @@ class ReceiptTests(TempCase):
             with s.locked(self.path, timeout=0):
                 pass
 
+    def test_windows_permission_error_for_existing_lock_is_treated_as_busy(self):
+        lock=self.path.with_name(self.path.name+".lock")
+        lock.mkdir(parents=True)
+        real_mkdir=Path.mkdir
+        def windows_contention(target,*args,**kwargs):
+            if target == lock:
+                raise PermissionError(5,"Access is denied",str(target))
+            return real_mkdir(target,*args,**kwargs)
+        with patch.object(Path,"mkdir",windows_contention):
+            with self.assertRaisesRegex(s.StoreError,"registry lock busy"):
+                with s.locked(self.path,timeout=0):
+                    self.fail("busy lock must not be acquired")
+
+    def test_real_permission_error_without_existing_lock_still_propagates(self):
+        lock=self.path.with_name(self.path.name+".lock")
+        real_mkdir=Path.mkdir
+        def denied(target,*args,**kwargs):
+            if target == lock:
+                raise PermissionError(5,"Access is denied",str(target))
+            return real_mkdir(target,*args,**kwargs)
+        with patch.object(Path,"mkdir",denied):
+            with self.assertRaises(PermissionError):
+                with s.locked(self.path,timeout=0.1):
+                    self.fail("permission denial must not be hidden")
+
     def test_multiple_processes_finalize_exactly_once(self):
         r = s.begin(self.path, metadata(), 'request-concurrent-01', NOW)
         code = "import sys; sys.path.insert(0, sys.argv[1]); from pathlib import Path; import outcome_store as s; s.finalize(Path(sys.argv[2]),sys.argv[3],'partial','Concurrent synthetic result.')"
