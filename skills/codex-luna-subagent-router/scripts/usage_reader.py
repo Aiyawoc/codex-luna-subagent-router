@@ -314,9 +314,25 @@ class _Scan:
                 self.terminal = False
         own = own and (self.cursor is None or offset >= self.cursor['offset'])
         own = own and (self.turn is None or self.active_turn == self.turn)
-        if own and kind == 'response_item' and payload.get('type') == 'sub_agent_activity':
-            agent = _route_text(payload.get('agent_thread_id'))
-            if agent and agent != self.agent and str(payload.get('kind', '')).lower() in ('started', 'interacted'):
+
+        # SubAgent activity has two persisted shapes across Codex hosts:
+        # legacy response_item/sub_agent_activity and current MultiAgentV2
+        # event_msg/item_completed carrying TurnItem::SubAgentActivity.
+        # Completion-only activity must not activate an old Worker; only
+        # Started/Interacted establishes ownership for this parent turn.
+        activity = None
+        if kind == 'response_item' and payload.get('type') == 'sub_agent_activity':
+            activity = payload
+        elif kind == 'event_msg' and payload.get('type') == 'item_completed':
+            event_turn = payload.get('turn_id')
+            item = payload.get('item')
+            if ((self.turn is None or event_turn in (None, self.turn))
+                    and isinstance(item, dict)
+                    and str(item.get('type', '')).lower() in ('subagentactivity', 'sub_agent_activity')):
+                activity = item
+        if own and activity is not None:
+            agent = _route_text(activity.get('agent_thread_id'))
+            if agent and agent != self.agent and str(activity.get('kind', '')).lower() in ('started', 'interacted'):
                 if len(self.activities) < 64: self.activities.add(agent)
                 else: self.acc.reasons.add('child_limit_exceeded')
         if kind != 'event_msg':
