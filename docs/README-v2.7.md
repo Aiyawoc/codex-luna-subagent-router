@@ -1,6 +1,6 @@
 # Agent Router v2.7.0 Alpha
 
-> **Development line:** `v2.7.0` (latest packaged pre-release may differ)  
+> **Pre-release:** `v2.7.0-alpha.2`  
 > **Stable release remains:** `v2.6.7`  
 > This Alpha is intended for controlled testing of the v2.7 execution-efficiency changes. It is not yet the recommended production replacement for v2.6.7.
 
@@ -225,16 +225,16 @@ Unknown Token data remains unknown and is never converted to zero.
 
 ## Alpha installation
 
-The published **v2.7.0-alpha.1** package is now a historical comparison build. It predates the post-alpha migration of automatic Luna/Sol Workers to `gpt-6-luna / gpt-6-sol` and must **not** be used to validate the current GPT-6 routing line.
+Download the complete package matching your OS and CPU from the **v2.7.0-alpha.2 pre-release**.
 
-For current GPT-6 Host acceptance, use the next packaged v2.7 pre-release built from the current development candidate. The alpha.1 package names below are retained only so existing alpha.1 testers can identify or roll back that historical build.
+`v2.7.0-alpha.1` remains a historical pre-GPT-6 comparison build and should not be used for current routing acceptance.
 
-| OS | CPU | Historical alpha.1 package |
+| OS | CPU | Package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.7.0-alpha.1-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.7.0-alpha.1-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.7.0-alpha.1-windows-x64.zip` |
-| Windows | ARM64 | `router-2.7.0-alpha.1-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.7.0-alpha.2-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.7.0-alpha.2-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.7.0-alpha.2-windows-x64.zip` |
+| Windows | ARM64 | `router-2.7.0-alpha.2-windows-arm64.zip` |
 
 Each archive has an adjacent `.sha256`; the release also contains `SHA256SUMS`.
 
@@ -353,4 +353,4 @@ The main questions for this Alpha are:
 
 Use **v2.6.7** when stability is the priority.
 
-Use **v2.7.0-alpha.1** only for historical comparison with the first Alpha. Use the next v2.7 pre-release for current GPT-6 Worker routing tests.
+Use **v2.7.0-alpha.2** for current GPT-6 Worker routing and targeted Host retests. Keep **v2.7.0-alpha.1** only as a historical comparison build.
