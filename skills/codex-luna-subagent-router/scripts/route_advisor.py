@@ -419,8 +419,11 @@ def main(argv=None):
                 if linked:
                     usage_scope, usage_root = store.resolve_scope(args.project_root, args.global_scope)
                     if usage.enabled(usage_root) and usage_scope == linked["scope_id"]:
-                        linked = usage.collect(upath, linked["agent_id"], linked["parent_id"], linked["scope_id"],
-                                               transcript=args.usage_transcript, root=usage_root)
+                        usage.collect(upath, linked["agent_id"], linked["parent_id"], linked["scope_id"],
+                                      transcript=args.usage_transcript, root=usage_root)
+                        # collect() refreshes the Worker lifetime row. Finalize must
+                        # continue returning the receipt's frozen per-attempt interval.
+                        linked = usage.for_receipt(upath, args.receipt_id) or linked
                     output["token_usage"] = linked["snapshot"]
                     output["token_usage_summary"] = usage.summary(linked["snapshot"])
             except (ValueError, OSError, TypeError, KeyError):
