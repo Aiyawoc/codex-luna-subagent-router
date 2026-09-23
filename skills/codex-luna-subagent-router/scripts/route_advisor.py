@@ -49,6 +49,29 @@ scope_id = store.scope_id
 append_record = store.append_record
 
 
+def _record_planning_observation(output, registry, scope, root):
+    import planning_store
+
+    row = planning_store.from_plan(output, scope)
+    primary = planning_store.default_path(registry)
+    try:
+        planning_store.append(primary, row)
+        output["planning_observation_storage"] = "default"
+        return
+    except (ValueError, OSError, TypeError, KeyError) as exc:
+        code = _planning_observation_error_code(exc)
+        if root is None or code not in ("permission_denied", "state_unavailable", "io_error"):
+            output["planning_observation_error"] = "planning telemetry unavailable; production plan unchanged"
+            output["planning_observation_error_code"] = code
+            return
+    try:
+        planning_store.append(planning_store.project_path(root), row)
+        output["planning_observation_storage"] = "project_fallback"
+    except (ValueError, OSError, TypeError, KeyError) as exc:
+        output["planning_observation_error"] = "planning telemetry unavailable; production plan unchanged"
+        output["planning_observation_error_code"] = _planning_observation_error_code(exc)
+
+
 def _planning_observation_error_code(exc):
     code = getattr(exc, "errno", None)
     if isinstance(exc, PermissionError) or code in (errno.EACCES, errno.EPERM):
@@ -407,12 +430,7 @@ def main(argv=None):
         elif args.command == "plan":
             from plan_work import plan_work
             output = plan_work(json.loads(args.request.read_text(encoding="utf-8")), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root, runtime_health=args.runtime_health)
-            try:
-                import planning_store
-                planning_store.append(planning_store.default_path(path), planning_store.from_plan(output, scope))
-            except (ValueError, OSError, TypeError, KeyError) as exc:
-                output["planning_observation_error"] = "planning telemetry unavailable; production plan unchanged"
-                output["planning_observation_error_code"] = _planning_observation_error_code(exc)
+            _record_planning_observation(output, path, scope, root)
         else:
             output = stats(path, scope)
             import token_usage as usage

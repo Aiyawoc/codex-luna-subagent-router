@@ -18,6 +18,58 @@ import route_advisor  # noqa: E402
 
 
 class V270ObservabilityTests(unittest.TestCase):
+    def test_planning_falls_back_to_project_state_on_permission_denied(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            registry = root / "home/state/codex-luna-subagent-router/outcomes.jsonl"
+            output = {
+                "routing_mode": "adaptive",
+                "lead_model": "gpt-6-sol",
+                "lead_effort": "high",
+                "decisions": [{"execution_shape": "subagent"}],
+                "workers": [{"worker_id": "private"}],
+                "ready_worker_ids": ["private"],
+                "open_workers": 0,
+                "effective_wave_limit": 3,
+                "runtime_health": "healthy",
+                "effective_runtime_health": "healthy",
+                "runtime_health_action": "use_ready_wave",
+                "health_probe_worker_id": None,
+            }
+            real_append = planning_store.append
+            primary = planning_store.default_path(registry)
+            def append_with_denial(path, row):
+                if Path(path) == primary:
+                    raise PermissionError(1, "private path")
+                return real_append(path, row)
+            with patch.object(planning_store, "append", side_effect=append_with_denial):
+                route_advisor._record_planning_observation(output, registry, "project-a", root)
+            self.assertEqual(output["planning_observation_storage"], "project_fallback")
+            self.assertNotIn("planning_observation_error", output)
+            rows, invalid = planning_store.read(planning_store.project_path(root))
+            self.assertEqual(invalid, 0)
+            self.assertEqual(len(rows), 1)
+
+    def test_planning_statistics_merge_default_and_project_fallback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            default = root / "global/planning.jsonl"
+            project = planning_store.project_path(root)
+            base = {
+                "routing_mode": "adaptive", "lead_model": "gpt-6-sol", "lead_effort": "high",
+                "decisions": [{"execution_shape": "local_serial"}], "workers": [],
+                "ready_worker_ids": [], "open_workers": 0, "effective_wave_limit": 3,
+                "runtime_health": "healthy", "effective_runtime_health": "healthy",
+                "runtime_health_action": "use_ready_wave", "health_probe_worker_id": None,
+            }
+            planning_store.append(default, planning_store.from_plan(base, "project-a"))
+            parallel = dict(base, decisions=[{"execution_shape": "local_parallel_tools"}])
+            planning_store.append(project, planning_store.from_plan(parallel, "project-a"))
+            stats = planning_store.statistics_many([default, project], "project-a")
+            self.assertEqual(stats["plans"], 2)
+            self.assertEqual(stats["execution_shapes"]["local_serial"], 1)
+            self.assertEqual(stats["execution_shapes"]["local_parallel_tools"], 1)
+
     def test_planning_error_codes_are_bounded_and_non_sensitive(self):
         self.assertEqual(route_advisor._planning_observation_error_code(PermissionError(1, "secret path")), "permission_denied")
         self.assertEqual(route_advisor._planning_observation_error_code(FileNotFoundError(2, "missing")), "state_unavailable")
@@ -27,7 +79,7 @@ class V270ObservabilityTests(unittest.TestCase):
     def test_planning_store_keeps_counts_not_task_content(self):
         plan = {
             "routing_mode": "adaptive",
-            "lead_model": "gpt-5.6-sol",
+            "lead_model": "gpt-6-sol",
             "lead_effort": "high",
             "decisions": [
                 {"execution_shape": "local_parallel_tools"},
@@ -53,7 +105,7 @@ class V270ObservabilityTests(unittest.TestCase):
             path = Path(temp) / "planning.jsonl"
             base = {
                 "routing_mode": "adaptive",
-                "lead_model": "gpt-5.6-sol",
+                "lead_model": "gpt-6-sol",
                 "lead_effort": "high",
                 "decisions": [{"execution_shape": "local_serial"}],
                 "workers": [],
@@ -81,7 +133,7 @@ class V270ObservabilityTests(unittest.TestCase):
                 planning_store.from_plan(
                     {
                         "routing_mode": "adaptive",
-                        "lead_model": "gpt-5.6-sol",
+                        "lead_model": "gpt-6-sol",
                         "lead_effort": "high",
                         "decisions": [{"execution_shape": "local_parallel_tools"}],
                         "workers": [],
@@ -141,7 +193,7 @@ class V270ObservabilityTests(unittest.TestCase):
                 ),
                 patch.object(report.turn_usage, "statistics", return_value=[]),
             ):
-                data = report.collect("project-a")
+                data = report.collect("project-a", home)
             self.assertEqual(data["planning"]["execution_shapes"]["local_parallel_tools"], 1)
             self.assertEqual(data["decisions"]["available"], 1)
             brief = report.markdown(

@@ -89,13 +89,16 @@ def _turn_summary(turn_rows):
     }
 
 
-def collect(scope_id):
+def collect(scope_id, project_root=None):
     registry = store.default_registry_path()
     usage_path = token_usage.default_usage_path(registry)
     outcomes = route_advisor.stats(registry, scope=scope_id)
     subagents = token_usage.statistics(usage_path, scope=scope_id)
     turns = turn_usage.statistics(usage_path, scope=scope_id)
-    planning = planning_store.statistics(planning_store.default_path(registry), scope=scope_id)
+    planning_paths = [planning_store.default_path(registry)]
+    if project_root is not None:
+        planning_paths.append(planning_store.project_path(project_root))
+    planning = planning_store.statistics_many(planning_paths, scope=scope_id)
     decision_rows, invalid_decisions = decision_store.read()
     decision_rows = [row for row in decision_rows if scope_id is None or row["scope_id"] == scope_id]
     decision_status = Counter(row["status"] for row in decision_rows)
@@ -348,7 +351,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         sid, _, mode = _scope(args)
-        data = collect(sid)
+        data = collect(sid, root)
         payload, md_path, json_path, csv_path = write_report(data, sid, mode, args.output_dir or _default_output_root())
         result = {
             "status": "ok", "generated_at": payload["generated_at"], "scope": payload["scope"],

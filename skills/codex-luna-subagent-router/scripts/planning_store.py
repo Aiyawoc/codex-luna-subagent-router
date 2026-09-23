@@ -18,6 +18,11 @@ def default_path(registry=None):
     return base.with_name("planning.jsonl")
 
 
+def project_path(project_root):
+    root = Path(project_root).expanduser().resolve()
+    return root / ".codex/codex-luna-subagent-router/state/planning.jsonl"
+
+
 def from_plan(plan, scope_id):
     shapes = Counter(d.get("execution_shape") for d in plan.get("decisions", []))
     if any(key not in SHAPES for key in shapes):
@@ -96,8 +101,7 @@ def read(path=None):
     return valid, invalid
 
 
-def statistics(path=None, scope=None):
-    rows, invalid = read(path)
+def _statistics_rows(rows, invalid, scope=None):
     rows = [r for r in rows if scope is None or r["scope_id"] == scope]
     shapes = Counter()
     actions = Counter()
@@ -114,3 +118,22 @@ def statistics(path=None, scope=None):
         "invalid_planning_rows": invalid,
         "latest_recorded_at": max((r["recorded_at"] for r in rows), default=None),
     }
+
+
+def statistics(path=None, scope=None):
+    rows, invalid = read(path)
+    return _statistics_rows(rows, invalid, scope)
+
+
+def statistics_many(paths, scope=None):
+    combined, invalid = [], 0
+    seen = set()
+    for path in paths:
+        rows, bad = read(path)
+        invalid += bad
+        for row in rows:
+            if row["plan_id"] in seen:
+                continue
+            seen.add(row["plan_id"])
+            combined.append(row)
+    return _statistics_rows(combined, invalid, scope)
