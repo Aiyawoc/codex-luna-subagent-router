@@ -22,6 +22,7 @@ RC.3 changes only this ownership bridge:
 - the parent rollout for that exact parent turn must contain a structured `Interacted` activity for the same Worker;
 - only then may a no-start reused child `SubagentStop` bind its real child turn ID and end boundary to the current turn;
 - historical turns still require an exact previously stored child turn ID.
+- Windows lock-directory contention is normalized only when an existing non-symlink lock directory proves another process owns the lock; real permission denial is not hidden.
 
 This preserves RC.2's late-stop contamination protection while making Completed Worker follow-up observable.
 
