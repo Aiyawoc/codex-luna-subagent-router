@@ -158,6 +158,29 @@ class ReaderRecoveryTests(Sandbox):
         reader.read_usage(self.path,PARENT,None,codex_home=self.home,thread_kind='main',turn_id=TURN,activity_out=found)
         self.assertEqual(found,set())
 
+    def test_paginated_inherited_parent_session_meta_is_not_child_conflict(self):
+        old=counter(90000,60000,10000,5000)
+        new=counter()
+        total={k:old[k]+new[k] for k in old}
+        canonical=meta(subagent_history_start_ordinal=3,
+                       history_base={"thread_id":PARENT,"end_ordinal_exclusive":3,"end_byte_offset":1})
+        canonical["ordinal"]=0
+        inherited=meta()
+        inherited["payload"]["id"]=PARENT
+        inherited["payload"]["parent_thread_id"]=None
+        inherited["payload"]["timestamp"]=T0
+        inherited["ordinal"]=1
+        inherited_usage=event(old,old,T0);inherited_usage["ordinal"]=2
+        own_context=context();own_context["ordinal"]=3
+        own_usage=event(total,new,T2);own_usage["ordinal"]=4
+        own_end=end();own_end["ordinal"]=5
+        self.transcript([canonical,inherited,inherited_usage,own_context,own_usage,own_end])
+        result=self.read()
+        self.assertEqual(result["status"],"complete")
+        self.assertEqual(result["counts"],new)
+        self.assertEqual((result["model"],result["effort"]),("gpt-6-sol","high"))
+        self.assertNotIn("conflicting_session_headers",result["reasons"])
+
     def test_complete_duplicate_header_preserves_origin_and_counters(self):
         self.transcript([meta(),context(),event(),meta(),event(twice(),counter(),T3),end(T4)])
         result=self.read();self.assertEqual(result['counts'],twice());self.assertEqual(result['status'],'complete')
