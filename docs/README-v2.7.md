@@ -14,6 +14,16 @@ The Alpha therefore delivers useful optimization even when the optional Jev/Laya
 
 ## What is new in v2.7
 
+### Worker model family
+
+The v2.7 automatic Worker family uses these runtime IDs:
+
+```text
+gpt-6-luna → gpt-6-sol → gpt-6-astra
+```
+
+The routing tiers and effort policy remain cost-first: Luna is the economy tier, Sol handles deeper mid-tier reasoning, and Astra remains the highest-capability tier. Historical outcome data stays readable for reporting, but only the current GPT-6 Worker routes participate in new automatic routing and calibration.
+
 ### 1. Execution Shape
 
 Before creating a SubAgent, the planner now chooses one of:

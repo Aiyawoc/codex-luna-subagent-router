@@ -18,7 +18,7 @@ Current stable release: [**v2.6.7**](https://github.com/Aiyawoc/codex-luna-subag
 |---|---|
 | **Cost-first routing** | Keep the current Lead unchanged and choose the cheapest sufficient Worker model and reasoning effort for delegable work. |
 | **Whole-workload planning** | Evaluate multiple delegable tasks together; run independent work concurrently and serialize dependencies or write conflicts. |
-| **Three model tiers** | `adaptive` mode can move across Luna → Sol → Astra when more capability is needed. |
+| **Three model tiers** | `adaptive` mode can move across Luna → Sol → Astra when more capability is needed; current automatic Worker runtime IDs are `gpt-6-luna → gpt-6-sol → gpt-6-astra`. |
 | **Worker reuse** | Reuse a completed Worker when the workstream matches, context is still valuable, and the route remains sufficient. |
 | **Evidence reuse** | Pass still-valid confirmed facts, evidence locations, and completed exploration to Workers so fresh Workers do not repeat sufficient discovery. |
 | **Verified-outcome calibration** | Optionally use local verified results to adjust later routing conservatively. |

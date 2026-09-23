@@ -55,6 +55,9 @@ class Gpt6WorkerFamilyTests(unittest.TestCase):
             ROOT / "references/config-snippet.toml",
             ROOT / "evals/cases.json",
             ROOT / "examples/route-plan.valid.json",
+            ROOT.parents[1] / "README.md",
+            ROOT.parents[1] / "README.en.md",
+            ROOT.parents[1] / "docs/README-v2.7.md",
             ROOT.parents[1] / "docs/v2.7.0-host-acceptance.md",
         )
         for path in current:
