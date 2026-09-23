@@ -225,9 +225,11 @@ Unknown Token data remains unknown and is never converted to zero.
 
 ## Alpha installation
 
-Download the complete package matching the operating system and CPU from the **v2.7.0-alpha.1 pre-release**.
+The published **v2.7.0-alpha.1** package is now a historical comparison build. It predates the post-alpha migration of automatic Luna/Sol Workers to `gpt-6-luna / gpt-6-sol` and must **not** be used to validate the current GPT-6 routing line.
 
-| OS | CPU | Package |
+For current GPT-6 Host acceptance, use the next packaged v2.7 pre-release built from the current development candidate. The alpha.1 package names below are retained only so existing alpha.1 testers can identify or roll back that historical build.
+
+| OS | CPU | Historical alpha.1 package |
 |---|---|---|
 | macOS | Apple Silicon / ARM64 | `router-2.7.0-alpha.1-macos-arm64.tar.gz` |
 | macOS | Intel / x64 | `router-2.7.0-alpha.1-macos-x64.tar.gz` |
@@ -351,4 +353,4 @@ The main questions for this Alpha are:
 
 Use **v2.6.7** when stability is the priority.
 
-Use **v2.7.0-alpha.1** when you want to test the new execution-efficiency/runtime-reliability design and can report regressions before the stable v2.7.0 release.
+Use **v2.7.0-alpha.1** only for historical comparison with the first Alpha. Use the next v2.7 pre-release for current GPT-6 Worker routing tests.
