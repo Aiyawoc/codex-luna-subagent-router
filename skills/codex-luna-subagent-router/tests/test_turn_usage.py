@@ -327,6 +327,39 @@ class MainTurnTests(Sandbox):
         self.assertEqual(aggregate['counts']['total_tokens'], counter()['total_tokens'])
         self.assertEqual(aggregate['field_coverage']['total_tokens'], 1)
 
+    def test_reused_child_later_turn_stop_cannot_backfill_prior_turn(self):
+        self.hook()
+        start=self.hook_payload("SubagentStart");start["turn_id"]="child-turn-a"
+        usage.hook(start,self.upath)
+        self.add([ctx(),event(),terminal()]);self.hook("Stop")
+        before=copy.deepcopy(self.row())
+        self.assertEqual(before["phase"],"stopped")
+        self.assertEqual(before["members"][AGENT].get("child_turn_id"),"child-turn-a")
+        self.assertIsNone(before["members"][AGENT].get("end_cursor"))
+
+        self.transcript()
+        later=self.hook_payload("SubagentStop");later["turn_id"]="child-turn-b"
+        usage.hook(later,self.upath)
+        after=self.row()
+        self.assertEqual(after["members"][AGENT].get("child_turn_id"),"child-turn-a")
+        self.assertIsNone(after["members"][AGENT].get("end_cursor"))
+
+    def test_public_stats_expose_boundary_presence_without_cursor_material(self):
+        self.hook()
+        start=self.hook_payload("SubagentStart");start["turn_id"]="child-turn-diag"
+        usage.hook(start,self.upath)
+        self.transcript()
+        stop=self.hook_payload("SubagentStop");stop["turn_id"]="child-turn-diag"
+        usage.hook(stop,self.upath)
+        public=turns.statistics(self.upath,session=PARENT,turn=TURN)[0]
+        boundary=public["child_boundaries"][AGENT]
+        self.assertEqual(boundary["child_turn_id"],"child-turn-diag")
+        self.assertTrue(boundary["end_boundary_known"])
+        self.assertEqual(boundary["baseline"],"fresh")
+        raw=json.dumps(public)
+        self.assertNotIn('"offset"',raw);self.assertNotIn('"anchor"',raw)
+        self.assertNotIn(str(self.home),raw)
+
     def test_parent_activity_can_recover_child_association(self):
         self.hook()
         usage.register(self.upath, AGENT, PARENT, 'global', 'default')
