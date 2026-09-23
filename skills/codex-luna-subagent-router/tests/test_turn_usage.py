@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from test_token_accounting import Sandbox, counter, meta, context, event, end, T0, T1, T2, T3, T4, AGENT, PARENT, SCRIPTS
@@ -383,6 +384,16 @@ class MainTurnTests(Sandbox):
         text=turns.report(row,'Token 用量（截至最终回复前；最终正文会产生少量额外输出）')
         self.assertIn('截至最终回复前',text)
         self.assertIn('主 Agent · Astra high',text)
+
+    def test_preview_is_read_only_when_turn_ledger_lock_is_unavailable(self):
+        self.hook();self.add([ctx(),event()])
+        path=turns.ledger_path(self.upath)
+        before=path.read_bytes()
+        with patch.object(turns.store,'locked',side_effect=PermissionError('read-only Host state')):
+            row=turns.preview(self.upath,'global',self.project)
+        self.assertEqual(row['phase'],'started')
+        self.assertEqual(row['main_snapshot']['counts']['total_tokens'],45000)
+        self.assertEqual(path.read_bytes(),before)
 
     def test_sealed_old_stop_cannot_absorb_later_child_steering(self):
         self.hook();self.add([ctx(),event(),terminal()]);self.hook('Stop');self.hook(turn=TURN2)
