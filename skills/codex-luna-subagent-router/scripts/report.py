@@ -350,7 +350,7 @@ def main(argv=None):
     parser.add_argument("--json", action="store_true", help="stdout 输出生成结果 JSON；文件内容不变")
     args = parser.parse_args(argv)
     try:
-        sid, _, mode = _scope(args)
+        sid, root, mode = _scope(args)
         data = collect(sid, root)
         payload, md_path, json_path, csv_path = write_report(data, sid, mode, args.output_dir or _default_output_root())
         result = {
