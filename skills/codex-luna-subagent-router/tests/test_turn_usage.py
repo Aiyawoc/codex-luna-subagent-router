@@ -407,10 +407,10 @@ class MainTurnTests(Sandbox):
         # The Host later persists current MultiAgentV2 activity. Parent Stop may
         # already have happened; the next real UserPromptSubmit must seal/recheck
         # Turn B and recover its exact interval without touching Turn A.
-        self.add([ctx(TURN2,T3),event(total,counter(),T3),terminal(TURN2,T4),
-                  v2_activity(kind="interacted",turn=TURN2,stamp=T4)],self.main_path)
+        self.add([ctx(TURN2,T3),event(total,counter(),T3),terminal(TURN2,T4)],self.main_path)
         self.hook("Stop",TURN2)
         self.assertNotIn(AGENT,self.row(TURN2)["child_snapshots"])
+        self.add([v2_activity(kind="interacted",turn=TURN2,stamp=T4)],self.main_path)
         self.hook(turn=TURN3)
 
         recovered=self.row(TURN2)
