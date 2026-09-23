@@ -1,8 +1,8 @@
-# Agent Router v2.7.0 Release Candidate
+# Agent Router v2.7.0 Stable Release
 
-> **Pre-release:** `v2.7.0-rc.4`  
-> **Stable release remains:** `v2.6.7`  
-> This Release Candidate is feature-frozen. RC.1 closed Sol Lead H3; RC.2 fixed paginated accounting and exact frozen boundaries; RC.3 exposed the Completed Worker no-Start lifecycle; RC.4 adds current MultiAgentV2 persisted activity compatibility. Only one clean real-Host A→B→C post-Stop acceptance remains before v2.7.0 stable. v2.6.7 remains the recommended stable release until that gate passes.
+> **Stable release:** `v2.7.0`  
+> **Final release gate:** PASS  
+> RC.4 completed the current MultiAgentV2 activity compatibility path, and the final real-Host A→B→C acceptance passed on macOS ARM64. v2.7.0 is the recommended stable release.
 
 Agent Router keeps the **Lead model selected by the user** and delegates only work that has positive expected value. v2.7 adds a new principle:
 
@@ -24,9 +24,9 @@ RC.4 keeps all routing/accounting boundaries unchanged and extends only activity
 - `Completed` alone still cannot charge an old Worker to a new turn;
 - if parent activity flushes after child Stop or parent Stop, the next natural user turn's sealed recheck can recover the exact interval from the already-frozen child cursor/end boundary.
 
-**Final Host gate:** use one clean RC.4 session: Turn A creates/finalizes Worker W, Turn B naturally reuses W, and Turn C only observes the post-Stop state. Turn B must end with `baseline=exact_cursor`, a known exact end boundary, and a child snapshot representing only Turn B's interval while Turn A remains unchanged.
+**Final Host gate: PASS.** In the clean RC.4 A→B→C run, Turn B naturally reused the exact same `gpt-6-luna/high` Worker, carried `baseline=exact_cursor`, and Stage C observed a sealed Turn B with a known exact end boundary and complete child snapshot. The Turn B interval was 36,406 tokens; Worker lifetime increased from 102,095 to 138,501, while Turn A remained unchanged.
 
-See `docs/v2.7.0-rc4-acceptance.md`.
+See `docs/v2.7.0-stable-acceptance.md` and `docs/v2.7.0-rc4-acceptance.md`.
 
 ---
 
@@ -328,18 +328,18 @@ Unknown Token data remains unknown and is never converted to zero.
 
 ---
 
-## Release Candidate installation
+## Stable installation
 
-Download the complete package matching your OS and CPU from the **v2.7.0-rc.4 pre-release**.
+Download the complete package matching your OS and CPU from the **v2.7.0 stable release**.
 
 `v2.7.0-alpha.1` remains a historical pre-GPT-6 comparison build and should not be used for current routing acceptance.
 
 | OS | CPU | Package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.7.0-rc.4-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.7.0-rc.4-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.7.0-rc.4-windows-x64.zip` |
-| Windows | ARM64 | `router-2.7.0-rc.4-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.7.0-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.7.0-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.7.0-windows-x64.zip` |
+| Windows | ARM64 | `router-2.7.0-windows-arm64.zip` |
 
 Each archive has an adjacent `.sha256`; the release also contains `SHA256SUMS`.
 
@@ -365,7 +365,7 @@ For a project-local install, use the existing project install option instead of 
 
 ---
 
-## Release Candidate upgrade notes
+## Stable upgrade notes
 
 Before upgrading from v2.6.7:
 
@@ -380,7 +380,7 @@ The installer is expected to preserve existing managed settings and user data.
 
 ## Automated validation completed
 
-The v2.7 candidate line has passed:
+The v2.7 stable line has passed:
 
 - Linux CI on Python 3.12 and 3.13;
 - macOS CI;
@@ -394,29 +394,26 @@ The v2.7 candidate line has passed:
 - Windows x64 portable package build/smoke;
 - source archive verification.
 
-The RC publication workflow reruns the package build, full regressions, Router Arena, and validation for the exact release commit before creating the GitHub pre-release.
+The stable publication workflow reruns Manifest verification, full regressions, Router Arena, and all four portable package build/smoke jobs for the exact reviewed main commit before creating the immutable GitHub release.
 
 ---
 
-## Remaining RC acceptance / not yet a stable-release claim
+## Stable release status and limits
 
-The following remains part of v2.7 acceptance work:
+The Core stable gates are complete, including the final current-Host MultiAgentV2 reuse/accounting path. Decision Shadow remains optional/experimental and off by default.
 
-- real Codex Host/Desktop acceptance with both GPT-6 Sol and GPT-6 Astra as Lead;
-- real-world comparison of `local_parallel_tools` versus Worker startup cost;
-- real materialization behavior across Host builds;
-- Decision Shadow calibration on real coding tasks;
-- measured Token/elapsed-time results from real sessions.
-
-Therefore this Release Candidate does **not** claim:
+v2.7.0 does **not** claim:
 
 - a fixed percentage of Token savings;
 - observed Codex quota savings;
 - that Jev/Laya decisions are production routing authority;
-- that v2.7 is already safer/better for every workload than stable v2.6.7.
+- that every workload benefits equally from Worker delegation.
+
+Real-world Token and elapsed-time results remain workload-dependent. Unknown accounting data remains unknown rather than being converted to zero.
 
 See:
 
+- `docs/v2.7.0-stable-acceptance.md`
 - `docs/v2.7.0-host-acceptance.md`
 - `docs/v2.7.0-grounded-decision-layer-plan.md`
 
@@ -424,38 +421,12 @@ See:
 
 ## Rollback
 
-If the Release Candidate behaves incorrectly in the real Host, reinstall the stable **v2.6.7** complete package.
+If v2.7.0 must be rolled back, reinstall the prior stable **v2.6.7** complete package.
 
 Do not delete Outcome/Token ledgers simply to downgrade. The release/installer flow is designed to preserve user data and unrelated Agent configuration.
 
 ---
 
-## Feedback requested for RC
+## Stable status
 
-The most useful reports include:
-
-- Lead model + effort;
-- Codex Desktop/CLI build;
-- OS/architecture;
-- whether Decision Engine was off or Shadow-enabled;
-- task type;
-- observed Execution Shape;
-- requested vs Materialized Worker count;
-- exact runtime failure category if a spawn fails;
-- generated `router report` statistics with private content removed.
-
-The final RC questions are:
-
-1. Does `local_parallel_tools` reduce unnecessary Workers without pulling real reasoning back into the Lead?
-2. Does the Materialization Gate match actual Codex Host behavior?
-3. Does the runtime health probe avoid failure fan-out without reducing normal parallelism?
-4. Does Decision Shadow remain truly non-authoritative?
-5. Do verified-task Token/elapsed-time metrics improve on real workloads?
-
----
-
-## Stable vs RC
-
-Use **v2.6.7** when stability is the priority.
-
-Use **v2.7.0-rc.4** only for the final MultiAgentV2 post-Stop reuse gate. Earlier RC/Alpha releases remain historical comparison builds.
+Use **v2.7.0** as the current stable release. Earlier RC/Alpha builds are retained only as historical acceptance artifacts.

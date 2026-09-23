@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.7.0 — Stable（2026-09-23）
+
+- 正式发布 v2.7 Core：在选择 Worker 模型前先选择最低成本且足够的 Execution Shape，支持 `local_serial / local_parallel_tools / subagent`，在 Decision Engine/Jev 完全关闭时仍生效。
+- 自动 Worker family 使用 `gpt-6-luna / gpt-6-sol / gpt-6-astra`；主 Agent 始终保持用户选择，不被 Router 静默替换。
+- Materialization Gate、Runtime Health Lease、Router Arena、fixed-seed planner fuzz、planning telemetry/reporting 与可选 Decision Shadow 均完成稳定版收口；Decision Shadow 继续非权威、fail-open、默认关闭。
+- Token accounting 完成跨真实 parent turn 的 Completed Worker reuse 支持：exact child cursor/end boundary、paginated inherited SessionMeta、receipt interval、late Stop ownership 与 historical freeze 均保持 fail-safe。
+- 兼容当前 Codex MultiAgentV2 parent activity 持久化格式 `event_msg → item_completed → SubAgentActivity`，同时保留 legacy `response_item/sub_agent_activity`；只有 Started/Interacted 建立当前-turn ownership，Completed-only 不会误计旧 Worker。
+- RC.4 最终真实 Host A→B→C 验收 PASS：同一 Luna Worker 自然复用，Turn B `baseline=exact_cursor`、exact end boundary 与 complete child snapshot 成立，snapshot 总量 36,406，且等于 Worker lifetime 从 102,095 增至 138,501 的新增区间；Turn A 历史 interval/boundary/child identity 均保持冻结。
+- macOS/Windows x64/ARM64 complete package、随包 CPython、安装/升级/hooks/完整测试、Router Arena 与 Manifest 由正式发布 workflow 对最终稳定版 commit 重新验证后才允许创建 immutable release。
+- 不声称固定 Token/配额节省比例；缺失/不可证明的统计继续保持 unknown/null，不补 0。
+
 ## 2.7.0-rc.4 — MultiAgentV2 activity compatibility（2026-09-23）
 
 - 修复当前 Codex MultiAgentV2 parent rollout 的 SubAgent activity 解析：Host 现在把 `Interacted/Completed` 持久化为 `event_msg → item_completed → TurnItem::SubAgentActivity`，而旧 Router 仅识别历史 `response_item → sub_agent_activity`，导致 Host UI 可见 follow-up activity、Router 却无法把 reused Worker 归入当前 parent turn。
@@ -68,7 +79,7 @@
 - 发布候选已通过 Linux/macOS/Windows CI、Router Arena、5000-case fuzz、完整 Manifest，以及 macOS/Windows x64/ARM64 Portable Runtime。
 
 
-## 2.7.0 — GPT-6 Worker migration（开发中）
+## 2.7.0 development baseline（历史记录）
 
 - 自动 Worker 路由从 `gpt-5.6-luna / gpt-5.6-sol` 迁移到 `gpt-6-luna / gpt-6-sol`；Astra 保持 `gpt-6-astra`。
 - Luna 继续使用 low/medium/high/xhigh/max 五档，Sol 继续使用 high/xhigh；本轮不改变三层能力策略与 effort 选择语义。
