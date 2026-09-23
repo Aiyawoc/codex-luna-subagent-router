@@ -264,6 +264,16 @@ class _Scan:
             self.acc.allow_zero_origin = not self.identity['inherited']
             return
         if row.get('type') == 'session_meta':
+            # Paginated subagent rollouts may contain inherited parent SessionMeta
+            # records before the child's own-history ordinal. The first SessionMeta
+            # remains canonical; inherited metadata is context and must not replace it.
+            inherited_start = self.identity['ordinal']
+            if self.identity['child'] and inherited_start is not None:
+                ordinal = row.get('ordinal')
+                if type(ordinal) is not int or ordinal < 0:
+                    raise ValueError('conflicting_session_headers')
+                if ordinal < inherited_start:
+                    return
             try:
                 same = _identity(payload) == self.identity
             except ValueError:
@@ -271,7 +281,7 @@ class _Scan:
             if not same:
                 raise ValueError('conflicting_session_headers')
             self.acc.reasons.add('repeated_session_header')
-            return  # Duplicate metadata never resets counters, route or interval boundaries.
+            return  # Duplicate canonical metadata never resets counters or boundaries.
         try:
             stamp = _time(row.get('timestamp'))
             own = stamp >= _time(self.identity['created'])
