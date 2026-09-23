@@ -1,14 +1,33 @@
 # Agent Router v2.7.0 Release Candidate
 
-> **Pre-release:** `v2.7.0-rc.2`  
+> **Pre-release:** `v2.7.0-rc.3`  
 > **Stable release remains:** `v2.6.7`  
-> This Release Candidate is feature-frozen. RC.1 closed the Sol Lead H3 gate; RC.2 fixes the cross-turn accounting evidence path and leaves only the real two-parent-turn Worker reuse gate before v2.7.0 stable. v2.6.7 remains the recommended stable release until that gate passes.
+> This Release Candidate is feature-frozen. RC.1 closed the Sol Lead H3 gate; RC.2 fixed paginated accounting and exact frozen boundaries; RC.3 fixes the Host lifecycle asymmetry for Completed Worker follow-up. Only one clean real-Host reuse acceptance remains before v2.7.0 stable. v2.6.7 remains the recommended stable release until that gate passes.
 
 Agent Router keeps the **Lead model selected by the user** and delegates only work that has positive expected value. v2.7 adds a new principle:
 
 > **Choose the cheapest execution shape before choosing a Worker model.**
 
 The v2.7 Core therefore delivers useful optimization even when the optional Jev/Laya-style Decision Layer is completely disabled.
+
+---
+
+## RC.3 closure scope
+
+RC.2 real-Host testing proved that the same Completed Worker can be naturally reused across a new parent turn, the new turn receives `baseline=exact_cursor`, normal paginated inherited metadata no longer causes `conflicting_session_headers`, and Turn A remains frozen. The remaining gap was lifecycle-specific: Codex `followup_task` wakes an existing Worker with `InterAgentCommunication + TriggerTurn`, so it does not emit another `SubagentStart`, while the reused child turn still emits `SubagentStop`.
+
+RC.3 changes only this ownership bridge:
+
+- the current started parent turn must already hold an exact reused-child cursor;
+- the parent rollout for that exact parent turn must contain a structured `Interacted` activity for the same Worker;
+- only then may a no-start reused child `SubagentStop` bind its real child turn ID and end boundary to the current turn;
+- historical turns still require an exact previously stored child turn ID.
+
+This preserves RC.2's late-stop contamination protection while making Completed Worker follow-up observable.
+
+**Only one clean real-Host Gate remains:** under RC.3, perform a fresh Turn A that establishes Worker W and a real next-user Turn B that naturally reuses W. Turn B must persist a new child turn ID/end boundary and an interval-only child snapshot.
+
+See `docs/v2.7.0-rc3-acceptance.md`.
 
 ---
 
@@ -292,16 +311,16 @@ Unknown Token data remains unknown and is never converted to zero.
 
 ## Release Candidate installation
 
-Download the complete package matching your OS and CPU from the **v2.7.0-rc.2 pre-release**.
+Download the complete package matching your OS and CPU from the **v2.7.0-rc.3 pre-release**.
 
 `v2.7.0-alpha.1` remains a historical pre-GPT-6 comparison build and should not be used for current routing acceptance.
 
 | OS | CPU | Package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.7.0-rc.2-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.7.0-rc.2-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.7.0-rc.2-windows-x64.zip` |
-| Windows | ARM64 | `router-2.7.0-rc.2-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.7.0-rc.3-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.7.0-rc.3-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.7.0-rc.3-windows-x64.zip` |
+| Windows | ARM64 | `router-2.7.0-rc.3-windows-arm64.zip` |
 
 Each archive has an adjacent `.sha256`; the release also contains `SHA256SUMS`.
 
@@ -420,4 +439,4 @@ The final RC questions are:
 
 Use **v2.6.7** when stability is the priority.
 
-Use **v2.7.0-rc.2** only for the final cross-turn Worker reuse gate. RC.1 and the Alpha releases remain historical comparison builds.
+Use **v2.7.0-rc.3** only for the final Completed Worker follow-up reuse gate. RC.1/RC.2 and the Alpha releases remain historical comparison builds.

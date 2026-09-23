@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.7.0-rc.3 — Completed Worker follow-up lifecycle（2026-09-23）
+
+- 修复当前 Codex `followup_task` 复用 Completed Worker 时不再次触发 `SubagentStart` 的生命周期兼容：Router 不再要求复用 child 必须先被 start hook 标记 active。
+- 对无新 `SubagentStart` 的复用，只允许当前 `started` parent turn 在已有 exact child cursor、非 fresh Worker、且 parent rollout 当前 turn 已出现该 Worker 的结构化 `Interacted` activity 时认领后续 `SubagentStop`。
+- 真实 `SubagentStop.turn_id` 随后写回本轮 `child_turn_id` 与 end boundary；parent Stop 可据此生成本轮 child interval snapshot。
+- 历史 stopped/sealed turn 仍必须依赖已保存的 exact `child_turn_id` 才允许 late-stop recovery；RC.2 的跨 turn 污染保护不放宽。
+- 新增回归完整模拟：Turn A 正常 spawn/stop → Turn B `followup_task` 复用同一 Completed Worker、无 SubagentStart、parent Interacted、child SubagentStop → Turn B 只统计 exact cursor 后新增 interval，Turn A 保持冻结。
+- 不改变 Execution Shape、GPT-6 路由、Materialization Gate、Runtime Health、Decision Shadow、receipt interval 或 conservative unknown/null 原则。
+
 ## 2.7.0-rc.2 — Cross-turn accounting compatibility（2026-09-23）
 
 - 修复当前 Codex paginated SubAgent rollout 的继承历史兼容：child canonical `SessionMeta` 之后、`subagent_history_start_ordinal` 之前出现的父线程 inherited `SessionMeta` 不再误报 `conflicting_session_headers`；own-history 边界后的冲突 header 仍 fail-closed。

@@ -137,6 +137,8 @@ SubagentStart 注册真实 agent_id 与父 session_id、scope。SubagentStop 只
 
 v2.7.0-rc.2 对当前 Codex paginated SubAgent rollout 增加显式兼容：文件第一条 child `SessionMeta` 是 canonical identity；在其 `subagent_history_start_ordinal` 之前的后续 `SessionMeta` 属于 inherited parent context，不作为 child identity 冲突。own-history ordinal 之后出现不同 identity 的 header 仍报告 `conflicting_session_headers`。同时，late `SubagentStop` 对 stopped/sealed parent turn 的 end-boundary 回填必须匹配该 turn 当时保存的 child hook `turn_id`；旧记录或缺失证据不猜归属。
 
+v2.7.0-rc.3 进一步兼容 Completed Worker follow-up：当前 Codex `followup_task` 不产生新的 `SubagentStart`，但 parent rollout 会记录该 Worker 的结构化 `Interacted` activity，复用 child turn 结束时仍产生 `SubagentStop`。因此当前 started parent turn 只有在已保存 exact child cursor、Worker 非 fresh，且当前 parent turn 的 transcript 明确发现同一 Worker `Interacted` 时，才允许该 no-start `SubagentStop` 写入新的 `child_turn_id` 与 end boundary。历史 stopped/sealed turn 仍不能凭 `Interacted` 猜归属，必须 exact child turn ID 匹配。
+
 本轮汇总区间是“本轮起点到当前 Stop 快照”，不是整段会话累计，也不是每个并行任务的因果成本测量。显示已登记主/子线程的已知合计，未关联线程数量另提示；不保证所有 Worker/外部调用全覆盖。模型中途改变不能把全部用量标到一个模型。缓存命中包含在输入中，推理输出包含在输出中。
 
 ```bash
