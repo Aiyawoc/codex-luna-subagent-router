@@ -19,6 +19,7 @@ import inspect_guided_install as setup
 
 TURN = "parent-turn-001"
 TURN2 = "parent-turn-002"
+TURN3 = "parent-turn-003"
 
 
 def root_meta():
@@ -374,6 +375,49 @@ class MainTurnTests(Sandbox):
         self.hook("Stop",TURN2)
         current=self.row(TURN2)
         self.assertEqual(current["child_snapshots"][AGENT]["counts"],counter())
+        self.assertEqual(self.row()["child_snapshots"][AGENT]["counts"],counter())
+
+    def test_next_turn_recheck_recovers_v2_followup_activity_flushed_after_child_stop(self):
+        # Turn A establishes an exact frozen child boundary.
+        self.hook()
+        start=self.hook_payload("SubagentStart");start["turn_id"]="child-turn-a"
+        usage.hook(start,self.upath)
+        self.transcript()
+        stop=self.hook_payload("SubagentStop");stop["turn_id"]="child-turn-a"
+        stop["transcript_path"]=str(self.main_path)
+        usage.hook(stop,self.upath)
+        self.add([ctx(),activity(),event(),terminal()]);self.hook("Stop")
+        first=copy.deepcopy(self.row())
+        self.assertIsNotNone(first["members"][AGENT].get("end_cursor"))
+
+        # Turn B reuses W. The child Stop arrives before the parent Interacted
+        # activity is durably visible, so immediate sync must fail safe.
+        self.hook(turn=TURN2)
+        baseline=self.row(TURN2)["members"][AGENT]
+        self.assertFalse(baseline["active"])
+        self.assertIsNotNone(baseline["cursor"])
+        total={k:v*2 for k,v in counter().items()}
+        self.add([context(T3),event(total,counter(),T3),end(T4)],self.path)
+        early_stop=self.hook_payload("SubagentStop");early_stop["turn_id"]="child-turn-b"
+        early_stop["transcript_path"]=str(self.main_path)
+        usage.hook(early_stop,self.upath)
+        self.assertFalse(self.row(TURN2)["members"][AGENT]["active"])
+        self.assertNotIn(AGENT,self.row(TURN2)["child_snapshots"])
+
+        # The Host later persists current MultiAgentV2 activity. Parent Stop may
+        # already have happened; the next real UserPromptSubmit must seal/recheck
+        # Turn B and recover its exact interval without touching Turn A.
+        self.add([ctx(TURN2,T3),event(total,counter(),T3),terminal(TURN2,T4),
+                  v2_activity(kind="interacted",turn=TURN2,stamp=T4)],self.main_path)
+        self.hook("Stop",TURN2)
+        self.assertNotIn(AGENT,self.row(TURN2)["child_snapshots"])
+        self.hook(turn=TURN3)
+
+        recovered=self.row(TURN2)
+        self.assertEqual(recovered["phase"],"sealed")
+        self.assertTrue(recovered["members"][AGENT]["active"])
+        self.assertIsNotNone(recovered["members"][AGENT].get("end_cursor"))
+        self.assertEqual(recovered["child_snapshots"][AGENT]["counts"],counter())
         self.assertEqual(self.row()["child_snapshots"][AGENT]["counts"],counter())
 
     def test_reused_child_later_turn_stop_cannot_backfill_prior_turn(self):
