@@ -327,6 +327,46 @@ class MainTurnTests(Sandbox):
         self.assertEqual(aggregate['counts']['total_tokens'], counter()['total_tokens'])
         self.assertEqual(aggregate['field_coverage']['total_tokens'], 1)
 
+    def test_followup_reuse_without_subagent_start_binds_current_turn_from_interacted_activity(self):
+        # Turn A: normal spawn lifecycle establishes a frozen exact child boundary.
+        self.hook()
+        start=self.hook_payload("SubagentStart");start["turn_id"]="child-turn-a"
+        usage.hook(start,self.upath)
+        self.transcript()
+        stop=self.hook_payload("SubagentStop");stop["turn_id"]="child-turn-a"
+        usage.hook(stop,self.upath)
+        self.add([ctx(),activity(),event(),terminal()]);self.hook("Stop")
+        first=copy.deepcopy(self.row())
+        self.assertIsNotNone(first["members"][AGENT].get("end_cursor"))
+
+        # Turn B: Codex followup_task reuses the Completed Worker without a new
+        # SubagentStart. UserPromptSubmit preserves the exact child cursor; the
+        # parent rollout records Interacted before the reused child stops.
+        self.hook(turn=TURN2)
+        baseline=self.row(TURN2)["members"][AGENT]
+        self.assertFalse(baseline["active"])
+        self.assertFalse(baseline["fresh"])
+        self.assertIsNotNone(baseline["cursor"])
+        self.assertIsNone(baseline.get("child_turn_id"))
+
+        total={k:v*2 for k,v in counter().items()}
+        self.add([ctx(TURN2,T3),activity(kind="interacted",stamp=T3)],self.main_path)
+        self.add([context(T3),event(total,counter(),T3),end(T4)],self.path)
+        followup_stop=self.hook_payload("SubagentStop");followup_stop["turn_id"]="child-turn-b"
+        usage.hook(followup_stop,self.upath)
+
+        current=self.row(TURN2)
+        member=current["members"][AGENT]
+        self.assertTrue(member["active"])
+        self.assertEqual(member["child_turn_id"],"child-turn-b")
+        self.assertIsNotNone(member.get("end_cursor"))
+
+        self.add([event(total,counter(),T3),terminal(TURN2,T4)],self.main_path)
+        self.hook("Stop",TURN2)
+        current=self.row(TURN2)
+        self.assertEqual(current["child_snapshots"][AGENT]["counts"],counter())
+        self.assertEqual(self.row()["child_snapshots"][AGENT]["counts"],counter())
+
     def test_reused_child_later_turn_stop_cannot_backfill_prior_turn(self):
         self.hook()
         start=self.hook_payload("SubagentStart");start["turn_id"]="child-turn-a"
