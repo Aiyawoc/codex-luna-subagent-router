@@ -139,6 +139,8 @@ v2.7.0-rc.2 对当前 Codex paginated SubAgent rollout 增加显式兼容：文�
 
 v2.7.0-rc.3 进一步兼容 Completed Worker follow-up：当前 Codex `followup_task` 不产生新的 `SubagentStart`，但 parent rollout 会记录该 Worker 的结构化 `Interacted` activity，复用 child turn 结束时仍产生 `SubagentStop`。因此当前 started parent turn 只有在已保存 exact child cursor、Worker 非 fresh，且当前 parent turn 的 transcript 明确发现同一 Worker `Interacted` 时，才允许该 no-start `SubagentStop` 写入新的 `child_turn_id` 与 end boundary。历史 stopped/sealed turn 仍不能凭 `Interacted` 猜归属，必须 exact child turn ID 匹配。
 
+v2.7.0-rc.4 补齐当前 MultiAgentV2 parent activity 的实际 rollout 形状：除旧 `response_item/sub_agent_activity` 外，reader 也识别 `event_msg` 中的 `item_completed`，其 `item.type=SubAgentActivity`、`kind=started/interacted`、`agent_thread_id` 作为本轮 child ownership 证据。`completed`-only 仍不激活旧 Worker。这样即使 child Stop 或 parent Stop 当下 parent activity 尚未 flush，下一自然 UserPromptSubmit 的 sealed recheck 也能在 activity 落盘后把 exact child cursor/end boundary 解析成上一 turn 的 interval snapshot；不从 lifetime 猜区间。
+
 本轮汇总区间是“本轮起点到当前 Stop 快照”，不是整段会话累计，也不是每个并行任务的因果成本测量。显示已登记主/子线程的已知合计，未关联线程数量另提示；不保证所有 Worker/外部调用全覆盖。模型中途改变不能把全部用量标到一个模型。缓存命中包含在输入中，推理输出包含在输出中。
 
 ```bash

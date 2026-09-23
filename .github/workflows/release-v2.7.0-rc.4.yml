@@ -1,9 +1,9 @@
-name: Release v2.7.0-rc.3
+name: Release v2.7.0-rc.4
 
 on:
   push:
     branches:
-      - publish/v2.7.0-rc.3
+      - publish/v2.7.0-rc.4
 
 permissions:
   contents: read
@@ -19,14 +19,14 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
-      - name: Verify rc.3 release source
+      - name: Verify rc.4 release source
         id: check
         shell: bash
         run: |
           set -euo pipefail
           VERSION=$(cat skills/codex-luna-subagent-router/VERSION)
-          [[ "$VERSION" == "2.7.0-rc.3" ]]
-          [[ "$GITHUB_REF_NAME" == "publish/v2.7.0-rc.3" ]]
+          [[ "$VERSION" == "2.7.0-rc.4" ]]
+          [[ "$GITHUB_REF_NAME" == "publish/v2.7.0-rc.4" ]]
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v5
         with:
@@ -60,7 +60,7 @@ jobs:
           pattern: portable-*
           path: packages
           merge-multiple: true
-      - name: Verify all four rc.3 packages
+      - name: Verify all four rc.4 packages
         shell: python
         env:
           VERSION: ${{ needs.authorize.outputs.version }}
@@ -97,7 +97,7 @@ jobs:
           fi
           gh release create "$TAG" \
             --target "$TARGET" \
-            --title "v2.7.0-rc.3 — Completed Worker Follow-up Candidate" \
+            --title "v2.7.0-rc.4 — MultiAgentV2 Activity Compatibility Candidate" \
             --draft \
             --prerelease \
             --notes-file docs/README-v2.7.md

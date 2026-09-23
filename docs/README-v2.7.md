@@ -1,14 +1,32 @@
 # Agent Router v2.7.0 Release Candidate
 
-> **Pre-release:** `v2.7.0-rc.3`  
+> **Pre-release:** `v2.7.0-rc.4`  
 > **Stable release remains:** `v2.6.7`  
-> This Release Candidate is feature-frozen. RC.1 closed the Sol Lead H3 gate; RC.2 fixed paginated accounting and exact frozen boundaries; RC.3 fixes the Host lifecycle asymmetry for Completed Worker follow-up. Only one clean real-Host reuse acceptance remains before v2.7.0 stable. v2.6.7 remains the recommended stable release until that gate passes.
+> This Release Candidate is feature-frozen. RC.1 closed Sol Lead H3; RC.2 fixed paginated accounting and exact frozen boundaries; RC.3 exposed the Completed Worker no-Start lifecycle; RC.4 adds current MultiAgentV2 persisted activity compatibility. Only one clean real-Host A→B→C post-Stop acceptance remains before v2.7.0 stable. v2.6.7 remains the recommended stable release until that gate passes.
 
 Agent Router keeps the **Lead model selected by the user** and delegates only work that has positive expected value. v2.7 adds a new principle:
 
 > **Choose the cheapest execution shape before choosing a Worker model.**
 
 The v2.7 Core therefore delivers useful optimization even when the optional Jev/Laya-style Decision Layer is completely disabled.
+
+---
+
+## RC.4 closure scope
+
+RC.3 real-Host testing proved same-session/same-Worker follow-up reuse, `baseline=exact_cursor`, frozen Turn A, and a safely frozen Turn B end boundary, but Stage C still had no Turn B child snapshot. The root cause is a Host persistence-format mismatch: current MultiAgentV2 records parent SubAgent activity as `event_msg/item_completed/TurnItem::SubAgentActivity`, while the Router activity reader only recognized the historical `response_item/sub_agent_activity` form.
+
+RC.4 keeps all routing/accounting boundaries unchanged and extends only activity decoding:
+
+- legacy `response_item/sub_agent_activity` remains supported;
+- current MultiAgentV2 `event_msg → item_completed → SubAgentActivity` is supported;
+- only `Started/Interacted` activates a child for the current parent turn;
+- `Completed` alone still cannot charge an old Worker to a new turn;
+- if parent activity flushes after child Stop or parent Stop, the next natural user turn's sealed recheck can recover the exact interval from the already-frozen child cursor/end boundary.
+
+**Final Host gate:** use one clean RC.4 session: Turn A creates/finalizes Worker W, Turn B naturally reuses W, and Turn C only observes the post-Stop state. Turn B must end with `baseline=exact_cursor`, a known exact end boundary, and a child snapshot representing only Turn B's interval while Turn A remains unchanged.
+
+See `docs/v2.7.0-rc4-acceptance.md`.
 
 ---
 
@@ -312,16 +330,16 @@ Unknown Token data remains unknown and is never converted to zero.
 
 ## Release Candidate installation
 
-Download the complete package matching your OS and CPU from the **v2.7.0-rc.3 pre-release**.
+Download the complete package matching your OS and CPU from the **v2.7.0-rc.4 pre-release**.
 
 `v2.7.0-alpha.1` remains a historical pre-GPT-6 comparison build and should not be used for current routing acceptance.
 
 | OS | CPU | Package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.7.0-rc.3-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.7.0-rc.3-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.7.0-rc.3-windows-x64.zip` |
-| Windows | ARM64 | `router-2.7.0-rc.3-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.7.0-rc.4-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.7.0-rc.4-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.7.0-rc.4-windows-x64.zip` |
+| Windows | ARM64 | `router-2.7.0-rc.4-windows-arm64.zip` |
 
 Each archive has an adjacent `.sha256`; the release also contains `SHA256SUMS`.
 
@@ -440,4 +458,4 @@ The final RC questions are:
 
 Use **v2.6.7** when stability is the priority.
 
-Use **v2.7.0-rc.3** only for the final Completed Worker follow-up reuse gate. RC.1/RC.2 and the Alpha releases remain historical comparison builds.
+Use **v2.7.0-rc.4** only for the final MultiAgentV2 post-Stop reuse gate. Earlier RC/Alpha releases remain historical comparison builds.

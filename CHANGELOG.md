@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.7.0-rc.4 — MultiAgentV2 activity compatibility（2026-09-23）
+
+- 修复当前 Codex MultiAgentV2 parent rollout 的 SubAgent activity 解析：Host 现在把 `Interacted/Completed` 持久化为 `event_msg → item_completed → TurnItem::SubAgentActivity`，而旧 Router 仅识别历史 `response_item → sub_agent_activity`，导致 Host UI 可见 follow-up activity、Router 却无法把 reused Worker 归入当前 parent turn。
+- usage reader 现在同时兼容 legacy 与 MultiAgentV2 两种持久化形状；只有 `Started/Interacted` 会建立当前-turn ownership，`Completed`-only 仍不会把历史 Worker 误计入新 turn。
+- 因此 Completed Worker follow-up 即使 child Stop 到达时 parent activity 尚未 flush，也可在 parent Stop 或下一真实 `UserPromptSubmit` 的 sealed recheck 中识别 V2 `Interacted`，使用已冻结 exact child cursor/end boundary 生成本轮 child interval snapshot。
+- 新增与真实 RC.3 Stage C 失败同构的回归：child Stop 先到、parent Stop 时仍无 activity/snapshot、V2 activity 随后落盘、下一真实 user turn 复核必须恢复 exact interval；Turn A 历史保持冻结。
+- 保留 RC.3 Windows lock-directory contention 修复，以及 RC.2 paginated SessionMeta、late-stop ownership、receipt interval 和 unknown/null 安全语义。
+- 不改变 Execution Shape、GPT-6 路由、Materialization Gate、Runtime Health、Decision Shadow 或模型选择策略。
+
 ## 2.7.0-rc.3 — Completed Worker follow-up lifecycle（2026-09-23）
 
 - 修复当前 Codex `followup_task` 复用 Completed Worker 时不再次触发 `SubagentStart` 的生命周期兼容：Router 不再要求复用 child 必须先被 start hook 标记 active。
