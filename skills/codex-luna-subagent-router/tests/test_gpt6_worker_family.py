@@ -47,7 +47,7 @@ class Gpt6WorkerFamilyTests(unittest.TestCase):
             self.assertNotIn("gpt-5.6-sol", text)
 
     def test_current_surfaces_do_not_reintroduce_gpt56_worker_ids(self):
-        current = (
+        current_skill = (
             ROOT / "SKILL.md",
             ROOT / "references/routing-policy.md",
             ROOT / "references/codex-guided-install.md",
@@ -55,12 +55,14 @@ class Gpt6WorkerFamilyTests(unittest.TestCase):
             ROOT / "references/config-snippet.toml",
             ROOT / "evals/cases.json",
             ROOT / "examples/route-plan.valid.json",
+        )
+        current_repo = (
             ROOT.parents[1] / "README.md",
             ROOT.parents[1] / "README.en.md",
             ROOT.parents[1] / "docs/README-v2.7.md",
             ROOT.parents[1] / "docs/v2.7.0-host-acceptance.md",
         )
-        for path in current:
+        for path in current_skill + tuple(path for path in current_repo if path.is_file()):
             with self.subTest(path=path):
                 text = path.read_text(encoding="utf-8")
                 self.assertNotIn("gpt-5.6-luna", text)
