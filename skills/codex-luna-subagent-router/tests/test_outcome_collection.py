@@ -61,7 +61,11 @@ class ReceiptTests(TempCase):
         legacy_row=legacy(model='gpt-5.6-luna',effort='high')
         s.validate_record(legacy_row)
         self.path.write_text(json.dumps(legacy_row)+'\n')
-        self.assertEqual(a.stats(self.path,now=NOW)['total_outcomes'],1)
+        stats=a.stats(self.path,now=NOW)
+        self.assertEqual(stats['total_outcomes'],1)
+        self.assertEqual(stats['eligible_history_rows'],0)
+        self.assertEqual(stats['available_recommendations'],[])
+        self.assertEqual(stats['sample_thresholds'],[])
         legacy_metadata=metadata(model='gpt-5.6-luna',effort='high')
         with self.assertRaisesRegex(s.StoreError,'bundled route'):
             s.begin(self.path,legacy_metadata,'legacy-route-not-new-01',NOW)

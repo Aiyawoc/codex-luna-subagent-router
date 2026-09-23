@@ -133,6 +133,7 @@ def _eligible_records(rows, scope=None, axes=None, task_family=None, now=None, t
     cutoff = now - timedelta(days=ttl_days)
     return [r for r in rows if cutoff <= store.parse_time(r["recorded_at"]) <= now
             and r.get("policy_version") == POLICY_VERSION
+            and (r.get("model"), r.get("effort")) in ROUTE_INDEX
             and (scope is None or r["scope_id"] == scope)
             and (axes is None or r["axes"] == dict(axes))
             and (task_family is None or r["task_family"] == task_family)]
