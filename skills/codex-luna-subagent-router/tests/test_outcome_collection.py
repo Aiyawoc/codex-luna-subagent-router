@@ -148,6 +148,7 @@ class ReceiptTests(TempCase):
             reasons=[],model=LUNA,effort="xhigh",terminal_observed=True)
         linked=dict(scope_id="global",agent_id="worker-agent",parent_id="parent-session",snapshot=interval)
         with patch.object(usage,"default_usage_path",return_value=self.root/"usage.jsonl"), \
+             patch.object(usage,"attach",return_value=linked), \
              patch.object(usage,"for_receipt",side_effect=[linked,linked]) as for_receipt, \
              patch.object(usage,"enabled",return_value=True), \
              patch.object(usage,"collect",return_value=dict(linked,snapshot=lifetime)) as collect:
