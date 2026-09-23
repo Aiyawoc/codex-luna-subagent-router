@@ -162,6 +162,8 @@ Codex 的 SubagentStart/SubagentStop `turn_id` 是子线程自己的 turn，不�
 
 仅当当前 scope 恰有一个 active turn 时返回摘要；多会话歧义时失败而不猜。正文必须标注“截至最终回复前”，因为 preview 之后的命令结果处理和最终正文自身仍会产生少量额外 token。Stop hook 继续记录更晚快照。不得为了得到“最终最终”数字触发第二个模型回合。
 
+v2.7.0-alpha.4 起，preview 是严格的只读观测路径：它可以读取 turn ledger 与显式 transcript 并在内存中计算当前快照，但不获取 turn-ledger 写锁、不把 preview 快照写回账本、不改变 active turn phase。这样即使 Host hook 可以写 `${CODEX_HOME}/state`、当前工作区 Agent 只能读取该目录，preview 仍可工作。Stop、collect、refresh 继续使用持久化写锁。usage read-cache 只是可丢弃优化，其写入失败不得使 preview 失败。
+
 
 ## v2.6.1：恢复与诊断
 
