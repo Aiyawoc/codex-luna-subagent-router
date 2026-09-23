@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           VERSION=$(cat skills/codex-luna-subagent-router/VERSION)
           [[ "$VERSION" == "2.7.0-rc.1" ]]
-          [[ "$GITHUB_REF_NAME" == "release/v2.7.0-rc.1" ]]
+          [[ "$GITHUB_REF_NAME" == "publish/v2.7.0-rc.1" ]]
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v5
         with:
