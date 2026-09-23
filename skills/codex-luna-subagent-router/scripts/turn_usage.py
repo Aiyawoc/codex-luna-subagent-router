@@ -25,7 +25,7 @@ import usage_diagnostics as diagnostics
 ROW_KEYS = {"schema_version", "session_id", "turn_id", "scope_id", "started_at", "updated_at",
             "phase", "locator", "cursor", "members", "main_snapshot", "child_snapshots", "excluded_children"}
 ROW_EXTRA = {"end_cursor", "reader_version", "boundary_reason"}
-MEMBER_EXTRA = {"end_cursor"}
+MEMBER_EXTRA = {"end_cursor", "child_turn_id"}
 MAX_MEMBERS = 16
 
 
@@ -84,6 +84,8 @@ def validate(row):
             raise store.StoreError("invalid turn member flags")
         _cursor(member["cursor"])
         _cursor(member.get("end_cursor"))
+        if member.get("child_turn_id") is not None:
+            usage._id(member["child_turn_id"])
         usage._valid_locator(member["locator"])
     if not isinstance(row["child_snapshots"], dict) or set(row["child_snapshots"]) - set(row["members"]):
         raise store.StoreError("unknown child snapshot")
@@ -209,6 +211,9 @@ def register_child(payload, upath, sid, root):
     """Register a child to the one active parent turn; child and parent turn IDs differ in Codex."""
     session = usage._id(payload.get("session_id"))
     agent = usage._id(payload.get("agent_id"))
+    child_turn = payload.get("turn_id")
+    if child_turn is not None:
+        child_turn = usage._id(child_turn)
     path = ledger_path(upath)
     with store.locked(path, timeout=0.4):
         latest = load(path)
@@ -226,8 +231,12 @@ def register_child(payload, upath, sid, root):
             child = children.get(usage.usage_id(agent, session))
             is_new = child is not None and store.parse_time(child["started_at"]) >= store.parse_time(row["started_at"])
             row["members"][agent] = dict(cursor=None, locator=child["locator"] if child else None, fresh=is_new, active=True)
+            if child_turn is not None:
+                row["members"][agent]["child_turn_id"] = child_turn
         else:
             row["members"][agent]["active"] = True
+            if child_turn is not None:
+                row["members"][agent]["child_turn_id"] = child_turn
         save(path, row, old)
 
 
@@ -245,6 +254,9 @@ def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
     """Persist one exact child stop boundary without changing sibling state."""
     session = usage._id(payload.get("session_id"))
     agent = usage._id(payload.get("agent_id"))
+    stop_turn = payload.get("turn_id")
+    if stop_turn is not None:
+        stop_turn = usage._id(stop_turn)
     if child is None:
         children, _ = usage.load_latest(upath)
         child = children.get(usage.usage_id(agent, session))
@@ -275,9 +287,13 @@ def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
         candidates = []
         for identity, candidate in latest.items():
             member = candidate["members"].get(agent)
+            member_turn = member.get("child_turn_id") if member is not None else None
+            exact_turn = member_turn is not None and stop_turn is not None and member_turn == stop_turn
+            current_unbound = candidate["phase"] == "started" and member_turn is None
             if (candidate["session_id"] == session and candidate["scope_id"] == sid
                     and member is not None and member["active"]
-                    and member.get("end_cursor") is None):
+                    and member.get("end_cursor") is None
+                    and (exact_turn or current_unbound)):
                 candidates.append((identity, candidate))
         if len(candidates) != 1:
             return None
@@ -285,6 +301,8 @@ def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
         identity, old = candidates[0]
         row = copy.deepcopy(old)
         member = row["members"][agent]
+        if member.get("child_turn_id") is None and stop_turn is not None:
+            member["child_turn_id"] = stop_turn
         if member["locator"] is not None and locator is not None and member["locator"] != locator:
             return None
         if member["locator"] is None and locator is not None:
@@ -591,9 +609,18 @@ def handle_hook(payload, upath, sid, root):
 
 
 def public_row(row):
+    child_boundaries = {
+        agent: {
+            "child_turn_id": member.get("child_turn_id"),
+            "baseline": "fresh" if member["fresh"] else ("exact_cursor" if member["cursor"] is not None else "missing"),
+            "end_boundary_known": member.get("end_cursor") is not None,
+            "active": member["active"],
+        }
+        for agent, member in row["members"].items()
+    }
     return {k: v for k, v in row.items() if k not in ("locator", "cursor", "end_cursor", "members")} | {
         "summary": report(row, include_context=True), "registered_children": len(row["members"]),
-        "diagnostics": diagnostics.describe(row)}
+        "child_boundaries": child_boundaries, "diagnostics": diagnostics.describe(row)}
 
 
 def statistics(upath, session=None, turn=None, *, scope=None, phase=None, limit=None):
