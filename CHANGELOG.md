@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.7.0-alpha.4 — Read-only turn preview（2026-09-23）
+
+- 修复真实 Host 已写入 turn ledger、但本地 Agent 对 `${CODEX_HOME}/state` 只有读取权限时，`turn_usage preview` 因尝试创建写锁而误报 `ledger_unavailable` 的问题。
+- `preview` 现在只在内存中刷新当前 active turn：不获取 turn-ledger 写锁、不持久化 preview 快照、不改变 phase；Host 的 Stop/collect/refresh 持久化路径保持原有锁与边界语义。
+- transcript 解析仍保持显式 locator、固定 scope、读取预算和 fail-safe unknown/partial；可选 usage read-cache 写入失败继续只是优化失败，不影响 preview 结果。
+- 新增回归测试：模拟 turn-ledger 写锁直接抛出 PermissionError，preview 仍必须读出本轮已知 Token，且调用前后 turn ledger 字节完全一致。
+- 本轮不改变 Execution Shape、Materialization Gate、GPT-6 Worker family、planning fallback、Stop-only recovery、Decision Shadow 或 receipt accounting 语义。
+
 ## 2.7.0-alpha.3 — Stop recovery + planning telemetry fallback（2026-09-23）
 
 - 修复真实 Host 未留下可用 `UserPromptSubmit` begin 时的 parent turn 统计：首个 Stop-only turn 只登记 `main_turn_baseline_missing` / unknown 并保存精确 end boundary，不再将 session lifetime 冒充本轮。
