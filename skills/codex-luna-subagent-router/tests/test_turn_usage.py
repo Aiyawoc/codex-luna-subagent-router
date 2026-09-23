@@ -252,7 +252,8 @@ class MainTurnTests(Sandbox):
 
     def test_missing_begin_not_lifetime_fallback(self):
         self.add([ctx(),event(),terminal()]);out=self.hook('Stop')
-        self.assertIn('未登记本轮开始',out['systemMessage']);self.assertNotIn('45k',out['systemMessage'])
+        self.assertIn('不可用',out['systemMessage']);self.assertNotIn('45k',out['systemMessage'])
+        self.assertIn('main_turn_baseline_missing',self.row()['main_snapshot']['reasons'])
 
     def test_new_session_no_header_at_submit_uses_exact_turn_later(self):
         self.main_path.unlink();self.hook()
