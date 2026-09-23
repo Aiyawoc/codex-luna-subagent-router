@@ -1,6 +1,7 @@
 from __future__ import annotations
 import contextlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -15,6 +16,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
 import route_advisor as a
 import outcome_store as s
+import token_usage as usage
 from plan_work import plan_work
 
 NOW = datetime(2026, 9, 14, tzinfo=timezone.utc)
@@ -131,6 +133,38 @@ class ReceiptTests(TempCase):
         r = s.begin(self.path, metadata(), 'quality-failure-01', NOW)
         row = s.finalize(self.path, r['receipt_id'], 'verified_fail', 'Named check failed.', observed_model=LUNA, observed_effort='xhigh', identity_source='spawn_response', completion_reason='quality_failure', now=NOW)
         self.assertEqual(row['outcome'], 'verified_fail')
+
+    def test_finalize_refresh_returns_frozen_receipt_interval_not_worker_lifetime(self):
+        receipt=s.begin(self.path,metadata(),"finalize-interval-worker",NOW)
+        interval=usage.empty("no_usage")
+        interval.update(status="complete",counts={
+            "total_tokens":1000,"input_tokens":800,"cached_input_tokens":400,
+            "output_tokens":200,"reasoning_output_tokens":100},
+            reasons=[],model=LUNA,effort="xhigh",terminal_observed=True)
+        lifetime=usage.empty("no_usage")
+        lifetime.update(status="complete",counts={
+            "total_tokens":9000,"input_tokens":7000,"cached_input_tokens":3000,
+            "output_tokens":2000,"reasoning_output_tokens":1000},
+            reasons=[],model=LUNA,effort="xhigh",terminal_observed=True)
+        linked=dict(scope_id="global",agent_id="worker-agent",parent_id="parent-session",snapshot=interval)
+        with patch.object(usage,"default_usage_path",return_value=self.root/"usage.jsonl"), \
+             patch.object(usage,"for_receipt",side_effect=[linked,linked]) as for_receipt, \
+             patch.object(usage,"enabled",return_value=True), \
+             patch.object(usage,"collect",return_value=dict(linked,snapshot=lifetime)) as collect:
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code=a.main([
+                    "--registry",str(self.path),"--global-scope","finalize",
+                    "--receipt-id",receipt["receipt_id"],"--outcome","partial",
+                    "--verification-summary","Interval response check.",
+                    "--usage-agent-id","worker-agent","--usage-parent-id","parent-session"
+                ])
+        self.assertEqual(code,0)
+        result=json.loads(output.getvalue())
+        self.assertEqual(result["token_usage"]["counts"]["total_tokens"],1000)
+        self.assertNotEqual(result["token_usage"]["counts"],lifetime["counts"])
+        self.assertEqual(for_receipt.call_count,2)
+        collect.assert_called_once()
 
     def test_receipt_scope_does_not_follow_finalize_cwd(self):
         r = s.begin(self.path, metadata(scope_id='project-original'), 'request-scope-01', NOW)
