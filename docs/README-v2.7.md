@@ -1,6 +1,6 @@
 # Agent Router v2.7.0 Alpha
 
-> **Development line:** `v2.7.0` (latest packaged pre-release may differ)  
+> **Pre-release:** `v2.7.0-alpha.3`  
 > **Stable release remains:** `v2.6.7`  
 > This Alpha is intended for controlled testing of the v2.7 execution-efficiency changes. It is not yet the recommended production replacement for v2.6.7.
 
@@ -9,6 +9,21 @@ Agent Router keeps the **Lead model selected by the user** and delegates only wo
 > **Choose the cheapest execution shape before choosing a Worker model.**
 
 The Alpha therefore delivers useful optimization even when the optional Jev/Laya-style Decision Layer is completely disabled.
+
+---
+
+## Alpha.3 fixes since alpha.2
+
+This build keeps the v2.7 execution-shape and GPT-6 routing policy unchanged and closes two Host-observability gaps found during alpha.2 acceptance:
+
+- when a usable `UserPromptSubmit` begin is missing, the first Stop-only parent turn is registered as `main_turn_baseline_missing` / unknown while preserving its exact end boundary; later turns may recover only from that frozen exact boundary, never from session-lifetime totals;
+- reused child accounting may reuse only the prior frozen child end cursor, preventing cross-turn lifetime expansion;
+- if the default `${CODEX_HOME}/state/.../planning.jsonl` is not writable for a project plan, planning telemetry may fall back to `<project>/.codex/codex-luna-subagent-router/state/planning.jsonl`;
+- `router report --project-root` merges default and project-fallback planning observations by `plan_id` without double counting, while lock failures remain explicit failures.
+
+No Execution Shape, Materialization Gate, GPT-6 Worker family, Decision Shadow authority, or receipt-accounting policy is changed in alpha.3.
+
+`v2.7.0-alpha.2` remains the previous Host-accounting comparison build; alpha.3 is the current targeted retest build.
 
 ---
 
@@ -225,16 +240,16 @@ Unknown Token data remains unknown and is never converted to zero.
 
 ## Alpha installation
 
-The published **v2.7.0-alpha.1** package is now a historical comparison build. It predates the post-alpha migration of automatic Luna/Sol Workers to `gpt-6-luna / gpt-6-sol` and must **not** be used to validate the current GPT-6 routing line.
+Download the complete package matching your OS and CPU from the **v2.7.0-alpha.3 pre-release**.
 
-For current GPT-6 Host acceptance, use the next packaged v2.7 pre-release built from the current development candidate. The alpha.1 package names below are retained only so existing alpha.1 testers can identify or roll back that historical build.
+`v2.7.0-alpha.1` remains a historical pre-GPT-6 comparison build and should not be used for current routing acceptance.
 
-| OS | CPU | Historical alpha.1 package |
+| OS | CPU | Package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.7.0-alpha.1-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.7.0-alpha.1-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.7.0-alpha.1-windows-x64.zip` |
-| Windows | ARM64 | `router-2.7.0-alpha.1-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.7.0-alpha.3-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.7.0-alpha.3-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.7.0-alpha.3-windows-x64.zip` |
+| Windows | ARM64 | `router-2.7.0-alpha.3-windows-arm64.zip` |
 
 Each archive has an adjacent `.sha256`; the release also contains `SHA256SUMS`.
 
@@ -353,4 +368,4 @@ The main questions for this Alpha are:
 
 Use **v2.6.7** when stability is the priority.
 
-Use **v2.7.0-alpha.1** only for historical comparison with the first Alpha. Use the next v2.7 pre-release for current GPT-6 Worker routing tests.
+Use **v2.7.0-alpha.3** for current GPT-6 Worker routing and targeted Host retests. Keep **v2.7.0-alpha.1** only as a historical comparison build.
