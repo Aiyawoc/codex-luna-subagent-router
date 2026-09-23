@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.7.0-alpha.3 — Stop recovery + planning telemetry fallback（2026-09-23）
+
+- 修复真实 Host 未留下可用 `UserPromptSubmit` begin 时的 parent turn 统计：首个 Stop-only turn 只登记 `main_turn_baseline_missing` / unknown 并保存精确 end boundary，不再将 session lifetime 冒充本轮。
+- 后续同一 transcript locator 的 Stop-only turn 可使用上一轮已冻结 end boundary 作为起点；复用 child 也仅复用上一轮精确 child end cursor，继续禁止跨轮累计污染。
+- 修复受限 Host 无法写 `${CODEX_HOME}/state/.../planning.jsonl` 时的 planning telemetry：项目计划可 fallback 到 `<project>/.codex/codex-luna-subagent-router/state/planning.jsonl`，生产计划继续 fail-open 不变。
+- `router report --project-root` 现在会合并 default + project fallback planning observations，并按 `plan_id` 去重；lock failure 不通过 fallback 掩盖。
+- 修复 report 调用链未把 project root 传入 planning collection 的问题。
+- 本轮不改变 Execution Shape、Materialization Gate、GPT-6 Worker family、Decision Shadow authority 或 receipt accounting semantics；目标是收口 alpha.2 Host 验收暴露的 parent turn registration 与 planning telemetry 权限/路径问题。
+- 发布工作流会在创建 immutable pre-release 前重新执行 Manifest 校验、全量单测、Router Arena 与四平台 portable build/smoke。
+
+## 2.7.0-alpha.2 — GPT-6 Worker migration + Host accounting fixes（2026-09-23）
+
+- 自动 Worker runtime IDs 更新为 `gpt-6-luna / gpt-6-sol / gpt-6-astra`；保留现有 Luna 五档、Sol high/xhigh、Astra high/xhigh/max 语义，不改变三层成本优先策略。
+- 历史 `gpt-5.6-luna / gpt-5.6-sol` outcome 继续可读与可展示，但不参与当前 GPT-6 calibration、sample threshold 或新 receipt 路由。
+- 修复同一 Materialized Worker 顺序复用时的 receipt interval 统计：第二个 receipt 只统计新增区间，不再把累计 lifetime 冒充本次任务成本。
+- 新增独立 receipt binding journal，并保留旧单 `receipt_id` usage 账本读取兼容；旧数据缺少冻结 baseline 时 fail-safe 为 `receipt_baseline_missing`，不猜 Token。
+- 修复 project report 对 child CWD 的依赖：优先使用 outcome receipt 的固定 project scope 归属 Worker，避免真实 Worker 在项目报告中被遗漏。
+- 新增跨 turn 缺失 baseline 回归保护：旧 sealed turn 不会吸收新 turn 的累计 child lifetime；未知仍保持 unknown，不补 0。
+- planning telemetry 写入失败新增稳定 reason code：`permission_denied / state_unavailable / lock_failed / io_error / invalid_observation / unknown`，继续 fail-open 且不记录本机路径。
+- README、README.en、v2.7 专项 README、Host Acceptance、RoutePlan/eval/profile/tests 已同步 GPT-6 Worker family；`v2.7.0-alpha.1` 明确保留为迁移前历史对照包。
+- 发布候选已通过 Linux/macOS/Windows CI、Router Arena、5000-case fuzz、完整 Manifest，以及 macOS/Windows x64/ARM64 Portable Runtime。
+
+
 ## 2.7.0 — GPT-6 Worker migration（开发中）
 
 - 自动 Worker 路由从 `gpt-5.6-luna / gpt-5.6-sol` 迁移到 `gpt-6-luna / gpt-6-sol`；Astra 保持 `gpt-6-astra`。
