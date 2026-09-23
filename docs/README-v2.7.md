@@ -1,14 +1,27 @@
-# Agent Router v2.7.0 Alpha
+# Agent Router v2.7.0 Release Candidate
 
-> **Pre-release:** `v2.7.0-alpha.4`  
+> **Pre-release:** `v2.7.0-rc.1`  
 > **Stable release remains:** `v2.6.7`  
-> This Alpha is intended for controlled testing of the v2.7 execution-efficiency changes. It is not yet the recommended production replacement for v2.6.7.
+> This Release Candidate is feature-frozen and intended only for the final two real-Host acceptance gates before v2.7.0 stable. v2.6.7 remains the recommended stable release until those gates pass.
 
 Agent Router keeps the **Lead model selected by the user** and delegates only work that has positive expected value. v2.7 adds a new principle:
 
 > **Choose the cheapest execution shape before choosing a Worker model.**
 
 The Alpha therefore delivers useful optimization even when the optional Jev/Laya-style Decision Layer is completely disabled.
+
+---
+
+## RC.1 closure scope
+
+The v2.7 Core is feature-frozen. RC.1 carries the alpha.4 runtime unchanged and narrows final real-Host acceptance to two remaining gates:
+
+1. **Sol Lead H3 fresh-wave:** runtime health begins unknown, the first real Worker Materializes, health becomes healthy, and remaining ready sibling(s) are released without a duplicate health probe.
+2. **Cross-turn reused Worker boundaries:** Turn B may reuse the same Worker only from Turn A's frozen exact child end cursor; Turn A remains frozen and Turn B reports only its new interval.
+
+Decision Shadow remains optional/experimental and off by default. No fixed Token/quota-savings percentage is claimed.
+
+See `docs/v2.7.0-rc1-acceptance.md`.
 
 ---
 
@@ -260,18 +273,18 @@ Unknown Token data remains unknown and is never converted to zero.
 
 ---
 
-## Alpha installation
+## Release Candidate installation
 
-Download the complete package matching your OS and CPU from the **v2.7.0-alpha.4 pre-release**.
+Download the complete package matching your OS and CPU from the **v2.7.0-rc.1 pre-release**.
 
 `v2.7.0-alpha.1` remains a historical pre-GPT-6 comparison build and should not be used for current routing acceptance.
 
 | OS | CPU | Package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.7.0-alpha.3-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.7.0-alpha.3-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.7.0-alpha.3-windows-x64.zip` |
-| Windows | ARM64 | `router-2.7.0-alpha.3-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.7.0-rc.1-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.7.0-rc.1-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.7.0-rc.1-windows-x64.zip` |
+| Windows | ARM64 | `router-2.7.0-rc.1-windows-arm64.zip` |
 
 Each archive has an adjacent `.sha256`; the release also contains `SHA256SUMS`.
 
@@ -297,7 +310,7 @@ For a project-local install, use the existing project install option instead of 
 
 ---
 
-## Alpha upgrade notes
+## Release Candidate upgrade notes
 
 Before upgrading from v2.6.7:
 
@@ -326,11 +339,11 @@ The v2.7 candidate line has passed:
 - Windows x64 portable package build/smoke;
 - source archive verification.
 
-The Alpha publication workflow reruns the package build and validation for the exact release commit before creating the GitHub pre-release.
+The RC publication workflow reruns the package build, full regressions, Router Arena, and validation for the exact release commit before creating the GitHub pre-release.
 
 ---
 
-## Still experimental / not yet a stable-release claim
+## Remaining RC acceptance / not yet a stable-release claim
 
 The following remains part of v2.7 acceptance work:
 
@@ -362,7 +375,7 @@ Do not delete Outcome/Token ledgers simply to downgrade. The release/installer f
 
 ---
 
-## Feedback requested for Alpha
+## Feedback requested for RC
 
 The most useful reports include:
 
@@ -376,7 +389,7 @@ The most useful reports include:
 - exact runtime failure category if a spawn fails;
 - generated `router report` statistics with private content removed.
 
-The main questions for this Alpha are:
+The final RC questions are:
 
 1. Does `local_parallel_tools` reduce unnecessary Workers without pulling real reasoning back into the Lead?
 2. Does the Materialization Gate match actual Codex Host behavior?
@@ -386,8 +399,8 @@ The main questions for this Alpha are:
 
 ---
 
-## Stable vs Alpha
+## Stable vs RC
 
 Use **v2.6.7** when stability is the priority.
 
-Use **v2.7.0-alpha.4** for current GPT-6 Worker routing and targeted Host retests. Keep **v2.7.0-alpha.1** only as a historical comparison build.
+Use **v2.7.0-rc.1** only for the final two targeted Host gates. Keep the Alpha releases as historical comparison builds.

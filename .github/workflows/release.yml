@@ -46,6 +46,7 @@ jobs:
         run: |
           python tools/verify_manifest.py
           python -m unittest discover -s skills/codex-luna-subagent-router/tests -v
+          python benchmarks/router_arena.py route-audit
   packages:
     needs: authorize
     uses: ./.github/workflows/portable-runtime.yml

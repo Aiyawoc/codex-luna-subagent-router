@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.7.0-rc.1 — Stable release candidate（2026-09-23）
+
+- 功能冻结：RC 不新增路由、Execution Shape、Materialization、Decision Shadow 或 accounting 功能，仅做 stable 发布收口与最后真实 Host 验收。
+- 继承 alpha.4 已通过的安装/升级、planning fallback、read-only preview、真实 Stop persistence、GPT-6 Worker family、receipt interval 与项目归属修复。
+- stable 前只保留两项真实 Host 门槛：Sol Lead 的 H3 fresh-wave Materialization/Runtime Health 闭环，以及跨 turn 复用同一 Worker 时 parent/child frozen boundary 的正常路径。
+- 删除 alpha.3/alpha.4 一次性发布 workflow；RC 使用独立一次性 pre-release workflow，正式 `release.yml` 继续只允许 main 上的纯 `X.Y.Z` 版本。
+- 正式发布 workflow 与 Alpha/RC 门禁对齐，加入 Router Arena；四平台 portable build/smoke 仍为发布前必过项。
+- Decision Shadow 继续保持 optional / experimental / off by default，不作为 Core stable 发布阻断项。
+
 ## 2.7.0-alpha.4 — Read-only turn preview（2026-09-23）
 
 - 修复真实 Host 已写入 turn ledger、但本地 Agent 对 `${CODEX_HOME}/state` 只有读取权限时，`turn_usage preview` 因尝试创建写锁而误报 `ledger_unavailable` 的问题。
