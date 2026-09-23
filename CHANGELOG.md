@@ -7,6 +7,7 @@
 - 真实 `SubagentStop.turn_id` 随后写回本轮 `child_turn_id` 与 end boundary；parent Stop 可据此生成本轮 child interval snapshot。
 - 历史 stopped/sealed turn 仍必须依赖已保存的 exact `child_turn_id` 才允许 late-stop recovery；RC.2 的跨 turn 污染保护不放宽。
 - 新增回归完整模拟：Turn A 正常 spawn/stop → Turn B `followup_task` 复用同一 Completed Worker、无 SubagentStart、parent Interacted、child SubagentStop → Turn B 只统计 exact cursor 后新增 interval，Turn A 保持冻结。
+- Windows portable 并发回归暴露目录锁竞态：同一 lock directory 已由其它进程持有时，Windows 可能返回 `PermissionError / WinError 5` 而非 `FileExistsError`；RC.3 仅在锁目录确实存在且非 symlink 时按既有 busy/retry 语义处理，真实权限拒绝仍向上抛出。
 - 不改变 Execution Shape、GPT-6 路由、Materialization Gate、Runtime Health、Decision Shadow、receipt interval 或 conservative unknown/null 原则。
 
 ## 2.7.0-rc.2 — Cross-turn accounting compatibility（2026-09-23）
