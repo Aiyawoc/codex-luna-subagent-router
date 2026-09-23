@@ -193,6 +193,16 @@ def locked(path, timeout=2):
             if lock.is_symlink() or time.monotonic() >= deadline:
                 raise StoreError("registry lock busy; inspect stale lock, do not blind-retry workers")
             time.sleep(0.02)
+        except PermissionError:
+            # On Windows, concurrent mkdir of an already-owned lock directory can
+            # surface as WinError 5 instead of FileExistsError. Treat it as the
+            # same busy lock only when the lock directory is actually present.
+            # A real permission denial with no existing lock still propagates.
+            if not lock.exists() or not lock.is_dir() or lock.is_symlink():
+                raise
+            if time.monotonic() >= deadline:
+                raise StoreError("registry lock busy; inspect stale lock, do not blind-retry workers")
+            time.sleep(0.02)
     try:
         yield
     finally:
