@@ -353,6 +353,7 @@ class MainTurnTests(Sandbox):
         self.add([ctx(TURN2,T3),activity(kind="interacted",stamp=T3)],self.main_path)
         self.add([context(T3),event(total,counter(),T3),end(T4)],self.path)
         followup_stop=self.hook_payload("SubagentStop");followup_stop["turn_id"]="child-turn-b"
+        followup_stop["transcript_path"]=str(self.main_path)
         usage.hook(followup_stop,self.upath)
 
         current=self.row(TURN2)
