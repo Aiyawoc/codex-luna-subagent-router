@@ -1,6 +1,6 @@
 # Agent Router v2.7.0 Alpha
 
-> **Pre-release:** `v2.7.0-alpha.3`  
+> **Pre-release:** `v2.7.0-alpha.4`  
 > **Stable release remains:** `v2.6.7`  
 > This Alpha is intended for controlled testing of the v2.7 execution-efficiency changes. It is not yet the recommended production replacement for v2.6.7.
 
@@ -9,6 +9,28 @@ Agent Router keeps the **Lead model selected by the user** and delegates only wo
 > **Choose the cheapest execution shape before choosing a Worker model.**
 
 The Alpha therefore delivers useful optimization even when the optional Jev/Laya-style Decision Layer is completely disabled.
+
+---
+
+## Alpha.4 fix since alpha.3
+
+Alpha.4 is intentionally narrow. It fixes the real-Host acceptance failure where `turn_usage stats` could read the saved turn ledger but `turn_usage preview` returned `ledger_unavailable` when the calling Agent had read-only access to `${CODEX_HOME}/state`.
+
+The cause was that preview refreshed the active turn and then reused the normal persistence path, which requires a turn-ledger write lock. In a workspace-sandboxed Agent, Host hooks may legitimately own write access to global Router state while the Agent process can only read it.
+
+Alpha.4 changes preview to an observational path:
+
+- it reads the registered active turn and explicit transcript locator;
+- it refreshes the current snapshot in memory only;
+- it does not acquire a turn-ledger write lock;
+- it does not persist the preview result or change turn phase;
+- Stop, collect and refresh keep their existing persistent/locked behavior.
+
+A regression test forces the turn-ledger lock to fail with `PermissionError`; preview must still return the known turn usage and the saved ledger bytes must remain unchanged.
+
+No routing, execution-shape, materialization, planning fallback, Stop-only recovery, Decision Shadow, or receipt-accounting policy changes are included in alpha.4.
+
+`v2.7.0-alpha.3` remains the comparison build for the planning fallback / Stop recovery fixes.
 
 ---
 
@@ -240,7 +262,7 @@ Unknown Token data remains unknown and is never converted to zero.
 
 ## Alpha installation
 
-Download the complete package matching your OS and CPU from the **v2.7.0-alpha.3 pre-release**.
+Download the complete package matching your OS and CPU from the **v2.7.0-alpha.4 pre-release**.
 
 `v2.7.0-alpha.1` remains a historical pre-GPT-6 comparison build and should not be used for current routing acceptance.
 
@@ -368,4 +390,4 @@ The main questions for this Alpha are:
 
 Use **v2.6.7** when stability is the priority.
 
-Use **v2.7.0-alpha.3** for current GPT-6 Worker routing and targeted Host retests. Keep **v2.7.0-alpha.1** only as a historical comparison build.
+Use **v2.7.0-alpha.4** for current GPT-6 Worker routing and targeted Host retests. Keep **v2.7.0-alpha.1** only as a historical comparison build.
