@@ -127,6 +127,10 @@ SubagentStart 注册真实 agent_id 与父 session_id、scope。SubagentStop 只
 
 主线程同第 6 项显式选择 `token_accounting=on` 与 `token_accounting_scope=main_and_subagents`。UserPromptSubmit 登记明确的 session_id/turn_id 和最后完整日志行的游标（只保存偏移与哈希）；Stop 仅读本轮身份匹配的 token_count，输出 systemMessage，不要求追加模型轮次、不修改已生成的回答正文。
 
+若真实 Host 未留下 UserPromptSubmit begin，但 Stop hook 仍到达，v2.7 的恢复路径只使用已持久化的精确 end boundary：首个无基线 turn 只登记 `main_turn_baseline_missing` 与当前 end boundary，不拿 session lifetime 冒充本轮；下一 turn 若与上一 turn 共享同一已验证 transcript locator，则可把上一 end boundary 作为本轮 cursor。reused child 同样只允许复用上一 turn 已冻结的 child end cursor。这个 fallback 是观测恢复，不代表 UserPromptSubmit hook 本身已正常触发。
+
+`reader_version` / diagnostics 中的 `2.6.1` 是 usage reader/cache 协议版本，用于判断已保存 snapshot 是否由当前兼容 reader 解析；它不是 Router 产品版本。产品版本继续只读取 `VERSION`。
+
 读不到游标时，只允许以已登记的精确 turn_id 和可验证累计边界读取；从未登记 UserPromptSubmit 的 Stop 不使用生命周期累计冒充本轮。读日志上限仍为 64 MiB/短时预算；大日志、不支持格式、重写/计数重置显示不可用或缺口，不无限扫描。
 
 子线程首次 SubagentStart 仅在明确的 parent session/turn 能关联时进入本轮；已经存在的子线程在 UserPromptSubmit 保存自己的游标，本轮只计其新增区间。父子分别读取各自线程局部 token_count，不混入 App Server 聚合/账号用量；不明确的线程不并入合计。新请求封存旧轮次，旧 Stop 不吸收新轮次的 steering。快照晚到时应在下一请求前 collect 复核；v2.6.1 起可显式 refresh 已封存快照，但须保留原区间，尤其不能无终点扩大旧 child 用量。

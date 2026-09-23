@@ -27,7 +27,7 @@ ffc9faef7717e4a9e123b01ef6f68231bf0f5f9038a19d6d770ea83a20de62b5  docs/v2.5.5-ho
 b6450eaf2f76603c652f9b01fa7793d59f9090bbb7815d0733bf51eb4a84a1a0  docs/v2.6.1-usage-recovery.md
 01d6f1ad80a70f2bd0b1fa2984e0ad1fd0b949a5518b66a6634b1d0144c11e11  docs/v2.6.2-report.md
 45e0df0d0bdc9496b00c10e9732d47e6c20959937e023c626bf569a2424fbefd  docs/v2.7.0-grounded-decision-layer-plan.md
-9c0cd64695cbf731dc428ea025bd6d01fe90f32896c11ff9cc0b1ebc6daf3c71  docs/v2.7.0-host-acceptance.md
+752f67f97a6803d3f9d679585ebc642385d71af53b9b0d0009c238f12626349c  docs/v2.7.0-host-acceptance.md
 c82573926db5c5c9f9521a4a04344b8278334a66b32b82cd258eaa8b8750a73a  LICENSE
 be2d7dfa35975f2c2f23d36c1631407ce164a3bfa7e38a9da7dfa61c79efcd14  NOTICE.md
 f92ccfe72e86d54785ab397e7e59f40dad5d663452a0c35e15faabb267620cea  README.en.md
@@ -66,7 +66,7 @@ bc9971eded561408240078e36b1ecbff716a22a16f1324f1ec9cf5112d2286d6  skills/codex-l
 da3879753c4f7306752ef7458280e912164813a910791171548012ed9854a671  skills/codex-luna-subagent-router/references/portable-runtime.md
 68e7f15aa40b74053ace7cc266811c3b1d9c9a34ab6fa91f8a4ddc6982b5f357  skills/codex-luna-subagent-router/references/routing-policy.md
 c6a84de67bc209c4db73be112457c6409879f2aa506eb8193adb497dee55760f  skills/codex-luna-subagent-router/references/task-packet.md
-e030d501521664f2b3a6d1e3872e4a35c1abfc4d957173532d2122905135c06e  skills/codex-luna-subagent-router/references/token-accounting.md
+10fd72c32f339e639c8df377ae5746f12663632d1b059e0685a4cfd058089c3d  skills/codex-luna-subagent-router/references/token-accounting.md
 64f7421d3c0b6717004cf0200a1eeedf283820b378cca158e24d5bb0023ac881  skills/codex-luna-subagent-router/references/validation-cases.md
 8bdb793c89f50be2b88f823243769e3688fe53eff15a1ec4905056af50d0ba63  skills/codex-luna-subagent-router/references/work-planning.md
 a8551a4918782784630d42cc284d38f139de3958b96ca0cc66984442fbc77059  skills/codex-luna-subagent-router/runtime/README.md
