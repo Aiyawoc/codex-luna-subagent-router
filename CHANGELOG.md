@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.7.0-alpha.2 — GPT-6 Worker migration + Host accounting fixes（2026-09-23）
+
+- 自动 Worker runtime IDs 更新为 `gpt-6-luna / gpt-6-sol / gpt-6-astra`；保留现有 Luna 五档、Sol high/xhigh、Astra high/xhigh/max 语义，不改变三层成本优先策略。
+- 历史 `gpt-5.6-luna / gpt-5.6-sol` outcome 继续可读与可展示，但不参与当前 GPT-6 calibration、sample threshold 或新 receipt 路由。
+- 修复同一 Materialized Worker 顺序复用时的 receipt interval 统计：第二个 receipt 只统计新增区间，不再把累计 lifetime 冒充本次任务成本。
+- 新增独立 receipt binding journal，并保留旧单 `receipt_id` usage 账本读取兼容；旧数据缺少冻结 baseline 时 fail-safe 为 `receipt_baseline_missing`，不猜 Token。
+- 修复 project report 对 child CWD 的依赖：优先使用 outcome receipt 的固定 project scope 归属 Worker，避免真实 Worker 在项目报告中被遗漏。
+- 新增跨 turn 缺失 baseline 回归保护：旧 sealed turn 不会吸收新 turn 的累计 child lifetime；未知仍保持 unknown，不补 0。
+- planning telemetry 写入失败新增稳定 reason code：`permission_denied / state_unavailable / lock_failed / io_error / invalid_observation / unknown`，继续 fail-open 且不记录本机路径。
+- README、README.en、v2.7 专项 README、Host Acceptance、RoutePlan/eval/profile/tests 已同步 GPT-6 Worker family；`v2.7.0-alpha.1` 明确保留为迁移前历史对照包。
+- 发布候选已通过 Linux/macOS/Windows CI、Router Arena、5000-case fuzz、完整 Manifest，以及 macOS/Windows x64/ARM64 Portable Runtime。
+
+
 ## 2.7.0 — GPT-6 Worker migration（开发中）
 
 - 自动 Worker 路由从 `gpt-5.6-luna / gpt-5.6-sol` 迁移到 `gpt-6-luna / gpt-6-sol`；Astra 保持 `gpt-6-astra`。
