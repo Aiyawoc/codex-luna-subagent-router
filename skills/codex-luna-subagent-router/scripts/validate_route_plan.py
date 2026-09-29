@@ -35,13 +35,14 @@ CAPABILITY_RANK = {name: index for index, name in enumerate(CAPABILITY_LEVELS)}
 ADAPTIVE_MODELS = (
     "gpt-6-luna",
     "gpt-5.6-terra",
-    "gpt-6-sol",
+    "gpt-6.1-sol",
     "gpt-6-astra",
 )
 MODEL_CAPABILITY = {
     "gpt-6-luna": "luna",
     "gpt-5.6-terra": "terra",
-    "gpt-6-sol": "sol",
+    "gpt-6.1-sol": "sol",
+    "gpt-6-sol": "sol",  # Historical v2.7 Lead identity only.
     "gpt-5.6": "sol",  # Lead/API alias only; not an automatic Worker route.
     "gpt-6-astra": "astra",
 }
@@ -53,11 +54,15 @@ PROFILE_BY_ROUTE = {
     ("gpt-6-luna", "max"): "luna_max",
     ("gpt-5.6-terra", "medium"): "terra_medium",
     ("gpt-5.6-terra", "high"): "terra_high",
-    ("gpt-6-sol", "high"): "sol_high",
-    ("gpt-6-sol", "xhigh"): "sol_xhigh",
+    ("gpt-6.1-sol", "high"): "sol_high",
+    ("gpt-6.1-sol", "xhigh"): "sol_xhigh",
     ("gpt-6-astra", "high"): "astra_high",
     ("gpt-6-astra", "xhigh"): "astra_xhigh",
     ("gpt-6-astra", "max"): "astra_max",
+}
+LEGACY_PROFILE_BY_ROUTE = {
+    ("gpt-6-sol", "high"): "sol_high",
+    ("gpt-6-sol", "xhigh"): "sol_xhigh",
 }
 CN_LEVEL = {
     "none": "无",
@@ -81,7 +86,8 @@ DIRECTION_LABEL = {
 MODEL_LABEL = {
     "gpt-6-luna": "gpt-6-luna",
     "gpt-5.6-terra": "gpt-5.6-terra",
-    "gpt-6-sol": "gpt-6-sol (Sol)",
+    "gpt-6.1-sol": "gpt-6.1-sol (Sol)",
+    "gpt-6-sol": "gpt-6-sol (legacy Sol)",
     "gpt-5.6": "gpt-5.6 (Sol alias)",
     "gpt-6-astra": "gpt-6-astra",
 }
@@ -329,7 +335,8 @@ def validate_plan(data: Any) -> list[str]:
                 errors.append(f"{path}.override_source: must be null without an override")
             if routing_mode == "luna_only" and model != "gpt-6-luna":
                 errors.append(f'{path}.model: luna_only mode requires "gpt-6-luna" unless user explicitly overrides')
-            if routing_mode == "adaptive" and model not in ADAPTIVE_MODELS:
+            legacy_v20_model = schema_version == "2.0" and model in {m for m, _ in LEGACY_PROFILE_BY_ROUTE}
+            if routing_mode == "adaptive" and model not in ADAPTIVE_MODELS and not legacy_v20_model:
                 errors.append(f"{path}.model: adaptive mode must use an approved built-in model")
 
         if not _is_nonempty_string(model):
@@ -370,6 +377,8 @@ def validate_plan(data: Any) -> list[str]:
         profile = worker.get("agent_profile")
         if binding == "installed_profile":
             expected = PROFILE_BY_ROUTE.get((model, effort))
+            if expected is None and schema_version == "2.0":
+                expected = LEGACY_PROFILE_BY_ROUTE.get((model, effort))
             if expected is None:
                 errors.append(
                     f"{path}.agent_profile: no installed cost-aware profile exists for model={model} effort={effort}; "

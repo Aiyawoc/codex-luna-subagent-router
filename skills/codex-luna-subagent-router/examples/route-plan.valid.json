@@ -38,7 +38,7 @@
       "complexity": "high",
       "minimum_capability": "sol",
       "capability_gap_reason": "跨模块竞态包含多个时序假设，需要非局部因果推理。",
-      "model": "gpt-6-sol",
+      "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
       "route_binding": "installed_profile",
       "capability_verified": true,

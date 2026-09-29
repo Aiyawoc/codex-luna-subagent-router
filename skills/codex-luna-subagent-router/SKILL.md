@@ -5,7 +5,7 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 # Agent Router
 
-可靠完成任务并最小化总成本。主 Agent 保持用户选择的模型和 reasoning。用户本轮要求优先；权限、精确绑定和不可逆边界仍生效。
+可靠完成并最小化总成本。主 Agent 保持用户选择的模型和 reasoning。用户要求优先；权限、精确绑定和不可逆边界仍生效。
 
 ## 入口
 
@@ -14,7 +14,7 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
 
 - `luna_only`：自动 Worker 只用 Luna；能力不足由 Lead 接管。
-- `adaptive`：`gpt-6-luna` → `gpt-6-sol` → `gpt-6-astra`；经济、中等、专家三层。Terra 不参与新自动路由。
+- `adaptive`：`gpt-6-luna` → `gpt-6.1-sol` → `gpt-6-astra`；Terra 不参与新自动路由，`gpt-6-sol` 仅历史兼容。
 - Sol 不得用旧 `gpt-5.6` alias 做自动 spawn；精确绑定不可证明时 `lead_only`，不静默替换。
 
 ## Adaptive Capability Gap Gate + Advisor
@@ -56,7 +56,7 @@ Astra/Sol Lead 不重复已适合廉价 Worker 的工作；关键路径、不可
 ## 执行与边界
 
 1. 推断目标与验收；仅实质歧义提问。必须有本轮或适用 AGENTS 长期委派授权。
-2. 路由后按 `work-planning.md` 先选 `local_serial / local_parallel_tools / subagent`；只有 subagent 进入 exact model+effort、写入范围和容量预检，并生成 RoutePlan 2.1。
+2. 按 `work-planning.md` 先选 `local_serial / local_parallel_tools / subagent`；Host 原语映射也在该文档定义。只有 subagent 进入 model+effort、写入范围和容量预检并生成 RoutePlan 2.1。
 3. spawn acknowledgement 不等于成功。只把 Host 可再次确认的 Materialized `PendingInit/Running` 计入并发；runtime health 未知时首只真实 Worker 兼作探针，成功后重规划放行同波。失败保留 thread limit / overload / auth/MCP/model 等原始分类。
 4. 确定要派遣后读 `task-packet.md` 与 `lifecycle-and-context.md`；conservative 的 `begin` 在 Materialized 后执行。按 Evidence reuse 复用有效证据；Worker 不创建下级、不做最终不可逆动作。
 5. Worker 以 `TASK_ACK <task_id>` 回传有效信息；Lead 去重综合 Worker 证据，不原样转贴 Worker 回复或日志。同波等待仍必要 Worker；失去价值时 early stop，验收/记录后允许 runtime 回收。

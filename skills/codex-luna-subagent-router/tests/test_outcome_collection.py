@@ -20,7 +20,7 @@ import token_usage as usage
 from plan_work import plan_work
 
 NOW = datetime(2026, 9, 14, tzinfo=timezone.utc)
-LUNA, SOL, ASTRA = 'gpt-6-luna', 'gpt-6-sol', 'gpt-6-astra'
+LUNA, SOL, ASTRA = 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra'
 
 
 def axes(**kw):

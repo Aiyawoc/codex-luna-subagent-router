@@ -43,7 +43,7 @@ class StaticAdvisorTests(unittest.TestCase):
                 scope="project-a",
             )
         self.assertEqual(result["decision"], "delegate")
-        self.assertEqual((result["model"], result["effort"]), ("gpt-6-sol", "high"))
+        self.assertEqual((result["model"], result["effort"]), ("gpt-6.1-sol", "high"))
         self.assertEqual(result["route_direction"], "up")
 
     def test_high_risk_unverifiable_architecture_routes_astra(self) -> None:
@@ -119,7 +119,7 @@ class StaticAdvisorTests(unittest.TestCase):
                 registry=Path(temp) / "outcomes.jsonl",
                 scope="project-a",
             )
-        self.assertEqual((result["model"], result["effort"]), ("gpt-6-sol", "high"))
+        self.assertEqual((result["model"], result["effort"]), ("gpt-6.1-sol", "high"))
         self.assertEqual(result["decision"], "lead_only")
         self.assertIsNone(result["delegation_trigger"])
         self.assertIn("delegation benefit", result["lead_only_reason"])
@@ -305,7 +305,7 @@ class HistoryCalibrationTests(unittest.TestCase):
         self.assertEqual(result["history_rule"], "verified-history-downshift")
 
     def test_three_passes_can_cross_tier_downshift_only_for_safe_verifiable_work(self) -> None:
-        base = advisor._route("gpt-6-sol", "high")
+        base = advisor._route("gpt-6.1-sol", "high")
         records = [
             {"model": "gpt-6-luna", "effort": "max", "outcome": "verified_pass", "identity_verified": True}
             for _ in range(3)
@@ -321,20 +321,20 @@ class HistoryCalibrationTests(unittest.TestCase):
             records,
         )
         self.assertEqual(safe["model"], "gpt-6-luna")
-        self.assertEqual(risky["model"], "gpt-6-sol")
+        self.assertEqual(risky["model"], "gpt-6.1-sol")
 
     def test_verified_failure_escalates_away_from_failed_combo(self) -> None:
-        base = advisor._route("gpt-6-sol", "high")
+        base = advisor._route("gpt-6.1-sol", "high")
         result = advisor.apply_history(
             base,
             axes(),
-            [{"model": "gpt-6-sol", "effort": "high", "outcome": "verified_fail", "identity_verified": True}],
+            [{"model": "gpt-6.1-sol", "effort": "high", "outcome": "verified_fail", "identity_verified": True}],
         )
-        self.assertEqual((result["model"], result["effort"]), ("gpt-6-sol", "xhigh"))
+        self.assertEqual((result["model"], result["effort"]), ("gpt-6.1-sol", "xhigh"))
         self.assertEqual(result["history_rule"], "verified-failure-escalation")
 
     def test_failure_beats_success_for_same_combo(self) -> None:
-        base = advisor._route("gpt-6-sol", "high")
+        base = advisor._route("gpt-6.1-sol", "high")
         records = [
             {"model": "gpt-6-luna", "effort": "max", "outcome": "verified_pass", "identity_verified": True},
             {"model": "gpt-6-luna", "effort": "max", "outcome": "verified_pass", "identity_verified": True},
@@ -342,7 +342,7 @@ class HistoryCalibrationTests(unittest.TestCase):
             {"model": "gpt-6-luna", "effort": "max", "outcome": "verified_fail", "identity_verified": True},
         ]
         result = advisor.apply_history(base, axes(verifiability="yes"), records)
-        self.assertEqual(result["model"], "gpt-6-sol")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertIn("gpt-6-luna / max", result["avoid_combos"])
 
 

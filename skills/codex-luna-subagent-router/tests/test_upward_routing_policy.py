@@ -31,12 +31,12 @@ class UpwardRoutingPolicyTests(unittest.TestCase):
 
         luna_race = cases["luna-max-cross-module-race-uproute"]
         self.assertEqual(luna_race["lead_model"], "gpt-6-luna")
-        self.assertEqual(luna_race["expected_model"], "gpt-6-sol")
+        self.assertEqual(luna_race["expected_model"], "gpt-6.1-sol")
         self.assertEqual(luna_race["expected_route_direction"], "up")
         self.assertEqual(luna_race["expected_minimum_capability"], "sol")
 
         sol_expert = cases["sol-max-expert-uproute-effort-floor"]
-        self.assertEqual(sol_expert["lead_model"], "gpt-6-sol")
+        self.assertEqual(sol_expert["lead_model"], "gpt-6.1-sol")
         self.assertEqual(sol_expert["expected_model"], "gpt-6-astra")
         self.assertEqual(sol_expert["minimum_upward_effort"], "medium")
 
@@ -51,7 +51,7 @@ class UpwardRoutingPolicyTests(unittest.TestCase):
         with (ROOT / "evals" / "cases.json").open("r", encoding="utf-8") as handle:
             cases = {case["id"]: case for case in json.load(handle)["cases"]}
         case = cases["capability-gap-no-sacrificial-attempt"]
-        self.assertEqual(case["expected_first_worker_model"], "gpt-6-sol")
+        self.assertEqual(case["expected_first_worker_model"], "gpt-6.1-sol")
         self.assertIn("luna_probe_first", case["forbid"])
 
 

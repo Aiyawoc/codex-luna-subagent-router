@@ -26,6 +26,8 @@ v2.7 起，“可并行”不再自动等于“应该创建 SubAgent”。planne
 
 `local_parallel_tools` 只优化工具级并行，不把深度分析、独立复核或高上下文扫描偷回 Lead。单个只读 scan 仍可因廉价 Worker 路由收益而委派；只有形成至少两个合格的本地并行候选时才启用该形态。
 
+v2.8 起通过 Host Backend capability 做执行原语映射：支持 `programmatic_tool_calling` 的 Host 优先将 `local_parallel_tools` 映射到该原语；否则继续使用 Lead 原生并行工具调用。`subagent` 优先映射到 Host 原生 multi-agent。该映射只改变执行载体，不改变 planner 的 Execution Shape 决策与安全边界。
+
 plan 输出新增 `execution_shape` / `execution_reason`，并列出 `local_parallel_task_ids`、`local_serial_task_ids`。只有 `execution_shape=subagent` 且 `decision=delegate` 的任务进入 Worker groups / planned_waves，不消耗不必要的 Worker slot。
 
 ## 可选 Grounded Decision Shadow

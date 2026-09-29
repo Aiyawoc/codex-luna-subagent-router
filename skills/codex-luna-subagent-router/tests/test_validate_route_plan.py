@@ -34,7 +34,7 @@ class RoutePlanValidationTests(unittest.TestCase):
         self.assertIn("adaptive", notice)
         self.assertIn("主 Agent：gpt-6-luna / 最高 (max)", notice)
         self.assertIn("gpt-6-luna", notice)
-        self.assertIn("gpt-6-sol (Sol)", notice)
+        self.assertIn("gpt-6.1-sol (Sol)", notice)
         self.assertNotIn("gpt-5.6-terra", notice)
         self.assertIn("最低能力：Sol (sol)", notice)
         self.assertIn("路由方向：向上 (up)", notice)
@@ -58,6 +58,7 @@ class RoutePlanValidationTests(unittest.TestCase):
         for worker in plan["workers"]:
             worker.pop("minimum_capability")
             worker.pop("capability_gap_reason", None)
+        plan["workers"][1]["model"] = "gpt-6-sol"
         self.assertEqual(validate_plan(plan), [])
 
     def test_schema_21_requires_minimum_capability(self) -> None:
@@ -84,7 +85,7 @@ class RoutePlanValidationTests(unittest.TestCase):
         self.assertEqual(plan["lead_reasoning_effort"], "max")
         worker = plan["workers"][1]
         self.assertEqual(worker["minimum_capability"], "sol")
-        self.assertEqual(worker["model"], "gpt-6-sol")
+        self.assertEqual(worker["model"], "gpt-6.1-sol")
         self.assertEqual(validate_plan(plan), [])
 
     def test_downward_route_is_visible(self) -> None:
@@ -103,7 +104,7 @@ class RoutePlanValidationTests(unittest.TestCase):
     def test_sol_route_uses_explicit_runtime_id(self) -> None:
         plan = self.plan()
         worker = plan["workers"][1]
-        self.assertEqual(worker["model"], "gpt-6-sol")
+        self.assertEqual(worker["model"], "gpt-6.1-sol")
         self.assertEqual(worker["agent_profile"], "sol_high")
         self.assertEqual(validate_plan(plan), [])
 
@@ -167,7 +168,7 @@ class RoutePlanValidationTests(unittest.TestCase):
     def test_unbundled_profile_combo_must_use_live_spawn(self) -> None:
         plan = self.plan()
         worker = plan["workers"][1]
-        worker["model"] = "gpt-6-sol"
+        worker["model"] = "gpt-6.1-sol"
         worker["reasoning_effort"] = "max"
         self.assertInvalidContains(plan, "no installed cost-aware profile")
         worker["route_binding"] = "live_spawn"
