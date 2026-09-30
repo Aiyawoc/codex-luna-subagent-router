@@ -66,6 +66,28 @@ def client(opener, *, base_url="https://api.openai.com/v1"):
     )
 
 
+def trace_page(spans, *, has_more=False, last_id=None):
+    return {
+        "object": "list",
+        "data": [{
+            "id": "trace_private",
+            "otlp": {"resourceSpans": [{"scopeSpans": [{"spans": spans}]}]},
+        }],
+        "has_more": has_more,
+        "last_id": last_id,
+    }
+
+
+def trace_span(name, start, end):
+    return {
+        "name": name,
+        "startTimeUnixNano": str(start),
+        "endTimeUnixNano": str(end),
+        "status": {"code": "STATUS_CODE_OK"},
+        "attributes": [{"key": "private.input", "value": {"stringValue": "discard"}}],
+    }
+
+
 class HostTransportTests(unittest.TestCase):
     def test_network_requires_explicit_opt_in(self):
         with self.assertRaisesRegex(host_transport.HostTransportError, "--allow-network"):
@@ -162,6 +184,31 @@ class HostTransportTests(unittest.TestCase):
         self.assertEqual(result["pages_read"], 2)
         self.assertEqual(result["items"][0]["recipient_agent_ids"], ["subagent_1"])
         self.assertIn("after=cursor_1", opener.requests[1][0].full_url)
+
+    def test_trace_summary_uses_read_only_endpoint_and_strips_attributes(self):
+        opener = FakeOpener(trace_page([trace_span("tool.call", 0, 2_000_000)]))
+        result = client(opener).trace_summary("session_1")
+        request, _ = opener.requests[0]
+        self.assertEqual(request.get_method(), "GET")
+        self.assertIn("/agents/sessions/session_1/traces?", request.full_url)
+        self.assertIn("limit=20", request.full_url)
+        self.assertIn("order=asc", request.full_url)
+        self.assertEqual(result["span_count"], 1)
+        self.assertEqual(result["span_categories"]["tool"], 1)
+        self.assertFalse(result["truncated"])
+        self.assertNotIn("private.input", repr(result))
+
+    def test_trace_summary_paginates_with_after_cursor(self):
+        opener = FakeOpener(
+            trace_page([trace_span("agent.run", 0, 1_000_000)], has_more=True, last_id="trace_1"),
+            trace_page([trace_span("response.generation", 1_000_000, 3_000_000)]),
+        )
+        result = client(opener).trace_summary("session_1", max_pages=2)
+        self.assertEqual(result["pages_read"], 2)
+        self.assertEqual(result["trace_count"], 2)
+        self.assertEqual(result["span_count"], 2)
+        self.assertIn("after=trace_1", opener.requests[1][0].full_url)
+        self.assertFalse(result["truncated"])
 
     def test_collect_returns_sanitized_shadow_evidence(self):
         opener = FakeOpener(

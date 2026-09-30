@@ -42,6 +42,20 @@ For one-shot shadow acceptance, pass a Router canonical usage snapshot. The resu
 
 The collector is intentionally not a general Agents API client. It does not create, steer, cancel, resume, close, or delete sessions/subagents; it does not stream events; and it does not automatically promote native usage into production accounting.
 
+### Native trace summary
+
+When trace export is available for an existing session, the same read-only transport can summarize OTLP traces:
+
+```bash
+./bin/router host_transport trace-summary \
+  --allow-network \
+  --session-id sess_...
+```
+
+The trace adapter intentionally keeps only aggregate observability facts: trace/span counts, coarse span categories, status-code counts, summed/max span duration, and within-page peak overlap. It discards OTLP attributes, trace/span IDs, prompts, responses, tool arguments, error messages, and other span content. Trace data is not used as a Token source; Router accounting continues to use turn usage / the existing Desktop accounting path.
+
+Trace export may lag turn completion, so missing trace data is not interpreted as zero latency, no tool work, or no concurrency. Trace-derived values remain shadow observability only.
+
 ## Authority boundary
 
 `agents_api` is experimental in this baseline. `host_adapter.py` is transport-free and does not make network calls, create sessions, spawn Agents, or override planner decisions. It only exposes capabilities, maps an already-selected Execution Shape to a Host primitive, and normalizes already-observed lifecycle/usage values.
@@ -61,6 +75,7 @@ Sol keeps `high / xhigh` effort profiles. The profile names remain `sol_high` an
 - run read-only shadow acceptance against real existing Agents API sessions using explicit session/subagent IDs;
 - compare native Agents API usage against Router canonical accounting on the same controlled turns, including late-arriving usage;
 - verify real interrupted/cancelled lifecycle evidence without cross-turn contamination, including interrupt-request-then-complete cases;
+- compare trace timing/overlap with observed execution shape without deriving Token cost from trace spans;
 - decide whether the Agents API backend can promote native turn/usage evidence from shadow to canonical source only after repeated agreement;
 - keep Plugin packaging and Decision Layer authority outside this baseline until the Host adapter is proven.
 

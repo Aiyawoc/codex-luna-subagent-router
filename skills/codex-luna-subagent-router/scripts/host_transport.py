@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 import host_adapter
 import host_shadow
 import host_shadow_store
+import host_trace
 import outcome_store as store
 
 
@@ -174,6 +175,31 @@ class AgentsReadOnlyTransport:
             after = last_id
         return {"items": output, "pages_read": max_pages, "truncated": True}
 
+    def trace_summary(self, session_id, *, max_pages=MAX_PAGES):
+        if type(max_pages) is not int or not 1 <= max_pages <= MAX_PAGES:
+            raise HostTransportError(f"max_pages must be 1..{MAX_PAGES}")
+        session = _segment(session_id, "session_id")
+        path = f"/agents/sessions/{session}/traces"
+        after = None
+        summaries = []
+        for page_index in range(max_pages):
+            query = {"limit": 20, "order": "asc"}
+            if after is not None:
+                query["after"] = after
+            summary = host_trace.summarize_trace_page(self._request_json(path, query))
+            summaries.append(summary)
+            if not summary["has_more"]:
+                merged = host_trace.merge_summaries(summaries)
+                merged["truncated"] = False
+                return merged
+            last_id = summary["last_id"]
+            if not last_id or last_id == after:
+                raise HostTransportError("invalid Agents API trace pagination cursor")
+            after = last_id
+        merged = host_trace.merge_summaries(summaries)
+        merged["truncated"] = True
+        return merged
+
 
 def collect_shadow_evidence(transport, *, session_id, subagent_id, subagent_turn_id=None, root_turn_id=None,
                             max_pages=MAX_PAGES):
@@ -270,6 +296,10 @@ def _parser():
     collect.add_argument("--subagent-turn-id")
     collect.add_argument("--root-turn-id")
     collect.add_argument("--max-pages", type=int, default=MAX_PAGES)
+    traces = commands.add_parser("trace-summary")
+    _common(traces)
+    traces.add_argument("--session-id", required=True)
+    traces.add_argument("--max-pages", type=int, default=MAX_PAGES)
     shadow = commands.add_parser("shadow")
     _common(shadow)
     shadow.add_argument("--session-id", required=True)
@@ -303,6 +333,8 @@ def main(argv=None):
             subagent_turn_id=args.subagent_turn_id, root_turn_id=args.root_turn_id,
             max_pages=args.max_pages,
         )
+    elif args.command == "trace-summary":
+        result = transport.trace_summary(args.session_id, max_pages=args.max_pages)
     else:
         result = run_shadow_acceptance(
             transport, json.loads(args.router_snapshot_json), session_id=args.session_id,
@@ -326,7 +358,7 @@ if __name__ == "__main__":
     except json.JSONDecodeError:
         print("ERROR: invalid JSON argument", file=sys.stderr)
         code = 2
-    except (HostTransportError, host_adapter.HostAdapterError, host_shadow.ShadowError) as exc:
+    except (HostTransportError, host_adapter.HostAdapterError, host_shadow.ShadowError, host_trace.HostTraceError) as exc:
         print("ERROR: " + str(exc), file=sys.stderr)
         code = 2
     raise SystemExit(code)

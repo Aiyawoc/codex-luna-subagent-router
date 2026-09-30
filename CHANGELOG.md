@@ -8,6 +8,7 @@
 - 增加 Agents API public Turn/event/coordination-item contract adapter 与 `host_shadow`：native usage 只做 shadow compare；`interrupt_subagent_call` 仅作为请求证据，只有 turn `cancelled` 才确认 interrupted，completed/failed 等终态不会被历史 interrupt request 覆盖。
 - 增加显式 opt-in 的 `host_transport` 只读采集器：每次调用必须 `--allow-network`，仅执行官方 Agents API GET，要求 `OpenAI-Beta: agents=v1`，远端仅允许 `api.openai.com`，API key 只从环境变量读取；session item 的消息/推理/命令正文在输出前过滤。`collect` 与 `shadow` 可用于真实 Host acceptance，但不修改 production ledger。
 - 增加脱敏 `host-shadow.jsonl` acceptance ledger：`host_transport shadow --record` 只保存哈希 evidence key、一致/分歧/未知、可比较字段和 interrupt 终态，不保存 raw Host ID、token 数值、prompt/回复/工具正文；`router report` 读取每个 evidence 的最新观测展示 Native Host Shadow 统计，但不用于自动 calibration 或路由 authority。
+- 增加 `host_transport trace-summary` 与脱敏 OTLP trace adapter：只汇总 trace/span 数、粗粒度 span 类别、status、duration 和重叠度，主动丢弃 attributes、trace/span ID、prompt/response/tool args/error message；trace 仅用于延迟/并行度 shadow observability，不作为 Token/accounting 来源。
 - 新自动 Sol Worker 从 `gpt-6-sol` 迁移到 `gpt-6.1-sol`；旧 `gpt-6-sol` 仅保留历史 outcome/usage/Lead identity 兼容，不参与新的自动 route/calibration。
 
 ## 2.7.0 — Stable（2026-09-23）
