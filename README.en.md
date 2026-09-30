@@ -6,9 +6,9 @@
 
 **Agent Router** is a cost-first SubAgent routing Skill for Codex. It can choose **Luna / Sol / Astra + reasoning effort** per task, plan a whole workload, run independent Workers concurrently, calibrate routing from verified outcomes, and optionally track main/child token usage.
 
-Current stable release: [**v2.7.0**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.7.0) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+Current stable release: [**v2.8.0**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.0) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.7.0 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
+> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.8.0 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 
 [Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Using with @Visualize](#using-with-visualize) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
 
@@ -18,7 +18,7 @@ Current stable release: [**v2.7.0**](https://github.com/Aiyawoc/codex-luna-subag
 |---|---|
 | **Cost-first routing** | Keep the current Lead unchanged and choose the cheapest sufficient Worker model and reasoning effort for delegable work. |
 | **Whole-workload planning** | Evaluate multiple delegable tasks together; run independent work concurrently and serialize dependencies or write conflicts. |
-| **Three model tiers** | `adaptive` mode can move across Luna → Sol → Astra when more capability is needed; the v2.8 development line uses `gpt-6-luna → gpt-6.1-sol → gpt-6-astra` for new automatic Workers. |
+| **Three model tiers** | `adaptive` mode can move across Luna → Sol → Astra when more capability is needed; v2.8 uses `gpt-6-luna → gpt-6.1-sol → gpt-6-astra` for new automatic Workers. |
 | **Worker reuse** | Reuse a completed Worker when the workstream matches, context is still valuable, and the route remains sufficient. |
 | **Evidence reuse** | Pass still-valid confirmed facts, evidence locations, and completed exploration to Workers so fresh Workers do not repeat sufficient discovery. |
 | **Verified-outcome calibration** | Optionally use local verified results to adjust later routing conservatively. |
@@ -48,11 +48,11 @@ The Router does not switch the user's Lead model. It decides whether to delegate
 You can paste this into Codex:
 
 ```text
-Install or upgrade Agent Router (Skill ID: `$codex-luna-subagent-router`) to stable v2.7.0:
-https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.7.0
+Install or upgrade Agent Router (Skill ID: `$codex-luna-subagent-router`) to stable v2.8.0:
+https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.0
 
 Detect the operating system and CPU architecture first, then download the matching
-router-2.7.0-<platform> complete package and checksum files.
+router-2.8.0-<platform> complete package and checksum files.
 Do not substitute GitHub's automatic Source code.zip/.tar.gz archive.
 
 Verify SHA256, run the bundled doctor --verify, then perform the full install/upgrade.
@@ -66,14 +66,14 @@ do not grant trust automatically.
 
 #### 2.1 Download the correct platform package
 
-From the [v2.7.0 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.7.0), download:
+From the [v2.8.0 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.0), download:
 
 | OS | CPU | Complete package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.7.0-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.7.0-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.7.0-windows-x64.zip` |
-| Windows | ARM64 | `router-2.7.0-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.8.0-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.8.0-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.8.0-windows-x64.zip` |
+| Windows | ARM64 | `router-2.8.0-windows-arm64.zip` |
 
 Each complete package has an adjacent `.sha256`, and the Release also contains `SHA256SUMS`.
 

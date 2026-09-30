@@ -1,10 +1,10 @@
-# Agent Router v2.8 Development Baseline
+# Agent Router v2.8 Stable Architecture
 
 v2.8 keeps the v2.7 planner semantics and moves platform-specific lifecycle and observability behind a Host Backend boundary.
 
 ## Scope
 
-The first v2.8 baseline intentionally contains only high-leverage changes:
+v2.8 intentionally contains only high-leverage changes:
 
 1. **Host Backend abstraction** — preserve the existing Codex Desktop rollout/hook path and add an experimental `agents_api` capability descriptor.
 2. **Execution Shape mapping** — `local_serial` stays in the Lead; `local_parallel_tools` uses programmatic tool calling when the Host exposes it, otherwise existing native parallel tools; `subagent` uses native multi-agent.
@@ -64,7 +64,7 @@ Native evidence is never promoted automatically. The local command below reads o
 ./bin/router host_transport readiness --global-scope
 ```
 
-The output has separate `usage` and `lifecycle` decisions: `eligible_for_review` or `not_ready`. The default engineering review thresholds are 10 clean consistent usage evidence keys and 3 resolved terminal lifecycle evidence keys. Any latest usage divergence/inconclusive result, truncated evidence, invalid ledger row, or unresolved interrupt request keeps the relevant path `not_ready`. These are conservative release-review thresholds, not statistical proof and not an authority switch.
+The output has separate `usage` and `lifecycle` decisions: `eligible_for_review` or `not_ready`. The default engineering review thresholds are 10 clean consistent usage evidence keys and 3 resolved terminal lifecycle evidence keys. Any latest usage divergence/inconclusive result, truncated evidence, invalid ledger row, or unresolved interrupt request keeps the relevant path `not_ready`. These are conservative **Native authority promotion review** thresholds, not statistical proof, not a Desktop Stable gate, and not an authority switch.
 
 `router report` shows the same readiness status under **Native Host Shadow**. Even `eligible_for_review` only means a human can consider a later explicit design change; `automatic_promotion` remains false.
 
@@ -104,7 +104,7 @@ The output uses `eligible_for_review` and `automatic_override=false`. It is obse
 
 ## Authority boundary
 
-`agents_api` is experimental in this baseline. `host_adapter.py` is transport-free and does not make network calls, create sessions, spawn Agents, or override planner decisions. It only exposes capabilities, maps an already-selected Execution Shape to a Host primitive, and normalizes already-observed lifecycle/usage values.
+`agents_api` remains experimental and shadow-only in v2.8 Stable. `host_adapter.py` is transport-free and does not make network calls, create sessions, spawn Agents, or override planner decisions. It only exposes capabilities, maps an already-selected Execution Shape to a Host primitive, and normalizes already-observed lifecycle/usage values.
 
 Decision Shadow remains optional, fail-open and non-authoritative.
 
@@ -116,18 +116,18 @@ gpt-6-luna → gpt-6.1-sol → gpt-6-astra
 
 Sol keeps `high / xhigh` effort profiles. The profile names remain `sol_high` and `sol_xhigh`; only the runtime model ID changes.
 
-## Next gates
+## Post-Stable authority gates
 
-- run read-only shadow acceptance against real existing Agents API sessions using explicit session/subagent IDs;
+- accumulate read-only shadow acceptance against real existing Agents API sessions using explicit session/subagent IDs;
 - compare native Agents API usage against Router canonical accounting on the same controlled turns, including late-arriving usage;
 - verify real interrupted/cancelled lifecycle evidence without cross-turn contamination, including interrupt-request-then-complete cases;
 - compare trace timing/overlap with observed execution shape without deriving Token cost from trace spans;
 - decide whether the Agents API backend can promote native turn/usage evidence from shadow to canonical source only after repeated agreement;
 - collect enough receipt-bound economics to compare cost/quality distributions before considering any cost-based production override;
 - review cost candidates on real repeated task families before considering a separate, explicitly gated production experiment;
-- keep Plugin packaging and Decision Layer authority outside this baseline until the Host adapter is proven.
+- keep Plugin packaging and Decision Layer authority outside the Stable authority boundary until the Host adapter is proven.
 
-Official contract references used by this development baseline:
+Official contract references used by v2.8:
 
 - `https://developers.openai.com/api/docs/guides/agents-api/multi-agent`
 - `https://developers.openai.com/api/docs/guides/agents-api/observability`

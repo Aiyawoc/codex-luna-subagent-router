@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.8.0 — Stable（2026-09-30）
+
+- 正式发布 v2.8 Native Harness：保留 v2.7 planner/Execution Shape 语义，将 Host capability、Agents API lifecycle/usage 适配、read-only shadow transport、trace summary 与 authority-readiness 隔离在非权威 Host Backend 边界后。
+- 新自动 Worker family 为 `gpt-6-luna → gpt-6.1-sol → gpt-6-astra`；历史 `gpt-6-sol` 仅保留读取兼容，不参与新的自动 route/calibration。
+- Desktop 实机验收通过 fresh Worker completion、同一 Worker 自然 reuse、`baseline=exact_cursor`、complete incremental child snapshot、lifetime 差值一致及 Post-Stop historical freeze；真实 Host interrupt 通过 `running → interrupt request → interrupted terminal` 证据链，缺失 Worker usage 保持 unavailable/null。
+- 原 interrupt Desktop session 后续已不可继续，因此严格 same-session next-turn isolation 保留为 `NOT VERIFIED`；其后 5 个 parent turn / 2 个其它 session 均未重新出现该 interrupted Worker，未发现跨 session 污染。该限制不扩大 Router authority，也不改写未知 usage。
+- RC.2 修复 Route Economics `unknown != 0`：无可估算 attempt 时 `estimated_usd=null`、report 显示 `-`；有真实 receipt-bound 样本时仍返回数值估算。Cost Review 保持 shadow-only、`automatic_override=false`。
+- Agents API backend 在 Stable 中仍为 explicit opt-in / read-only shadow，`authoritative=false`、`automatic_promotion=false`。默认 10 个 clean usage evidence + 3 个 resolved lifecycle evidence 继续作为未来 Native authority promotion 的人工评审门槛，而不是 v2.8 Desktop Stable 的 authority 声明。
+- Stable 前 clean install `doctor --verify` PASS，指定可写目录的 report export PASS；Serena 曾向 immutable 安装目录写入 `.serena/**` 并被 doctor 正确判为 integrity mismatch，该外部工具污染已通过干净重装恢复，不加入完整性白名单。
+- Stable release workflow 对最终 `main` commit 重新执行 Manifest、完整测试、Router Arena，以及 Windows x64/ARM64、macOS x64/ARM64 complete portable build/smoke 与 SHA256 校验后才发布。
+
 ## 2.8.0-rc.2 — Unknown Route Economics cost semantics（2026-09-30）
 
 - 修复 RC.1 本地验收发现的 Route Economics 缺失值语义：当 `estimated_attempts == 0` 时，总计及单 route 的 `estimated_usd` 现在保持 `null`，不再用 `0.0` 表示“没有可估算样本”。
