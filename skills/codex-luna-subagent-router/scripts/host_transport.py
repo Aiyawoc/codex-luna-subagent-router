@@ -10,12 +10,15 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 import host_adapter
 import host_shadow
+import host_shadow_store
+import outcome_store as store
 
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
@@ -215,6 +218,16 @@ def run_shadow_acceptance(transport, router_snapshot, *, session_id, subagent_id
     }
 
 
+def record_shadow_result(result, *, session_id, subagent_id, subagent_turn_id=None,
+                         project_root=None, global_scope=False, path=None):
+    scope_id, _ = store.resolve_scope(project_root, global_scope)
+    turn_id = result.get("usage_comparison", {}).get("turn_id") or subagent_turn_id or "unknown"
+    row = host_shadow_store.from_result(
+        result, scope_id, session_id=session_id, turn_id=turn_id, subagent_id=subagent_id,
+    )
+    return host_shadow_store.append(Path(path) if path is not None else host_shadow_store.default_path(), row)
+
+
 def _transport(args):
     return AgentsReadOnlyTransport(
         allow_network=args.allow_network,
@@ -265,6 +278,10 @@ def _parser():
     shadow.add_argument("--root-turn-id")
     shadow.add_argument("--max-pages", type=int, default=MAX_PAGES)
     shadow.add_argument("--router-snapshot-json", required=True)
+    shadow.add_argument("--record", action="store_true")
+    scope = shadow.add_mutually_exclusive_group()
+    scope.add_argument("--project-root")
+    scope.add_argument("--global-scope", action="store_true")
     return parser
 
 
@@ -292,6 +309,13 @@ def main(argv=None):
             subagent_id=args.subagent_id, subagent_turn_id=args.subagent_turn_id,
             root_turn_id=args.root_turn_id, max_pages=args.max_pages,
         )
+        if args.record:
+            record_shadow_result(
+                result, session_id=args.session_id, subagent_id=args.subagent_id,
+                subagent_turn_id=args.subagent_turn_id, project_root=args.project_root,
+                global_scope=args.global_scope,
+            )
+            result["recorded"] = True
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

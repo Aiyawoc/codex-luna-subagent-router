@@ -34,8 +34,11 @@ For one-shot shadow acceptance, pass a Router canonical usage snapshot. The resu
   --session-id sess_... \
   --subagent-id subagent_... \
   --root-turn-id turn_... \
+  --record \
   --router-snapshot-json '{"source":"codex_rollout_v1","status":"complete","counts":{"total_tokens":150,"input_tokens":120,"cached_input_tokens":80,"output_tokens":30,"reasoning_output_tokens":12}}'
 ```
+
+`--record` writes only a sanitized observation to `host-shadow.jsonl`: raw session/turn/subagent IDs are replaced by a deterministic evidence hash, token values/deltas are omitted, and prompt/response/tool content is never stored. `router report` summarizes the latest observation per evidence key under **Native Host Shadow**. These observations remain non-authoritative and are never calibration samples.
 
 The collector is intentionally not a general Agents API client. It does not create, steer, cancel, resume, close, or delete sessions/subagents; it does not stream events; and it does not automatically promote native usage into production accounting.
 

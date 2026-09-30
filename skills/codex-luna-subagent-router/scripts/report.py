@@ -18,6 +18,7 @@ import token_usage
 import turn_usage
 import decision_store
 import planning_store
+import host_shadow_store
 
 REPORT_VERSION = "1.0"
 ROUTER_VERSION = store.ROUTER_VERSION
@@ -115,12 +116,14 @@ def collect(scope_id, project_root=None):
         "invalid_decision_rows": invalid_decisions,
         "latest_recorded_at": max((row.get("recorded_at") for row in decision_rows), default=None),
     }
+    host_shadow = host_shadow_store.statistics(scope=scope_id)
     return {
         "outcomes": outcomes,
         "subagents": subagents,
         "turns": {"summary": _turn_summary(turns), "records": turns},
         "planning": planning,
         "decisions": decisions,
+        "host_shadow": host_shadow,
     }
 
 
@@ -171,6 +174,10 @@ def csv_rows(data):
         for agent_id, snapshot in sorted(turn.get("child_snapshots", {}).items()):
             rows.append(_row("turn_child", agent_id=agent_id, model=snapshot.get("model"), effort=snapshot.get("effort"),
                              status=snapshot.get("status"), reasons=snapshot.get("reasons", []), **common, **_counts(snapshot)))
+    for status, count in sorted(data.get("host_shadow", {}).get("latest_usage_statuses", {}).items()):
+        rows.append(_row("host_shadow_usage", status=status, count=count))
+    for status, count in sorted(data.get("host_shadow", {}).get("latest_interruption_statuses", {}).items()):
+        rows.append(_row("host_shadow_interrupt", status=status, count=count))
     return rows
 
 
@@ -190,6 +197,7 @@ def markdown(payload):
     data = payload["data"]
     outcomes, subagents, turns = data["outcomes"], data["subagents"], data["turns"]["summary"]
     planning, decisions = data.get("planning", {}), data.get("decisions", {})
+    host_shadow = data.get("host_shadow", {})
     known = subagents.get("known_usage", {}).get("counts", {})
     subcov = subagents.get("completeness", {})
     maincov = turns.get("main_completeness", {})
@@ -276,6 +284,18 @@ def markdown(payload):
         f"| 有 confidence | {decisions.get('with_confidence', 0)} |",
         f"| 中位延迟 | {decisions.get('median_latency_ms') if decisions.get('median_latency_ms') is not None else '-'} ms |",
         "",
+        "## Native Host Shadow",
+        "",
+        "| 指标 | 当前值 |",
+        "|---|---:|",
+        f"| Shadow observations | {host_shadow.get('observations', 0)} |",
+        f"| Unique evidence | {host_shadow.get('unique_evidence', 0)} |",
+        f"| Usage consistent | {host_shadow.get('latest_usage_statuses', {}).get('consistent', 0)} |",
+        f"| Usage divergent | {host_shadow.get('latest_usage_statuses', {}).get('divergent', 0)} |",
+        f"| Usage inconclusive | {host_shadow.get('latest_usage_statuses', {}).get('inconclusive', 0)} |",
+        f"| Confirmed interrupted | {host_shadow.get('latest_interruption_statuses', {}).get('confirmed_interrupted', 0)} |",
+        f"| Truncated evidence | {host_shadow.get('truncated_evidence', 0)} |",
+        "",
         "## ⚠️ 需要关注",
         "",
     ])
@@ -305,6 +325,7 @@ def markdown(payload):
         "",
         "- token 是已知快照，不是账单、配额或实测节省；缓存命中属于输入子项。",
         "- Outcome 是 Lead 验收结果；token 完整度与任务质量是两个不同维度。",
+        "- Native Host Shadow 仅用于对照验证，不能自动覆盖生产 accounting 或路由；只保存脱敏状态，不保存 token 数值或原始 Host ID。",
         "- CSV/JSON 可能包含 session / turn / agent ID；不包含 prompt、回复正文、源码或原始 rollout 行。",
         "- `all` 范围可能混合多个项目；项目简报优先从目标项目目录运行，或显式传 `--project-root`。",
         "",

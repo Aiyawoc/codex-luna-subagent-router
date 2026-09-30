@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from urllib.error import HTTPError
@@ -210,6 +211,28 @@ class HostTransportTests(unittest.TestCase):
         self.assertEqual(result["usage_comparison"]["status"], "consistent")
         self.assertEqual(result["interruption"]["status"], "confirmed_interrupted")
         self.assertFalse(result["authoritative"])
+
+    def test_record_shadow_result_writes_only_sanitized_observation(self):
+        shadow = {
+            "usage_comparison": {
+                "status": "consistent", "reason": "core_fields_equal",
+                "comparable_fields": ["total_tokens", "input_tokens", "output_tokens"],
+                "mismatched_fields": [], "turn_id": "turn_secret",
+            },
+            "interruption": {"status": "not_observed"},
+            "coordination_truncated": False,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "host-shadow.jsonl"
+            row = host_transport.record_shadow_result(
+                shadow, session_id="session_secret", subagent_id="subagent_secret",
+                global_scope=True, path=path,
+            )
+            raw = path.read_text(encoding="utf-8")
+        self.assertEqual(row["scope_id"], "global")
+        self.assertNotIn("session_secret", raw)
+        self.assertNotIn("turn_secret", raw)
+        self.assertNotIn("subagent_secret", raw)
 
 
 if __name__ == "__main__":
