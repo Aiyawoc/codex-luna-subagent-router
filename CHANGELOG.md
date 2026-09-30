@@ -1,6 +1,8 @@
 # Changelog
 
-## 2.8.0-dev — Native Harness baseline（开发中）
+## 2.8.0-rc.1 — Native Harness release candidate（2026-09-30）
+
+- 冻结 v2.8.0 RC 功能范围；RC.1 进入只修回归/发布阻断问题阶段。Stable 之前仍要求真实 Agents API Host shadow acceptance，不因 RC 发布而提升 Native authority。
 
 - 新增 transport-free Host Backend adapter：保持 Codex Desktop 现有 rollout/hooks 路径，并加入实验性的 `agents_api` capability/usage/lifecycle 适配层；本阶段不发网络请求、不接管生产路由 authority。
 - Execution Shape 可映射到 Host 原生执行原语：`local_serial → lead_tooling`，支持时 `local_parallel_tools → programmatic_tool_calling`，`subagent → native_multi_agent`；不改变 v2.7 planner 的 shape 决策。
