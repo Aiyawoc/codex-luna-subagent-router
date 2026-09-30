@@ -178,7 +178,7 @@ class ReaderRecoveryTests(Sandbox):
         result=self.read()
         self.assertEqual(result["status"],"complete")
         self.assertEqual(result["counts"],new)
-        self.assertEqual((result["model"],result["effort"]),("gpt-6-sol","high"))
+        self.assertEqual((result["model"],result["effort"]),("gpt-6.1-sol","high"))
         self.assertNotIn("conflicting_session_headers",result["reasons"])
 
     def test_complete_duplicate_header_preserves_origin_and_counters(self):

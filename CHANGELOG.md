@@ -5,6 +5,7 @@
 - 新增 transport-free Host Backend adapter：保持 Codex Desktop 现有 rollout/hooks 路径，并加入实验性的 `agents_api` capability/usage/lifecycle 适配层；本阶段不发网络请求、不接管生产路由 authority。
 - Execution Shape 可映射到 Host 原生执行原语：`local_serial → lead_tooling`，支持时 `local_parallel_tools → programmatic_tool_calling`，`subagent → native_multi_agent`；不改变 v2.7 planner 的 shape 决策。
 - Native usage normalizer 保持 `unknown != 0`，只有 input/output 都已知时才可推导 total；取消/中断统一归入 interrupted 生命周期语义。
+- 增加 Agents API public Turn/event/coordination-item contract adapter 与 `host_shadow`：native usage 只做 shadow compare；`interrupt_subagent_call` 仅作为请求证据，只有 turn `cancelled` 才确认 interrupted，completed/failed 等终态不会被历史 interrupt request 覆盖。
 - 新自动 Sol Worker 从 `gpt-6-sol` 迁移到 `gpt-6.1-sol`；旧 `gpt-6-sol` 仅保留历史 outcome/usage/Lead identity 兼容，不参与新的自动 route/calibration。
 
 ## 2.7.0 — Stable（2026-09-23）
