@@ -6,6 +6,7 @@
 - Execution Shape 可映射到 Host 原生执行原语：`local_serial → lead_tooling`，支持时 `local_parallel_tools → programmatic_tool_calling`，`subagent → native_multi_agent`；不改变 v2.7 planner 的 shape 决策。
 - Native usage normalizer 保持 `unknown != 0`，只有 input/output 都已知时才可推导 total；取消/中断统一归入 interrupted 生命周期语义。
 - 增加 Agents API public Turn/event/coordination-item contract adapter 与 `host_shadow`：native usage 只做 shadow compare；`interrupt_subagent_call` 仅作为请求证据，只有 turn `cancelled` 才确认 interrupted，completed/failed 等终态不会被历史 interrupt request 覆盖。
+- 增加显式 opt-in 的 `host_transport` 只读采集器：每次调用必须 `--allow-network`，仅执行官方 Agents API GET，要求 `OpenAI-Beta: agents=v1`，远端仅允许 `api.openai.com`，API key 只从环境变量读取；session item 的消息/推理/命令正文在输出前过滤。`collect` 与 `shadow` 可用于真实 Host acceptance，但不修改 production ledger。
 - 新自动 Sol Worker 从 `gpt-6-sol` 迁移到 `gpt-6.1-sol`；旧 `gpt-6-sol` 仅保留历史 outcome/usage/Lead identity 兼容，不参与新的自动 route/calibration。
 
 ## 2.7.0 — Stable（2026-09-23）

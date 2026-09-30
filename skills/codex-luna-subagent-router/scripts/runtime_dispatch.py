@@ -11,7 +11,7 @@ COMMANDS = {
     'route_advisor', 'token_usage', 'turn_usage', 'report', 'inspect_guided_install',
     'configure_guided_install', 'configure_subagent_limit', 'configure_evidence_calibration',
     'configure_token_accounting', 'configure_decision_engine', 'validate_route_plan', 'decision_shadow',
-    'host_adapter', 'host_shadow',
+    'host_adapter', 'host_shadow', 'host_transport',
 }
 
 

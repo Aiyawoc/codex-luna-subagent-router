@@ -112,6 +112,14 @@ class HostAdapterTests(unittest.TestCase):
         self.assertEqual(normalized["subagent_id"], "subagent_1")
         self.assertNotIn("subagent", normalized)
 
+    def test_create_subagent_item_keeps_created_agent_id_without_content(self):
+        normalized = host_adapter.normalize_coordination_item({
+            "id": "create_1", "type": "create_subagent_call", "turn_id": "root_1",
+            "agent_id": "agent_child", "content": "private delegation task",
+        })
+        self.assertEqual(normalized["created_agent_id"], "agent_child")
+        self.assertNotIn("content", normalized)
+
 
 if __name__ == "__main__":
     unittest.main()

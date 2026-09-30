@@ -203,6 +203,7 @@ def normalize_coordination_item(payload: dict) -> dict:
         "item_id": _identifier(payload.get("id"), "item.id"),
         "item_type": item_type,
         "turn_id": _identifier(payload.get("turn_id"), "item.turn_id", optional=True),
+        "created_agent_id": _identifier(payload.get("agent_id"), "agent_id", optional=True),
         "sender_agent_id": _identifier(payload.get("sender_agent_id"), "sender_agent_id", optional=True),
         "recipient_agent_id": _identifier(payload.get("recipient_agent_id"), "recipient_agent_id", optional=True),
         "request_only": item_type in ("interrupt_subagent_call", "close_subagent_call"),
