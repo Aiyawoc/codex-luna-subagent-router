@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.0-rc.2 — Unknown Route Economics cost semantics（2026-09-30）
+
+- 修复 RC.1 本地验收发现的 Route Economics 缺失值语义：当 `estimated_attempts == 0` 时，总计及单 route 的 `estimated_usd` 现在保持 `null`，不再用 `0.0` 表示“没有可估算样本”。
+- `router report` 对未知 estimated token cost 显示 `-`，只有至少一个 receipt-bound attempt 成功估价时才显示 `$...` 数值；已知成本恰好为 0 的情况仍可合法显示 `$0.000000`。
+- 新增空数据集、missing usage、incomplete usage 和 report unknown-cost 回归；不改变 pricing、route economics 估价公式、cost review、route_advisor、Execution Shape 或任何 production authority。
+
 ## 2.8.0-rc.1 — Native Harness release candidate（2026-09-30）
 
 - 冻结 v2.8.0 RC 功能范围；RC.1 进入只修回归/发布阻断问题阶段。Stable 之前仍要求真实 Agents API Host shadow acceptance，不因 RC 发布而提升 Native authority。

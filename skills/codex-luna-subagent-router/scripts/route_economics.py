@@ -68,8 +68,9 @@ def collect(registry=None, usage_path=None, *, scope=None):
     total_estimated = 0.0
     total_estimated_attempts = 0
     for (model, effort), values in sorted(grouped.items(), key=lambda item: str(item[0])):
-        estimated_usd = round(values["estimated_usd"], 8)
-        total_estimated += estimated_usd
+        estimated_usd = round(values["estimated_usd"], 8) if values["estimated_attempts"] else None
+        if estimated_usd is not None:
+            total_estimated += estimated_usd
         total_estimated_attempts += values["estimated_attempts"]
         routes.append({
             "model": model,
@@ -93,7 +94,7 @@ def collect(registry=None, usage_path=None, *, scope=None):
         "outcomes": dict(outcome_counts),
         "matched_receipts": matched_receipts,
         "estimated_attempts": total_estimated_attempts,
-        "estimated_usd": round(total_estimated, 8),
+        "estimated_usd": round(total_estimated, 8) if total_estimated_attempts else None,
         "missing_receipt": missing_receipt,
         "missing_usage": missing_usage,
         "malformed_usage": malformed_usage,

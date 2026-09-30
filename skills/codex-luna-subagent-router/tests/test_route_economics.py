@@ -70,7 +70,16 @@ class RouteEconomicsTests(unittest.TestCase):
         self.assertEqual(result["missing_receipt"], 1)
         self.assertEqual(result["missing_usage"], 1)
         self.assertEqual(result["estimated_attempts"], 0)
-        self.assertEqual(result["estimated_usd"], 0.0)
+        self.assertIsNone(result["estimated_usd"])
+
+    def test_empty_dataset_keeps_estimated_cost_unknown(self):
+        with patch.object(route_economics.store, "read_records", return_value=([], {})):
+            result = route_economics.collect(Path("outcomes.jsonl"), Path("usage.jsonl"), scope="global")
+        self.assertEqual(result["outcome_records"], 0)
+        self.assertEqual(result["matched_receipts"], 0)
+        self.assertEqual(result["estimated_attempts"], 0)
+        self.assertIsNone(result["estimated_usd"])
+        self.assertEqual(result["routes"], [])
 
     def test_incomplete_cached_detail_is_not_estimated(self):
         bad = usage("gpt-6.1-sol", "high")
@@ -80,6 +89,8 @@ class RouteEconomicsTests(unittest.TestCase):
             result = route_economics.collect(Path("outcomes.jsonl"), Path("usage.jsonl"), scope="project-x")
         self.assertEqual(result["routes"][0]["incomplete_usage"], 1)
         self.assertEqual(result["routes"][0]["estimated_attempts"], 0)
+        self.assertIsNone(result["routes"][0]["estimated_usd"])
+        self.assertIsNone(result["estimated_usd"])
 
     def test_scope_filter_prevents_cross_project_cost_mix(self):
         records = [outcome("r1", scope="project-x"), outcome("r2", scope="project-y")]

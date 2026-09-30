@@ -200,6 +200,10 @@ def _coverage_line(coverage):
             f"部分 {coverage.get('partial', 0)} / 不可用 {coverage.get('unavailable', 0)}")
 
 
+def _money(value):
+    return "-" if value is None else f"${value:.6f}"
+
+
 def markdown(payload):
     """Fixed chat-first Markdown panel. brief.md and stdout intentionally share this exact layout."""
     data = payload["data"]
@@ -317,7 +321,7 @@ def markdown(payload):
         f"| Outcome records | {economics.get('outcome_records', 0)} |",
         f"| Receipt usage matched | {economics.get('matched_receipts', 0)} |",
         f"| Estimated attempts | {economics.get('estimated_attempts', 0)} |",
-        f"| Estimated token cost | ${economics.get('estimated_usd', 0):.6f} |",
+        f"| Estimated token cost | {_money(economics.get('estimated_usd'))} |",
         f"| Missing receipt | {economics.get('missing_receipt', 0)} |",
         f"| Missing usage | {economics.get('missing_usage', 0)} |",
         f"| Comparable safe groups | {economics_review.get('comparable_groups', 0)} |",

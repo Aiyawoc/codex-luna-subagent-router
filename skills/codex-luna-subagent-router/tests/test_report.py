@@ -78,7 +78,7 @@ class ReportTests(unittest.TestCase):
              patch.object(report.turn_usage, "statistics", return_value=[]) as turn_stats, \
              patch.object(report.host_shadow_store, "statistics", return_value={"observations": 0}) as shadow_stats, \
              patch.object(report.host_shadow_store, "review_readiness", return_value={"usage": {"status": "not_ready"}, "lifecycle": {"status": "not_ready"}}) as readiness, \
-             patch.object(report.route_economics, "collect", return_value={"pricing_profile": "test", "estimated_usd": 0.0}) as economics, \
+             patch.object(report.route_economics, "collect", return_value={"pricing_profile": "test", "estimated_usd": None}) as economics, \
              patch.object(report.cost_review, "collect", return_value={"comparable_groups": 0, "review_candidate_count": 0, "automatic_override": False}) as cost_review_stats:
             result = report.collect("project-test")
         route_stats.assert_called_once_with(Path("/tmp/outcomes.jsonl"), scope="project-test")
@@ -119,6 +119,14 @@ class ReportTests(unittest.TestCase):
             types = {row["record_type"] for row in rows}
             self.assertTrue({"outcome_summary", "outcome_route", "subagent", "turn_main", "turn_child"} <= types)
             self.assertEqual(next(row for row in rows if row["record_type"] == "subagent")["total_tokens"], "100")
+
+    def test_markdown_keeps_unknown_economics_cost_out_of_zero_dollars(self):
+        data = sample_data()
+        data["route_economics"] = {"pricing_profile": "test", "estimated_attempts": 0, "estimated_usd": None}
+        text = report.markdown({"generated_at": "2026-09-30T00:00:00Z", "router_version": "2.8.0-rc.2",
+                                "scope": {"scope_id": "global", "mode": "current"}, "data": data})
+        self.assertIn("| Estimated token cost | - |", text)
+        self.assertNotIn("Estimated token cost | $0.000000", text)
 
     def test_fixed_panel_section_order_is_stable(self):
         text = report.markdown({"generated_at": "2026-09-16T10:00:00Z", "router_version": "2.6.2",
