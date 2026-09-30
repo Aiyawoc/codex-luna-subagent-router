@@ -11,6 +11,7 @@
 - 增加 `host_transport trace-summary` 与脱敏 OTLP trace adapter：只汇总 trace/span 数、粗粒度 span 类别、status、duration 和重叠度，主动丢弃 attributes、trace/span ID、prompt/response/tool args/error message；trace 仅用于延迟/并行度 shadow observability，不作为 Token/accounting 来源。
 - 增加只读 `host_transport readiness` authority-review gate：无需网络/API key，仅依据脱敏 `host-shadow.jsonl` 判断 usage/lifecycle 是否达到 `eligible_for_review`；默认要求 10 个干净一致 usage evidence 与 3 个已解析终态 lifecycle evidence，任一 divergence/inconclusive/truncated/invalid/unresolved interrupt 均保持 `not_ready`。该门槛只打开人工评审，不会自动提升 Native authority，`automatic_promotion` 固定为 false。
 - P1 新增 Cost-aware Routing v2 Shadow Economics：`cost_estimator` 固定 `openai-standard-2026-09-30` Standard 文本 token 价格快照，支持 Luna / GPT-6.1 Sol / Astra 与历史 GPT-6 Sol、272K long-context 门槛；`route_economics` 只对 exact receipt interval 估价并按 route/outcome 聚合，缺 cache detail/receipt usage 保持未估价。`router report` 展示 receipt 覆盖与 estimated token cost；不包含 cache write/tool/regional/processing-tier 等不可恢复费用，不声称账单或反事实节省，也不改变 production routing。
+- P1 增加 `cost_review` 人工候选门：只比较完全相同 task family + 六轴的安全 bucket；lower-capability route 默认需 3 个 exact-cost verified pass、零 verified_fail/partial，且观测平均 token cost ≤ 高能力路线的 75%（后者至少 2 个 exact-cost pass）才输出 `eligible_for_review`。任何结果都保持 `automatic_override=false`，`router report` 仅展示 comparable groups / candidate count，不自动修改 route_advisor。
 - 新自动 Sol Worker 从 `gpt-6-sol` 迁移到 `gpt-6.1-sol`；旧 `gpt-6-sol` 仅保留历史 outcome/usage/Lead identity 兼容，不参与新的自动 route/calibration。
 
 ## 2.7.0 — Stable（2026-09-23）

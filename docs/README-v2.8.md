@@ -90,6 +90,18 @@ The estimate intentionally excludes cache-write charges, tool-call fees, regiona
 
 `router report` exposes the same receipt-bound economics under **Route Economics · Shadow**. No economics result changes `route_advisor`, Execution Shape, model selection, calibration, or retry policy in this stage.
 
+### Cost review candidates
+
+`cost_review` is the next shadow-only gate. It does not recommend or apply a production route; it only identifies buckets worth human review:
+
+```bash
+./bin/router cost_review --project-root /path/to/project
+```
+
+Comparison is deliberately narrow: the task family and all six classification axes must match exactly. A lower-capability route is eligible only when the bucket is verifiable, micro/bounded, shallow/medium reasoning, low/medium failure cost and low/medium context, with at least 3 exact-cost verified passes, no verified fail/partial outcomes, and an observed average token-cost ratio no greater than 0.75 versus a higher-capability route with at least 2 exact-cost verified passes.
+
+The output uses `eligible_for_review` and `automatic_override=false`. It is observational evidence only: different attempts can still differ in hidden difficulty, latency, tool work, or quality. Therefore it is not a counterfactual savings estimate and cannot modify `route_advisor`. `router report` shows only the comparable-safe-group and candidate counts.
+
 ## Authority boundary
 
 `agents_api` is experimental in this baseline. `host_adapter.py` is transport-free and does not make network calls, create sessions, spawn Agents, or override planner decisions. It only exposes capabilities, maps an already-selected Execution Shape to a Host primitive, and normalizes already-observed lifecycle/usage values.
@@ -112,6 +124,7 @@ Sol keeps `high / xhigh` effort profiles. The profile names remain `sol_high` an
 - compare trace timing/overlap with observed execution shape without deriving Token cost from trace spans;
 - decide whether the Agents API backend can promote native turn/usage evidence from shadow to canonical source only after repeated agreement;
 - collect enough receipt-bound economics to compare cost/quality distributions before considering any cost-based production override;
+- review cost candidates on real repeated task families before considering a separate, explicitly gated production experiment;
 - keep Plugin packaging and Decision Layer authority outside this baseline until the Host adapter is proven.
 
 Official contract references used by this development baseline:

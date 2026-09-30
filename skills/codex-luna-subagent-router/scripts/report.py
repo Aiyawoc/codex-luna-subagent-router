@@ -20,6 +20,7 @@ import decision_store
 import planning_store
 import host_shadow_store
 import route_economics
+import cost_review
 
 REPORT_VERSION = "1.0"
 ROUTER_VERSION = store.ROUTER_VERSION
@@ -120,6 +121,7 @@ def collect(scope_id, project_root=None):
     host_shadow = host_shadow_store.statistics(scope=scope_id)
     host_shadow_readiness = host_shadow_store.review_readiness(scope=scope_id)
     economics = route_economics.collect(registry, usage_path, scope=scope_id)
+    economics_review = cost_review.collect(registry, usage_path, scope=scope_id)
     return {
         "outcomes": outcomes,
         "subagents": subagents,
@@ -129,6 +131,7 @@ def collect(scope_id, project_root=None):
         "host_shadow": host_shadow,
         "host_shadow_readiness": host_shadow_readiness,
         "route_economics": economics,
+        "cost_review": economics_review,
     }
 
 
@@ -205,6 +208,7 @@ def markdown(payload):
     host_shadow = data.get("host_shadow", {})
     host_shadow_readiness = data.get("host_shadow_readiness", {})
     economics = data.get("route_economics", {})
+    economics_review = data.get("cost_review", {})
     known = subagents.get("known_usage", {}).get("counts", {})
     subcov = subagents.get("completeness", {})
     maincov = turns.get("main_completeness", {})
@@ -316,6 +320,9 @@ def markdown(payload):
         f"| Estimated token cost | ${economics.get('estimated_usd', 0):.6f} |",
         f"| Missing receipt | {economics.get('missing_receipt', 0)} |",
         f"| Missing usage | {economics.get('missing_usage', 0)} |",
+        f"| Comparable safe groups | {economics_review.get('comparable_groups', 0)} |",
+        f"| Cost review candidates | {economics_review.get('review_candidate_count', 0)} |",
+        f"| Automatic cost override | {'enabled' if economics_review.get('automatic_override') else 'disabled'} |",
         "",
         "## ⚠️ 需要关注",
         "",
