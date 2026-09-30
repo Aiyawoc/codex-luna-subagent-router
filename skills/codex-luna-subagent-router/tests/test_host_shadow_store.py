@@ -75,6 +75,62 @@ class HostShadowStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown usage fields"):
             host_shadow_store.from_result(bad, "global", session_id="s", turn_id="t", subagent_id="a")
 
+    def test_review_readiness_requires_clean_repeated_usage_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "host-shadow.jsonl"
+            for index in range(3):
+                row = host_shadow_store.from_result(
+                    result("consistent"), "global", session_id="s", turn_id=f"u{index}", subagent_id="a",
+                )
+                host_shadow_store.append(path, row)
+            readiness = host_shadow_store.review_readiness(
+                path, "global", min_usage_evidence=3, min_lifecycle_evidence=1,
+            )
+        self.assertEqual(readiness["usage"]["status"], "eligible_for_review")
+        self.assertFalse(readiness["authoritative"])
+        self.assertFalse(readiness["automatic_promotion"])
+
+    def test_any_latest_divergence_blocks_usage_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "host-shadow.jsonl"
+            for index in range(3):
+                status = "divergent" if index == 2 else "consistent"
+                mismatched = ["total_tokens"] if status == "divergent" else []
+                host_shadow_store.append(path, host_shadow_store.from_result(
+                    result(status, mismatched=mismatched), "global",
+                    session_id="s", turn_id=f"u{index}", subagent_id="a",
+                ))
+            readiness = host_shadow_store.review_readiness(
+                path, "global", min_usage_evidence=2, min_lifecycle_evidence=1,
+            )
+        self.assertEqual(readiness["usage"]["status"], "not_ready")
+        self.assertIn("usage_divergence_observed", readiness["usage"]["reasons"])
+
+    def test_lifecycle_review_requires_terminal_evidence_and_no_unresolved_interrupt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "host-shadow.jsonl"
+            host_shadow_store.append(path, host_shadow_store.from_result(
+                result("consistent", interrupt="confirmed_interrupted"), "global",
+                session_id="s", turn_id="l1", subagent_id="a",
+            ))
+            host_shadow_store.append(path, host_shadow_store.from_result(
+                result("consistent", interrupt="terminal_not_interrupted"), "global",
+                session_id="s", turn_id="l2", subagent_id="a",
+            ))
+            ready = host_shadow_store.review_readiness(
+                path, "global", min_usage_evidence=1, min_lifecycle_evidence=2,
+            )
+            host_shadow_store.append(path, host_shadow_store.from_result(
+                result("consistent", interrupt="requested_unconfirmed"), "global",
+                session_id="s", turn_id="l3", subagent_id="a",
+            ))
+            blocked = host_shadow_store.review_readiness(
+                path, "global", min_usage_evidence=1, min_lifecycle_evidence=2,
+            )
+        self.assertEqual(ready["lifecycle"]["status"], "eligible_for_review")
+        self.assertEqual(blocked["lifecycle"]["status"], "not_ready")
+        self.assertIn("unresolved_interrupt_evidence", blocked["lifecycle"]["reasons"])
+
 
 if __name__ == "__main__":
     unittest.main()

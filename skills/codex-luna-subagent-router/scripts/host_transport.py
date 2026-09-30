@@ -312,11 +312,26 @@ def _parser():
     scope = shadow.add_mutually_exclusive_group()
     scope.add_argument("--project-root")
     scope.add_argument("--global-scope", action="store_true")
+    readiness = commands.add_parser("readiness")
+    readiness_scope = readiness.add_mutually_exclusive_group()
+    readiness_scope.add_argument("--project-root")
+    readiness_scope.add_argument("--global-scope", action="store_true")
+    readiness.add_argument("--min-usage-evidence", type=int, default=10)
+    readiness.add_argument("--min-lifecycle-evidence", type=int, default=3)
     return parser
 
 
 def main(argv=None):
     args = _parser().parse_args(argv)
+    if args.command == "readiness":
+        scope_id, _ = store.resolve_scope(args.project_root, args.global_scope)
+        result = host_shadow_store.review_readiness(
+            scope=scope_id,
+            min_usage_evidence=args.min_usage_evidence,
+            min_lifecycle_evidence=args.min_lifecycle_evidence,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     transport = _transport(args)
     if args.command == "turn":
         result = transport.retrieve_turn(args.session_id, args.turn_id, subagent_id=args.subagent_id)
@@ -358,7 +373,8 @@ if __name__ == "__main__":
     except json.JSONDecodeError:
         print("ERROR: invalid JSON argument", file=sys.stderr)
         code = 2
-    except (HostTransportError, host_adapter.HostAdapterError, host_shadow.ShadowError, host_trace.HostTraceError) as exc:
+    except (HostTransportError, host_adapter.HostAdapterError, host_shadow.ShadowError,
+            host_trace.HostTraceError, store.StoreError) as exc:
         print("ERROR: " + str(exc), file=sys.stderr)
         code = 2
     raise SystemExit(code)

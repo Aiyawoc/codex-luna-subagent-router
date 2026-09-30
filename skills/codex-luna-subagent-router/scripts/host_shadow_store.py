@@ -119,3 +119,60 @@ def statistics(path=None, scope=None):
         "latest_recorded_at": max((row["recorded_at"] for row in rows), default=None),
         "limitation": "Shadow observations are non-authoritative and contain no raw IDs, token values, prompts, or response content.",
     }
+
+
+def review_readiness(path=None, scope=None, *, min_usage_evidence=10, min_lifecycle_evidence=3):
+    """Return review eligibility only; never change authority or Router configuration."""
+    if type(min_usage_evidence) is not int or min_usage_evidence < 1:
+        raise store.StoreError("min_usage_evidence must be a positive integer")
+    if type(min_lifecycle_evidence) is not int or min_lifecycle_evidence < 1:
+        raise store.StoreError("min_lifecycle_evidence must be a positive integer")
+    stats = statistics(path, scope)
+    usage = stats["latest_usage_statuses"]
+    interruptions = stats["latest_interruption_statuses"]
+    usage_consistent = int(usage.get("consistent", 0))
+    usage_divergent = int(usage.get("divergent", 0))
+    usage_inconclusive = int(usage.get("inconclusive", 0))
+    usage_reasons = []
+    if stats["invalid_rows"]:
+        usage_reasons.append("invalid_shadow_rows")
+    if stats["truncated_evidence"]:
+        usage_reasons.append("truncated_evidence")
+    if usage_divergent:
+        usage_reasons.append("usage_divergence_observed")
+    if usage_inconclusive:
+        usage_reasons.append("usage_inconclusive_observed")
+    if usage_consistent < min_usage_evidence:
+        usage_reasons.append("insufficient_consistent_usage_evidence")
+
+    lifecycle_terminal = int(interruptions.get("confirmed_interrupted", 0)) + int(
+        interruptions.get("terminal_not_interrupted", 0)
+    )
+    lifecycle_unresolved = int(interruptions.get("requested_unconfirmed", 0)) + int(interruptions.get("unknown", 0))
+    lifecycle_reasons = []
+    if stats["invalid_rows"]:
+        lifecycle_reasons.append("invalid_shadow_rows")
+    if stats["truncated_evidence"]:
+        lifecycle_reasons.append("truncated_evidence")
+    if lifecycle_unresolved:
+        lifecycle_reasons.append("unresolved_interrupt_evidence")
+    if lifecycle_terminal < min_lifecycle_evidence:
+        lifecycle_reasons.append("insufficient_terminal_lifecycle_evidence")
+
+    return {
+        "authoritative": False,
+        "automatic_promotion": False,
+        "usage": {
+            "status": "eligible_for_review" if not usage_reasons else "not_ready",
+            "reasons": usage_reasons,
+            "consistent_evidence": usage_consistent,
+            "required_consistent_evidence": min_usage_evidence,
+        },
+        "lifecycle": {
+            "status": "eligible_for_review" if not lifecycle_reasons else "not_ready",
+            "reasons": lifecycle_reasons,
+            "terminal_evidence": lifecycle_terminal,
+            "required_terminal_evidence": min_lifecycle_evidence,
+        },
+        "limitation": "Eligibility only opens manual review; it does not promote Agents API evidence to canonical authority.",
+    }

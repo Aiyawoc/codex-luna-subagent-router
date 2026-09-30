@@ -9,6 +9,7 @@
 - 增加显式 opt-in 的 `host_transport` 只读采集器：每次调用必须 `--allow-network`，仅执行官方 Agents API GET，要求 `OpenAI-Beta: agents=v1`，远端仅允许 `api.openai.com`，API key 只从环境变量读取；session item 的消息/推理/命令正文在输出前过滤。`collect` 与 `shadow` 可用于真实 Host acceptance，但不修改 production ledger。
 - 增加脱敏 `host-shadow.jsonl` acceptance ledger：`host_transport shadow --record` 只保存哈希 evidence key、一致/分歧/未知、可比较字段和 interrupt 终态，不保存 raw Host ID、token 数值、prompt/回复/工具正文；`router report` 读取每个 evidence 的最新观测展示 Native Host Shadow 统计，但不用于自动 calibration 或路由 authority。
 - 增加 `host_transport trace-summary` 与脱敏 OTLP trace adapter：只汇总 trace/span 数、粗粒度 span 类别、status、duration 和重叠度，主动丢弃 attributes、trace/span ID、prompt/response/tool args/error message；trace 仅用于延迟/并行度 shadow observability，不作为 Token/accounting 来源。
+- 增加只读 `host_transport readiness` authority-review gate：无需网络/API key，仅依据脱敏 `host-shadow.jsonl` 判断 usage/lifecycle 是否达到 `eligible_for_review`；默认要求 10 个干净一致 usage evidence 与 3 个已解析终态 lifecycle evidence，任一 divergence/inconclusive/truncated/invalid/unresolved interrupt 均保持 `not_ready`。该门槛只打开人工评审，不会自动提升 Native authority，`automatic_promotion` 固定为 false。
 - 新自动 Sol Worker 从 `gpt-6-sol` 迁移到 `gpt-6.1-sol`；旧 `gpt-6-sol` 仅保留历史 outcome/usage/Lead identity 兼容，不参与新的自动 route/calibration。
 
 ## 2.7.0 — Stable（2026-09-23）

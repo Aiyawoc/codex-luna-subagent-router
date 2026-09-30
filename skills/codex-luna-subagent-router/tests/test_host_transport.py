@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -102,6 +103,22 @@ class HostTransportTests(unittest.TestCase):
         self.assertEqual(process.returncode, 2)
         self.assertIn("ERROR: network access is disabled", process.stderr)
         self.assertNotIn("Traceback", process.stderr)
+
+    def test_readiness_cli_needs_no_network_or_api_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ, CODEX_HOME=tmp)
+            env.pop("OPENAI_API_KEY", None)
+            process = subprocess.run(
+                [sys.executable, str(ROOT / "scripts/host_transport.py"), "readiness",
+                 "--global-scope", "--min-usage-evidence", "2", "--min-lifecycle-evidence", "1"],
+                capture_output=True, text=True, env=env,
+            )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        payload = json.loads(process.stdout)
+        self.assertFalse(payload["authoritative"])
+        self.assertFalse(payload["automatic_promotion"])
+        self.assertEqual(payload["usage"]["status"], "not_ready")
+        self.assertEqual(payload["lifecycle"]["status"], "not_ready")
 
     def test_api_key_is_required_but_never_returned(self):
         with self.assertRaisesRegex(host_transport.HostTransportError, "OPENAI_API_KEY"):

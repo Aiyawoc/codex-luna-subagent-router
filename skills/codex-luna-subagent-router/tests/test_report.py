@@ -76,12 +76,14 @@ class ReportTests(unittest.TestCase):
              patch.object(report.route_advisor, "stats", return_value={"route": True}) as route_stats, \
              patch.object(report.token_usage, "statistics", return_value={"workers": []}) as token_stats, \
              patch.object(report.turn_usage, "statistics", return_value=[]) as turn_stats, \
-             patch.object(report.host_shadow_store, "statistics", return_value={"observations": 0}) as shadow_stats:
+             patch.object(report.host_shadow_store, "statistics", return_value={"observations": 0}) as shadow_stats, \
+             patch.object(report.host_shadow_store, "review_readiness", return_value={"usage": {"status": "not_ready"}, "lifecycle": {"status": "not_ready"}}) as readiness:
             result = report.collect("project-test")
         route_stats.assert_called_once_with(Path("/tmp/outcomes.jsonl"), scope="project-test")
         token_stats.assert_called_once_with(Path("/tmp/usage.jsonl"), scope="project-test")
         turn_stats.assert_called_once_with(Path("/tmp/usage.jsonl"), scope="project-test")
         shadow_stats.assert_called_once_with(scope="project-test")
+        readiness.assert_called_once_with(scope="project-test")
         self.assertEqual(result["turns"]["summary"]["registered_turns"], 0)
 
     def test_report_writes_markdown_json_and_csv_without_local_paths(self):

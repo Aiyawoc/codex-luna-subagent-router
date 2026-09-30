@@ -117,6 +117,7 @@ def collect(scope_id, project_root=None):
         "latest_recorded_at": max((row.get("recorded_at") for row in decision_rows), default=None),
     }
     host_shadow = host_shadow_store.statistics(scope=scope_id)
+    host_shadow_readiness = host_shadow_store.review_readiness(scope=scope_id)
     return {
         "outcomes": outcomes,
         "subagents": subagents,
@@ -124,6 +125,7 @@ def collect(scope_id, project_root=None):
         "planning": planning,
         "decisions": decisions,
         "host_shadow": host_shadow,
+        "host_shadow_readiness": host_shadow_readiness,
     }
 
 
@@ -198,6 +200,7 @@ def markdown(payload):
     outcomes, subagents, turns = data["outcomes"], data["subagents"], data["turns"]["summary"]
     planning, decisions = data.get("planning", {}), data.get("decisions", {})
     host_shadow = data.get("host_shadow", {})
+    host_shadow_readiness = data.get("host_shadow_readiness", {})
     known = subagents.get("known_usage", {}).get("counts", {})
     subcov = subagents.get("completeness", {})
     maincov = turns.get("main_completeness", {})
@@ -295,6 +298,8 @@ def markdown(payload):
         f"| Usage inconclusive | {host_shadow.get('latest_usage_statuses', {}).get('inconclusive', 0)} |",
         f"| Confirmed interrupted | {host_shadow.get('latest_interruption_statuses', {}).get('confirmed_interrupted', 0)} |",
         f"| Truncated evidence | {host_shadow.get('truncated_evidence', 0)} |",
+        f"| Usage authority review | {host_shadow_readiness.get('usage', {}).get('status', 'not_ready')} |",
+        f"| Lifecycle authority review | {host_shadow_readiness.get('lifecycle', {}).get('status', 'not_ready')} |",
         "",
         "## ⚠️ 需要关注",
         "",

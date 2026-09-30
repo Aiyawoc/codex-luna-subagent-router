@@ -56,6 +56,18 @@ The trace adapter intentionally keeps only aggregate observability facts: trace/
 
 Trace export may lag turn completion, so missing trace data is not interpreted as zero latency, no tool work, or no concurrency. Trace-derived values remain shadow observability only.
 
+### Authority review gate
+
+Native evidence is never promoted automatically. The local command below reads only the sanitized `host-shadow.jsonl` ledger and does not require network access or an API key:
+
+```bash
+./bin/router host_transport readiness --global-scope
+```
+
+The output has separate `usage` and `lifecycle` decisions: `eligible_for_review` or `not_ready`. The default engineering review thresholds are 10 clean consistent usage evidence keys and 3 resolved terminal lifecycle evidence keys. Any latest usage divergence/inconclusive result, truncated evidence, invalid ledger row, or unresolved interrupt request keeps the relevant path `not_ready`. These are conservative release-review thresholds, not statistical proof and not an authority switch.
+
+`router report` shows the same readiness status under **Native Host Shadow**. Even `eligible_for_review` only means a human can consider a later explicit design change; `automatic_promotion` remains false.
+
 ## Authority boundary
 
 `agents_api` is experimental in this baseline. `host_adapter.py` is transport-free and does not make network calls, create sessions, spawn Agents, or override planner decisions. It only exposes capabilities, maps an already-selected Execution Shape to a Host primitive, and normalizes already-observed lifecycle/usage values.
