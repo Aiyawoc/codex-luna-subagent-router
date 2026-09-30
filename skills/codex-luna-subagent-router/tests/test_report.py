@@ -77,13 +77,15 @@ class ReportTests(unittest.TestCase):
              patch.object(report.token_usage, "statistics", return_value={"workers": []}) as token_stats, \
              patch.object(report.turn_usage, "statistics", return_value=[]) as turn_stats, \
              patch.object(report.host_shadow_store, "statistics", return_value={"observations": 0}) as shadow_stats, \
-             patch.object(report.host_shadow_store, "review_readiness", return_value={"usage": {"status": "not_ready"}, "lifecycle": {"status": "not_ready"}}) as readiness:
+             patch.object(report.host_shadow_store, "review_readiness", return_value={"usage": {"status": "not_ready"}, "lifecycle": {"status": "not_ready"}}) as readiness, \
+             patch.object(report.route_economics, "collect", return_value={"pricing_profile": "test", "estimated_usd": 0.0}) as economics:
             result = report.collect("project-test")
         route_stats.assert_called_once_with(Path("/tmp/outcomes.jsonl"), scope="project-test")
         token_stats.assert_called_once_with(Path("/tmp/usage.jsonl"), scope="project-test")
         turn_stats.assert_called_once_with(Path("/tmp/usage.jsonl"), scope="project-test")
         shadow_stats.assert_called_once_with(scope="project-test")
         readiness.assert_called_once_with(scope="project-test")
+        economics.assert_called_once_with(Path("/tmp/outcomes.jsonl"), Path("/tmp/usage.jsonl"), scope="project-test")
         self.assertEqual(result["turns"]["summary"]["registered_turns"], 0)
 
     def test_report_writes_markdown_json_and_csv_without_local_paths(self):
@@ -105,6 +107,7 @@ class ReportTests(unittest.TestCase):
             self.assertIn("## 模型使用", brief)
             self.assertIn("## 验收结果", brief)
             self.assertIn("## Native Host Shadow", brief)
+            self.assertIn("## Route Economics · Shadow", brief)
             self.assertIn("## ⚠️ 需要关注", brief)
             self.assertIn("不执行 `refresh`", brief)
             self.assertIn("brief.md`：与聊天中显示相同的固定面板", brief)

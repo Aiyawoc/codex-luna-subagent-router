@@ -40,7 +40,9 @@ class HostShadowStoreTests(unittest.TestCase):
         self.assertNotIn("sess_secret", text)
         self.assertNotIn("turn_secret", text)
         self.assertNotIn("subagent_secret", text)
-        self.assertNotIn("150", text)
+        self.assertNotIn("counts", row)
+        self.assertNotIn("deltas", row)
+        self.assertNotIn("estimated_usd", row)
         self.assertEqual(len(row["evidence_id"]), 24)
 
     def test_evidence_id_is_stable_for_same_identity_and_changes_for_turn(self):

@@ -19,6 +19,7 @@ import turn_usage
 import decision_store
 import planning_store
 import host_shadow_store
+import route_economics
 
 REPORT_VERSION = "1.0"
 ROUTER_VERSION = store.ROUTER_VERSION
@@ -118,6 +119,7 @@ def collect(scope_id, project_root=None):
     }
     host_shadow = host_shadow_store.statistics(scope=scope_id)
     host_shadow_readiness = host_shadow_store.review_readiness(scope=scope_id)
+    economics = route_economics.collect(registry, usage_path, scope=scope_id)
     return {
         "outcomes": outcomes,
         "subagents": subagents,
@@ -126,6 +128,7 @@ def collect(scope_id, project_root=None):
         "decisions": decisions,
         "host_shadow": host_shadow,
         "host_shadow_readiness": host_shadow_readiness,
+        "route_economics": economics,
     }
 
 
@@ -201,6 +204,7 @@ def markdown(payload):
     planning, decisions = data.get("planning", {}), data.get("decisions", {})
     host_shadow = data.get("host_shadow", {})
     host_shadow_readiness = data.get("host_shadow_readiness", {})
+    economics = data.get("route_economics", {})
     known = subagents.get("known_usage", {}).get("counts", {})
     subcov = subagents.get("completeness", {})
     maincov = turns.get("main_completeness", {})
@@ -301,6 +305,18 @@ def markdown(payload):
         f"| Usage authority review | {host_shadow_readiness.get('usage', {}).get('status', 'not_ready')} |",
         f"| Lifecycle authority review | {host_shadow_readiness.get('lifecycle', {}).get('status', 'not_ready')} |",
         "",
+        "## Route Economics · Shadow",
+        "",
+        "| 指标 | 当前值 |",
+        "|---|---:|",
+        f"| Pricing profile | {economics.get('pricing_profile', '-')} |",
+        f"| Outcome records | {economics.get('outcome_records', 0)} |",
+        f"| Receipt usage matched | {economics.get('matched_receipts', 0)} |",
+        f"| Estimated attempts | {economics.get('estimated_attempts', 0)} |",
+        f"| Estimated token cost | ${economics.get('estimated_usd', 0):.6f} |",
+        f"| Missing receipt | {economics.get('missing_receipt', 0)} |",
+        f"| Missing usage | {economics.get('missing_usage', 0)} |",
+        "",
         "## ⚠️ 需要关注",
         "",
     ])
@@ -331,6 +347,7 @@ def markdown(payload):
         "- token 是已知快照，不是账单、配额或实测节省；缓存命中属于输入子项。",
         "- Outcome 是 Lead 验收结果；token 完整度与任务质量是两个不同维度。",
         "- Native Host Shadow 仅用于对照验证，不能自动覆盖生产 accounting 或路由；只保存脱敏状态，不保存 token 数值或原始 Host ID。",
+        "- Route Economics 是 receipt-bound Standard 文本 token 估算，不是账单；不包含 cache-write、工具调用、regional/processing tier 等费用，也不据此声称反事实节省。",
         "- CSV/JSON 可能包含 session / turn / agent ID；不包含 prompt、回复正文、源码或原始 rollout 行。",
         "- `all` 范围可能混合多个项目；项目简报优先从目标项目目录运行，或显式传 `--project-root`。",
         "",

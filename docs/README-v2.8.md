@@ -68,6 +68,28 @@ The output has separate `usage` and `lifecycle` decisions: `eligible_for_review`
 
 `router report` shows the same readiness status under **Native Host Shadow**. Even `eligible_for_review` only means a human can consider a later explicit design change; `automatic_promotion` remains false.
 
+## Cost-aware Routing v2 · Shadow economics
+
+P1 starts with a non-authoritative economics layer rather than changing the planner. `route_economics` joins **exact receipt-bound usage intervals** to finalized outcomes and applies a versioned Standard text-token price profile:
+
+```bash
+./bin/router route_economics --project-root /path/to/project
+```
+
+Current price snapshot (`openai-standard-2026-09-30`, USD / 1M text tokens):
+
+| Model | Short input | Short cached | Short output | Long input | Long cached | Long output |
+|---|---:|---:|---:|---:|---:|---:|
+| `gpt-6-luna` | 0.10 | 0.01 | 0.50 | 0.20 | 0.02 | 0.75 |
+| `gpt-6.1-sol` | 2.00 | 0.10 | 10.00 | 4.00 | 0.20 | 15.00 |
+| `gpt-6-astra` | 10.00 | 1.00 | 50.00 | 20.00 | 2.00 | 75.00 |
+
+`gpt-6-sol` is retained only for retrospective v2.7 economics with its historical cached-input rate. Input above 272K uses the published long-context rates. Cached input is treated as a subset of input; reasoning tokens are not added again because they are already contained in output usage.
+
+The estimate intentionally excludes cache-write charges, tool-call fees, regional premiums, Batch/Flex/Fast/Ultrafast differences, and non-text modalities because Router cannot safely reconstruct those billing inputs from the current usage ledger. Missing cache detail or exact receipt usage remains unestimated. The result is therefore **estimated token cost**, not an invoice and not a counterfactual savings claim.
+
+`router report` exposes the same receipt-bound economics under **Route Economics · Shadow**. No economics result changes `route_advisor`, Execution Shape, model selection, calibration, or retry policy in this stage.
+
 ## Authority boundary
 
 `agents_api` is experimental in this baseline. `host_adapter.py` is transport-free and does not make network calls, create sessions, spawn Agents, or override planner decisions. It only exposes capabilities, maps an already-selected Execution Shape to a Host primitive, and normalizes already-observed lifecycle/usage values.
@@ -89,6 +111,7 @@ Sol keeps `high / xhigh` effort profiles. The profile names remain `sol_high` an
 - verify real interrupted/cancelled lifecycle evidence without cross-turn contamination, including interrupt-request-then-complete cases;
 - compare trace timing/overlap with observed execution shape without deriving Token cost from trace spans;
 - decide whether the Agents API backend can promote native turn/usage evidence from shadow to canonical source only after repeated agreement;
+- collect enough receipt-bound economics to compare cost/quality distributions before considering any cost-based production override;
 - keep Plugin packaging and Decision Layer authority outside this baseline until the Host adapter is proven.
 
 Official contract references used by this development baseline:
