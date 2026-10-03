@@ -133,6 +133,10 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
     try:
+        import plugin_support
+        owner, _ = plugin_support.effective_owner(args.project)
+        if owner.get("active_source") == "plugin":
+            raise ValueError("plugin owns this scope; deactivate and roll back before installing a second Skill")
         dest, agents = destinations(args.project)
         existed = dest.exists()
         if existed and args.install_mode is None:

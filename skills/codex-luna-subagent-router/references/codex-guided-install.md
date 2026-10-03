@@ -232,3 +232,8 @@ cat VERSION
 - 未 Materialized 的 spawn 不计 `open_workers`，也不执行 conservative outcome `begin`。
 - `python benchmarks/router_arena.py route-audit` 必须通过；CI 同时运行 >=5000 个固定 seed planner invariant cases。
 - `bin/router report` 的“执行规划”只汇总脱敏计数；Decision Shadow 关闭时对应记录为 0，不影响 Core。
+
+## Native plugin distribution since 2.8.3
+
+For an explicitly requested native plugin install/migration, first follow `plugin-install.md`.
+The six questions and existing choices stay unchanged. Plugin ownership is separate from Host enablement and hook trust. Do not invoke the standalone installer from an active plugin or maintain a duplicate Skill/hook source. The native plugin uses the same Core helpers and external canonical ledgers.

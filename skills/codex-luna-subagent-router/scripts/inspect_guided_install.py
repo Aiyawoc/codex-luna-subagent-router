@@ -13,6 +13,7 @@ import outcome_store as store
 import configure_token_accounting as tokens
 import configure_subagent_limit as concurrency
 from configure_guided_install import _authorization_block, authorization_state
+import plugin_support
 
 NAME = "codex-luna-subagent-router"
 INSTALL_MODES = ("upgrade", "fresh")
@@ -47,6 +48,14 @@ def _installed_locations(home, root=None, skills_dir=None):
         version_path = path / "VERSION"
         version = version_path.read_text(encoding="utf-8").strip() if version_path.is_file() else None
         result.append({"scope": scope, "path": str(path), "version": version})
+    for scope, project in (("global_plugin", None), ("project_plugin", root)):
+        if scope == "project_plugin" and root is None:
+            continue
+        if home != store.codex_home().expanduser().resolve() and project is None:
+            continue
+        owner = plugin_support.read_owner(project)
+        if owner.get("active_source") == "plugin":
+            result.append({"scope": scope, "path": owner["plugin_root"], "version": owner.get("version"), "source": "plugin"})
     return result
 
 
@@ -58,7 +67,7 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
     if install_mode is not None and install_mode not in INSTALL_MODES:
         raise ValueError("install_mode must be upgrade or fresh")
     detected = _installed_locations(home, root, skills_dir)
-    target_scopes = {"project"} if root else {"global", "global_legacy"}
+    target_scopes = {"project", "project_plugin"} if root else {"global", "global_legacy", "global_plugin"}
     installed = [item for item in detected if item["scope"] in target_scopes]
     other_installs = [item for item in detected if item["scope"] not in target_scopes]
     if install_mode == "upgrade" and not installed:
@@ -139,6 +148,10 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
             managed = [h for g in hooks.get(event, []) for h in g.get("hooks", []) if h.get("statusMessage") == tokens.OWNER]
             if len(managed) == 1 and managed[0] == expected:
                 hook_events.append(event)
+        native_root = plugin_support.plugin_root()
+        if native_root and plugin_support.owner_matches(native_root, root)[0] and not plugin_support.hook_sources(root):
+            definitions = tokens.read_json(native_root / "hooks/hooks.json").get("hooks", {})
+            hook_events = [event for event in tokens.EVENTS if event in definitions]
         needs = needs or set(hook_events) != set(tokens.EVENTS)
     add(5, "token_accounting", {"mode": token_mode, "scope": accounting_scope, "collection": collection, "current_hook_events": hook_events}, fresh or needs,
         "是否统计主 Agent / SubAgent 的实际 Token 用量和完成状态？可选择自动 hooks、手动采集或关闭；统计不改变路由结果。")

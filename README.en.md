@@ -6,11 +6,17 @@
 
 **Agent Router** is a cost-first SubAgent routing Skill for Codex. It can choose **Luna / Sol / Astra + reasoning effort** per task, plan a whole workload, run independent Workers concurrently, calibrate routing from verified outcomes, and optionally track main/child token usage.
 
-Current stable release: [**v2.8.2**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+Current stable release: [**v2.8.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.8.2 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
+> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.8.3 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 
 [Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Using with @Visualize](#using-with-visualize) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
+
+## Native plugin distribution (2.8.3)
+
+Each Release includes the existing `router-*` complete packages plus platform-matched `router-plugin-*` local marketplace packages. The same Core, profiles, private Python and historical ledger semantics are shared. Installing a plugin grants neither routing permission nor hook trust and does not enable collection by itself.
+
+Read [plugin installation, migration and rollback](skills/codex-luna-subagent-router/references/plugin-install.md). `plugin_control inspect` is read-only; activation needs explicit mode/setup/native-install/quiescence review. Packaging and synthetic hook smoke are release-gated. **Actual Desktop marketplace loading, enablement and trust still require field acceptance.** Keep using the complete package when migration is unnecessary.
 
 ## Capabilities
 
@@ -48,11 +54,11 @@ The Router does not switch the user's Lead model. It decides whether to delegate
 You can paste this into Codex:
 
 ```text
-Install or upgrade Agent Router (Skill ID: `$codex-luna-subagent-router`) to stable v2.8.2:
-https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2
+Install or upgrade Agent Router (Skill ID: `$codex-luna-subagent-router`) to stable v2.8.3:
+https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3
 
 Detect the operating system and CPU architecture first, then download the matching
-router-2.8.2-<platform> complete package and checksum files.
+router-2.8.3-<platform> complete package and checksum files.
 Do not substitute GitHub's automatic Source code.zip/.tar.gz archive.
 
 Verify SHA256, run the bundled doctor --verify, then check whether Agent Router is
@@ -78,14 +84,14 @@ do not grant trust automatically.
 
 #### 2.1 Download the correct platform package
 
-From the [v2.8.2 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2), download:
+From the [v2.8.3 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3), download:
 
 | OS | CPU | Complete package |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.8.2-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.8.2-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.8.2-windows-x64.zip` |
-| Windows | ARM64 | `router-2.8.2-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.8.3-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.8.3-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.8.3-windows-x64.zip` |
+| Windows | ARM64 | `router-2.8.3-windows-arm64.zip` |
 
 Each complete package has an adjacent `.sha256`, and the Release also contains `SHA256SUMS`.
 

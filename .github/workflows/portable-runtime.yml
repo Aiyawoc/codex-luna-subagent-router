@@ -57,6 +57,20 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: python tools/smoke_portable.py --target ${{ matrix.target }}
+      - name: Build native plugin from the verified complete package
+        env:
+          PYTHONUTF8: '1'
+        run: python tools/build_plugin.py --target ${{ matrix.target }}
+      - name: Verify plugin migration, inactive hooks, rollback and identical Core
+        env:
+          PYTHONUTF8: '1'
+        run: python tools/smoke_plugin.py --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-plugin-${{ matrix.target }}
+          path: dist-plugin/*
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: portable-${{ matrix.target }}

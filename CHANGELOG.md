@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.8.3: Native plugin distribution (2026-10-03)
+
+- 新增四平台本地 marketplace 插件包 `router-plugin-*`，与 `router-*` 完整包复用同一份 Core、profiles、账本语义及私有 Python；不新增 MCP 服务、常驻进程或第二套 Router。
+- 插件默认不接管委派或 Token 统计。迁移前必须确认 upgrade/fresh、已通过 Host 原生安装和六项配置审查，并结束活跃任务；插件安装、长期授权和 hooks 信任相互独立。
+- 新增 `plugin_control inspect/activate/deactivate/rollback`：完整性校验后备份旧 Skill，仅移除当前层 Router 托管 hooks，刷新托管 profiles；历史账本与用户配置不被迁移重写。支持哈希防覆盖回退，保留原始迁移备份。
+- 原生 hooks 检查当前 root/fingerprint/作用域和旧 hooks/Skill 冲突；冲突时跳过本插件采集。off/manual 保持不采集，失败不阻断 Stop，不产生第二份账本。
+- Release 同时校验并发布四个完整包、四个插件包和全部 SHA256。原生 Host 的 marketplace 可见性、实际加载和信任审查仍需本机验收；自动化合成事件测试不冒充实机通过。原完整包持续可用。
+- 2.8.2 Sol 努力档位与所有既有权限/成本/Native authority 边界保持不变；仅在需要时另发 2.8.4，2.9 的专项重构未提前纳入。
+
 ## 2.8.2: Sol effort expansion (2026-10-03)
 
 - 新增 `sol_medium` / `sol_max` profiles，精确模型仍为 `gpt-6.1-sol`。支持集合与默认自动候选、失败升级链分离。

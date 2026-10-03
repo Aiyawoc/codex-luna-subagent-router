@@ -69,7 +69,12 @@ jobs:
           pattern: portable-*
           path: packages
           merge-multiple: true
-      - name: Check all four archives and their hashes before publication
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-plugin-*
+          path: packages
+          merge-multiple: true
+      - name: Check all four complete packages and four plugin packages before publication
         shell: python
         env:
           VERSION: ${{ needs.authorize.outputs.version }}
@@ -77,8 +82,9 @@ jobs:
           import hashlib, os
           from pathlib import Path
           root = Path('packages')
-          names = [f"router-{os.environ['VERSION']}-{target}.{ext}" for target, ext in
-                   [('windows-x64','zip'),('windows-arm64','zip'),('macos-x64','tar.gz'),('macos-arm64','tar.gz')]]
+          names = [f"{prefix}-{os.environ['VERSION']}-{target}.{ext}"
+                   for prefix in ('router', 'router-plugin')
+                   for target, ext in [('windows-x64','zip'),('windows-arm64','zip'),('macos-x64','tar.gz'),('macos-arm64','tar.gz')]]
           assert {p.name for p in root.iterdir()} == set(names + [n+'.sha256' for n in names])
           lines = []
           for name in names:
@@ -104,6 +110,6 @@ jobs:
             echo 'Tag already exists; refusing to move it.' >&2
             exit 1
           fi
-          gh release create "$TAG" --target "$TARGET" --title "$TAG" --draft --notes "Complete platform packages with pinned private CPython. See CHANGELOG.md and the portable-runtime guide."
+          gh release create "$TAG" --target "$TARGET" --title "$TAG" --draft --notes "Complete platform packages and opt-in local-marketplace plugin packages, sharing pinned private CPython and one Router Core. Plugin packaging and synthetic migration/hooks are tested; actual Host loading/trust still needs field acceptance. See CHANGELOG.md and references/plugin-install.md."
           gh release upload "$TAG" packages/*
           gh release edit "$TAG" --draft=false

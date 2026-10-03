@@ -121,6 +121,11 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
         raise ConfigurationError("confirm UserPromptSubmit/Stop/SubagentStart/SubagentStop support before --install-hooks")
     routing_path = Path(routing_path)
     hooks_path = routing_path.parent.parent / "hooks.json"
+    import plugin_support
+    native_plugin = plugin_support.plugin_root(Path(script).parent.parent if script else Path(__file__).resolve().parents[1])
+    if native_plugin and not dry_run:
+        if not plugin_support.owner_matches(native_plugin, project_root)[0] or plugin_support.hook_sources(project_root):
+            raise ConfigurationError("activate the reviewed plugin migration before applying native token settings; legacy hooks must be backed up first")
     # Hold one config transaction lock to serialize this helper; never alter trust storage.
     with store.locked(routing_path, timeout=0.4) if not dry_run else _noop():
         data = read_json(routing_path)
@@ -152,8 +157,11 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
             target = Path(script or Path(__file__).with_name("token_usage.py")).absolute()
             if not target.is_file():
                 raise ConfigurationError("installed token_usage.py is missing")
-            handler = hook_handler(target, project_root=project_root)
-        merged = merge_hooks(existing, handler)
+            if native_plugin is None:
+                handler = hook_handler(target, project_root=project_root)
+            # Native plugin definitions are packaged and reviewed by the Host.
+            # Do not also install a second user/project handler for the same events.
+        merged = existing if native_plugin else merge_hooks(existing, handler)
         if merged != existing:
             writes.append((hooks_path, merged))
         originals = {p: p.read_bytes() if p.exists() else None for p, _ in writes}

@@ -1,0 +1,16 @@
+{
+  "name": "agent-router",
+  "version": "@VERSION@",
+  "description": "Cost-aware Codex routing with explicit installation, guarded Sol efforts and optional native accounting hooks.",
+  "author": {"name": "Aiyawoc", "url": "https://github.com/Aiyawoc"},
+  "repository": "https://github.com/Aiyawoc/codex-luna-subagent-router",
+  "license": "MIT",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Agent Router",
+    "shortDescription": "Guarded model routing and optional token accounting",
+    "category": "Productivity",
+    "developerName": "Aiyawoc"
+  }
+}
