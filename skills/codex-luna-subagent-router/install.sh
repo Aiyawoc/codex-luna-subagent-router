@@ -141,7 +141,7 @@ echo "Installed/updated Skill: $DEST_SKILL"
 echo "Installed version: $INSTALLED_VERSION"
 echo "Refreshed cost-aware profiles:"
 echo "  Luna:  luna-{low,medium,high,xhigh,max}.toml"
-echo "  Sol:   sol-{high,xhigh}.toml"
+echo "  Sol:   sol-{medium,high,xhigh,max}.toml"
 echo "  Astra: astra-{high,xhigh,max}.toml"
 echo "Retired managed profiles: terra-{medium,high}.toml"
 echo

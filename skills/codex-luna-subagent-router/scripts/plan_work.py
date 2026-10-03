@@ -59,7 +59,7 @@ def conflict(a, b):
     return any(overlap(x, y) for x in a["write_paths"] for y in b["write_paths"] + b["read_paths"]) or any(overlap(x, y) for x in b["write_paths"] for y in a["read_paths"])
 
 
-def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope, routing_mode="adaptive", max_workers=3, open_workers=0, project_root=None, runtime_health="healthy"):
+def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope, routing_mode="adaptive", max_workers=3, open_workers=0, project_root=None, runtime_health="healthy", sol_medium_supported=False):
     if not isinstance(payload, dict) or set(payload) - {"version", "tasks", "completed_task_ids", "in_progress_task_ids"} or payload.get("version") != 1:
         raise advisor.AdvisorError("plan requires version=1 and a task list")
     tasks = payload.get("tasks")
@@ -184,7 +184,8 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
 
     for tid, t in by_id.items():
         rec = advisor.recommend(task_family=t["task_family"], axes=t["axes"], lead_model=lead_model, lead_effort=lead_effort,
-                                calibration=calibration if routing_mode == "adaptive" else "off", registry=registry, scope=scope)
+                                calibration=calibration if routing_mode == "adaptive" else "off", registry=registry, scope=scope,
+                                sol_medium_supported=sol_medium_supported is True and routing_mode == "adaptive" and not t.get("independent_review"))
         retained = t.get("retain_reason")
         decision, reason = rec["decision"], rec["selection_reason"]
         trigger = rec.get("delegation_trigger")

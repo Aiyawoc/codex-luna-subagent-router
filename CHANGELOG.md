@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.8.2: Sol effort expansion (2026-10-03)
+
+- 新增 `sol_medium` / `sol_max` profiles，精确模型仍为 `gpt-6.1-sol`。支持集合与默认自动候选、失败升级链分离。
+- 默认 high/xhigh 路由不变；只有当前 Host medium 支持已验证时，`--sol-medium-supported` 才为原本需要 Sol 的 bounded/verifiable/medium-depth 局部设计启用 medium。独立复核、深度/高风险/高上下文任务不降档。
+- max 仅显式用户指定；不进入自动校准、重试链或替代 Astra 最低能力。新档位 RoutePlan 要求当前 Host effort 证据，不支持时不静默回退。
+- 保留旧高档 profiles、用户配置和历史精确 effort 记录。插件独立在 2.8.3；其余路线见 docs/v2.8-release-roadmap.md。
+
 ## 2.8.1 — Guided install flow（2026-10-03）
 
 - 安装引导新增独立 Preflight：先只读检测目标位置是否已有 Agent Router；检测到旧安装时必须先选择 `upgrade` 或 `fresh`，未选择时安装器拒绝覆盖。

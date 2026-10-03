@@ -81,3 +81,7 @@ OpenAI Model Guidance 建议针对工作流明确何时、多少工作委派，A
 ## 已完成 Worker 的条件复用
 
 Completed Worker 不是默认垃圾，也不是永久占位。若同一工作流/模块继续小范围工作、实际模型/强度已知且满足最低能力、无需独立复核，可通过运行时 follow-up 入口复用；新的 task_id 和验收仍必须明确。不同模型、无关任务、真正独立复核或身份未知时使用 fresh Worker。复用仅统计本轮增量，不重新计入旧生命周期 token。
+
+## Sol efforts since 2.8.2
+
+`plan --sol-medium-supported` is an explicit attestation of current Host model/effort support, not a probe. Without it, existing high/xhigh choices remain. Independent review never lowers to automatic medium. When emitting RoutePlan for new Sol medium/max, copy the six `axes` and attach `host_effort_verified=true` plus a concise non-sensitive `host_effort_evidence` reference to the observed Host metadata. max additionally requires an explicit user override and cannot satisfy an Astra minimum. See routing-policy.md.

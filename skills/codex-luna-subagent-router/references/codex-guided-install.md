@@ -191,7 +191,7 @@ Decision Engine 不新增强制安装问题，缺失始终等价于 off。Agents
   --open-workers 0 --runtime-health unknown
 ```
 
-stats 默认全部 scope；query 保留精确 family/六轴查询。详情：outcome-collection.md、work-planning.md。Luna 五档、Sol high/xhigh、Astra high/xhigh/max profiles 不变，RoutePlan 2.1 不变。
+stats 默认全部 scope；query 保留精确 family/六轴查询。详情：outcome-collection.md、work-planning.md。Luna 五档、Sol medium/high/xhigh/max、Astra high/xhigh/max profiles 不变，RoutePlan 2.1 不变。
 
 升级后本地包验收：
 

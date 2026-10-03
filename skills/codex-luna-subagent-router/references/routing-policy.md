@@ -26,7 +26,7 @@ Lead 提供非敏感 task_family 和 task_kind/task_scope/reasoning_depth/verifi
 
 luna_only 自动 Worker 只允许 gpt-6-luna，low/medium/high/xhigh/max 选最低足够；Luna 不足交回 Lead。
 
-adaptive 自动候选仅 gpt-6-luna / gpt-6.1-sol / gpt-6-astra。已安装 profiles：Luna 五档、Sol high/xhigh、Astra high/xhigh/max。gpt-6-sol 仅作为 v2.7 历史 outcome/usage/Lead identity 读取兼容，不参与新的自动 Worker 路由或校准。
+adaptive 自动候选仅 gpt-6-luna / gpt-6.1-sol / gpt-6-astra。已安装 profiles：Luna 五档、Sol medium/high/xhigh/max、Astra high/xhigh/max。gpt-6-sol 仅作为 v2.7 历史 outcome/usage/Lead identity 读取兼容，不参与新的自动 Worker 路由或校准。
 
 旧 `gpt-5.6` alias 不用于自动 installed profile / RoutePlan / spawn。未预装组合只有 live spawn 精确支持 model+effort 才允许；不能验证时 lead_only，不静默继承。用户本轮明确覆盖可记录，但不能越过平台/权限边界。
 
@@ -45,7 +45,7 @@ Luna max → Sol low
 Sol max  → Astra low
 ```
 
-当前 Sol/Astra bundled profiles 从 high 起满足下限。
+Sol 从 medium、Astra 从 high 起满足下限。新增 Sol medium/max 必须有当前 Host 精确档位证据。
 
 ## 校准与采集
 
@@ -64,3 +64,17 @@ B：同 scope/六轴/policy，>=5 个唯一回执、>=2 个 family，仅安全�
 继续使用 RoutePlan 2.1：Lead model/effort、Worker minimum_capability、upward gap reason；允许附 calibration_basis。由 Advisor 最终最低能力生成计划。
 
 每波最多 min(3, Codex 显式上限)，扣除仍打开线程。所有独立 ready Worker 先创建再 wait；依赖和重叠写入/读写冲突分波。生命周期与最小 packet 公共规则仍生效。
+
+## v2.8.2 Sol effort boundary
+
+Sol medium/high/xhigh/max 为支持集合，不等于自动候选。默认 high/xhigh 策略不变。
+只有已确认当前 Host 支持 Sol medium 后，才能传 `--sol-medium-supported` 给 recommend/plan。
+medium 自动范围仅限原策略已需要 Sol 的局部设计：architecture/bounded/medium/yes、
+非 high failure_cost、非 high context，且不能承担 independent review。不把 Luna-sufficient 任务升级。
+深度 debug、race、lifecycle 和 Astra 级任务不降档。没有 Host 证据时保留原路线，不能伪称已验证。
+
+Sol max 只接受用户明确指定；不进入失败升级链、默认校准或自动降档候选。
+RoutePlan 对新两档要求 `host_effort_verified=true` 和非敏感 `host_effort_evidence`；
+max 还要求既有 user_model_override/override_source=user/override_reason。
+自动 medium 需要同样六轴 `axes`，minimum_capability=astra 不允许被新 Sol 档位覆盖。
+安装 profile 不代表真实 Host 已接受；拒绝时如实报告，不静默切换模型/effort。

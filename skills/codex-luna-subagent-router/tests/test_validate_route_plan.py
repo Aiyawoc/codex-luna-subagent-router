@@ -169,7 +169,7 @@ class RoutePlanValidationTests(unittest.TestCase):
         plan = self.plan()
         worker = plan["workers"][1]
         worker["model"] = "gpt-6.1-sol"
-        worker["reasoning_effort"] = "max"
+        worker["reasoning_effort"] = "low"
         self.assertInvalidContains(plan, "no installed cost-aware profile")
         worker["route_binding"] = "live_spawn"
         worker["agent_profile"] = None

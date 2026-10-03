@@ -11,6 +11,11 @@ from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+import sol_policy
+
 SUPPORTED_SCHEMA_VERSIONS = ("2.0", "2.1")
 ALLOWED_ROUTING_MODES = ("luna_only", "adaptive")
 ALLOWED_LEVELS = ("low", "medium", "high", "xhigh", "max")
@@ -54,6 +59,8 @@ PROFILE_BY_ROUTE = {
     ("gpt-6-luna", "max"): "luna_max",
     ("gpt-5.6-terra", "medium"): "terra_medium",
     ("gpt-5.6-terra", "high"): "terra_high",
+    ("gpt-6.1-sol", "medium"): "sol_medium",
+    ("gpt-6.1-sol", "max"): "sol_max",
     ("gpt-6.1-sol", "high"): "sol_high",
     ("gpt-6.1-sol", "xhigh"): "sol_xhigh",
     ("gpt-6-astra", "high"): "astra_high",
@@ -367,6 +374,17 @@ def validate_plan(data: Any) -> list[str]:
                         errors.append(
                             f"{path}.capability_gap_reason: required when minimum_capability exceeds Lead capability"
                         )
+
+        if isinstance(model, str) and isinstance(effort, str) and (model, effort) in sol_policy.NEW_PAIRS:
+            if worker.get("host_effort_verified") is not True or not _is_nonempty_string(worker.get("host_effort_evidence")):
+                errors.append(f"{path}.host_effort_verified: new Sol efforts need current Host model/effort evidence; no silent fallback")
+            if effort == "max" and not override:
+                errors.append(f"{path}.user_model_override: Sol max requires an explicit user request")
+            if effort == "medium" and not override:
+                if not sol_policy.medium_eligible(worker.get("axes")) or worker.get("independent_review") is True:
+                    errors.append(f"{path}.axes: automatic Sol medium requires bounded verifiable medium-depth design, not independent review")
+            if minimum_capability == "astra":
+                errors.append(f"{path}.model: Sol effort cannot replace minimum_capability=astra even with an override")
 
         binding = worker.get("route_binding")
         if binding not in ALLOWED_ROUTE_BINDINGS:

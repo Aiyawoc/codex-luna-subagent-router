@@ -16,6 +16,7 @@ SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import outcome_store as store
+import sol_policy
 
 POLICY_VERSION = store.POLICY_VERSION
 ROUTER_VERSION = store.ROUTER_VERSION
@@ -171,9 +172,13 @@ def _can_cross_tier_downshift(axes):
     return axes["failure_cost"] != "high" and axes["verifiability"] == "yes" and axes["task_kind"] != "architecture"
 
 
-def apply_history(base, axes, records, pooled_records=None):
+def apply_history(base, axes, records, pooled_records=None, *, sol_medium_supported=False):
     result = dict(base)
     base_key = (base["model"], base["effort"])
+    pairs = sol_policy.automatic_pairs(store.PAIRS, axes, medium_supported=sol_medium_supported)
+    if base_key not in pairs:
+        raise AdvisorError("route is not an automatic candidate for this workload/Host")
+    base_index = pairs.index(base_key)
     def failed(rows):
         return {(r.get("model"), r.get("effort")) for r in rows if r.get("identity_verified") is True and r.get("outcome") == "verified_fail"}
     exact_failures = failed(records)
@@ -182,14 +187,14 @@ def apply_history(base, axes, records, pooled_records=None):
     result["avoid_combos"] = sorted(f"{m} / {e}" for m, e in failures)
     # Only an exact-family failure escalates; related-family failures merely veto reuse.
     if base_key in exact_failures:
-        for m, e, _, _ in ROUTES[ROUTE_INDEX[base_key] + 1:]:
+        for m, e in pairs[base_index + 1:]:
             if (m, e) not in failures:
                 result.update(_route(m, e), history_rule="verified-failure-escalation", history_basis=f"verified failure for {base_key[0]} / {base_key[1]}")
                 return result
         result.update(decision="lead_only", history_rule="verified-failure-exhausted", history_basis="verified failures exhausted the bundled escalation chain")
         return result
     passes = Counter((r.get("model"), r.get("effort")) for r in records if r.get("identity_verified") is True and r.get("outcome") == "verified_pass")
-    for key in store.PAIRS[:ROUTE_INDEX[base_key]]:
+    for key in pairs[:base_index]:
         cross = TIER_BY_MODEL[key[0]] != TIER_BY_MODEL[base_key[0]]
         required = 3 if cross else 2
         if key not in failures and passes[key] >= required and (not cross or _can_cross_tier_downshift(axes)):
@@ -203,7 +208,7 @@ def apply_history(base, axes, records, pooled_records=None):
             rows = [r for r in pooled if (r.get("model"), r.get("effort")) == key and r.get("outcome") == "verified_pass" and r.get("identity_verified") is True and r.get("receipt_id")]
             ids = {r["receipt_id"] for r in rows}
             families = {r["task_family"] for r in rows}
-            if key in ROUTE_INDEX and key not in failures and len(ids) >= 5 and len(families) >= 2:
+            if key in pairs and key not in failures and len(ids) >= 5 and len(families) >= 2:
                 result.update(_route(*key), history_rule="axes-history-effort-downshift", history_basis=f"{len(ids)} distinct verified receipts across {len(families)} families; same-model one-step effort reduction")
                 return result
     result.update(history_rule="no-history-override", history_basis="no conservative verified-history override")
@@ -242,12 +247,14 @@ def _decide_dispatch(rec, axes, lead_model, lead_effort):
     return "lead_only", "same-tier delegation benefit is too small", None
 
 
-def recommend(*, task_family, axes, lead_model, lead_effort, calibration, registry, scope, now=None):
+def recommend(*, task_family, axes, lead_model, lead_effort, calibration, registry, scope, now=None, sol_medium_supported=False):
     _validate_family(task_family)
     _validate_axes(axes)
     if calibration not in CALIBRATION_MODES or lead_effort not in LEAD_EFFORTS:
         raise AdvisorError("invalid calibration or lead effort")
     base, rule = classify_static(axes)
+    if sol_medium_supported is True and sol_policy.medium_eligible(axes) and (base["model"], base["effort"]) == (sol_policy.SOL_MODEL, "high"):
+        base, rule = _route(sol_policy.SOL_MODEL, "medium"), "verified-host-bounded-sol-medium"
     result = dict(base, task_family=task_family, axes=dict(axes), static_rule=rule,
                   static_model=base["model"], static_effort=base["effort"], static_minimum_capability=base["minimum_capability"],
                   policy_version=POLICY_VERSION, router_version=ROUTER_VERSION, calibration=calibration, scope_id=scope)
@@ -255,7 +262,7 @@ def recommend(*, task_family, axes, lead_model, lead_effort, calibration, regist
         rows, diagnostics = store.read_records(registry)
         pool = _eligible_records(rows, scope, axes, now=now)
         exact = [r for r in pool if r["task_family"] == task_family]
-        result = apply_history(result, axes, exact, pool)
+        result = apply_history(result, axes, exact, pool, sol_medium_supported=sol_medium_supported)
         result["registry_diagnostics"] = diagnostics
     else:
         result.update(history_rule="calibration-off", history_basis="verified outcome calibration is disabled", avoid_combos=[])
@@ -295,7 +302,9 @@ def stats(path, scope=None, now=None):
         for m, e in sorted({(r["model"], r["effort"]) for r in items}):
             passes = sum(r["outcome"] == "verified_pass" and r["identity_verified"] for r in items if (r["model"], r["effort"]) == (m, e))
             cross = m != base["model"]
-            eligible = ROUTE_INDEX[m, e] < ROUTE_INDEX[base["model"], base["effort"]] and (not cross or _can_cross_tier_downshift(axes))
+            eligible = ((m, e) in sol_policy.automatic_pairs(store.PAIRS, axes)
+                        and ROUTE_INDEX[m, e] < ROUTE_INDEX[base["model"], base["effort"]]
+                        and (not cross or _can_cross_tier_downshift(axes)))
             failed = any(r["outcome"] == "verified_fail" and r["identity_verified"] and (r["model"], r["effort"]) == (m, e) for r in pooled)
             thresholds.append(dict(scope_id=sid, task_family=family, axes=axes, model=m, effort=e, verified_passes=passes,
                                    eligible_cheaper_candidate=eligible and not failed, remaining_passes=max(0, (3 if cross else 2) - passes) if eligible and not failed else None))
@@ -334,6 +343,7 @@ def _parser():
             sub.add_argument("--lead-model", required=True)
             sub.add_argument("--lead-effort", choices=LEAD_EFFORTS, required=True)
             sub.add_argument("--calibration", choices=CALIBRATION_MODES)
+            sub.add_argument("--sol-medium-supported", action="store_true", help="Attest current Host exact Sol medium support; profiles/API docs alone are not proof.")
         if name in ("record", "begin"):
             sub.add_argument("--model", required=True)
             sub.add_argument("--effort", choices=ROUTE_EFFORTS, required=True)
@@ -363,6 +373,7 @@ def _parser():
     sub.add_argument("--lead-model", required=True)
     sub.add_argument("--lead-effort", choices=LEAD_EFFORTS, required=True)
     sub.add_argument("--calibration", choices=CALIBRATION_MODES)
+    sub.add_argument("--sol-medium-supported", action="store_true", help="Attest current Host exact Sol medium support.")
     sub.add_argument("--max-workers", type=int, default=3)
     sub.add_argument("--open-workers", type=int, required=True, help="Current materialized PendingInit/Running Worker count only; spawn acknowledgements and completed historical agents do not count.")
     sub.add_argument("--runtime-health", choices=("unknown", "healthy", "degraded"), default="unknown",
@@ -396,7 +407,7 @@ def main(argv=None):
         if args.command == "recommend":
             if config.get("routing_mode") != "adaptive":
                 raise AdvisorError("effective routing mode is not adaptive; use the Luna-only policy")
-            output = recommend(task_family=args.task_family, axes=_axes_from_args(args), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope)
+            output = recommend(task_family=args.task_family, axes=_axes_from_args(args), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, sol_medium_supported=args.sol_medium_supported)
         elif args.command in ("begin", "record"):
             data = dict(scope_id=scope, task_family=args.task_family, axes=_axes_from_args(args), model=args.model, effort=args.effort, route_binding=args.route_binding)
             if args.command == "begin":
@@ -432,7 +443,7 @@ def main(argv=None):
             output = query_records(path, scope=scope, task_family=args.task_family, axes=_axes_from_args(args))
         elif args.command == "plan":
             from plan_work import plan_work
-            output = plan_work(json.loads(args.request.read_text(encoding="utf-8")), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root, runtime_health=args.runtime_health)
+            output = plan_work(json.loads(args.request.read_text(encoding="utf-8")), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root, runtime_health=args.runtime_health, sol_medium_supported=args.sol_medium_supported)
             _record_planning_observation(output, path, scope, root)
         else:
             output = stats(path, scope)

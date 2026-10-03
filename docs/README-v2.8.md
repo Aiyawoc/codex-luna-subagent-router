@@ -114,7 +114,7 @@ Decision Shadow remains optional, fail-open and non-authoritative.
 gpt-6-luna → gpt-6.1-sol → gpt-6-astra
 ```
 
-Sol keeps `high / xhigh` effort profiles. The profile names remain `sol_high` and `sol_xhigh`; only the runtime model ID changes.
+Sol supports `medium / high / xhigh / max` profiles as of 2.8.2. Existing high/xhigh defaults remain; medium is narrowly Host-gated and max explicit-user-only. See references/routing-policy.md.
 
 ## Post-Stable authority gates
 
