@@ -1,0 +1,160 @@
+diff --git a/docs/v2.8.3-stable-acceptance.md b/docs/v2.8.3-stable-acceptance.md
+new file mode 100644
+index 0000000..5359db9
+--- /dev/null
++++ b/docs/v2.8.3-stable-acceptance.md
+@@ -0,0 +1,76 @@
++# v2.8.3 Native Plugin Distribution
++
++Date: 2026-10-03. Baseline release: v2.8.2,
++`e7e73aa86b46013863047807cc7db70074fe8844`.
++
++## Release boundary
++
++This release adds opt-in local-marketplace plugin distribution without replacing
++the existing complete packages. Both distributions contain the same Router Core,
++profiles and pinned private Python. It is not a public Plugins Directory listing,
++a new remote MCP service, or an assertion of universal Host compatibility.
++
++The plugin manifest and four native hook definitions follow the current public
++plugin/hooks contract. A guarded wrapper resolves the one bundled Core and
++requires explicit, conflict-free ownership before applying its routing skill.
++
++## Migration and safety
++
++- No collection before explicit native-install/setup/quiescence review.
++- Upgrade/fresh must be chosen; fresh does not silently clear history or choices.
++- One owner per effective scope; pinned plugin cache root and package fingerprint.
++- The old complete Skill is moved to a hidden sibling backup, not left as a second
++  active instruction source.
++- Only the selected Router-owned hooks and profiles are changed. Config, AGENTS
++  user/authorization content and canonical ledgers are not rewritten by migration.
++- Inline/other-layer hooks and remaining global legacy Skill conflicts block
++  project migration. Native hooks skip collection if a legacy source reappears.
++- Plugin and complete-package installers cannot silently activate a second source.
++- Off/manual collection is preserved. Runtime failures do not block Stop.
++- Deactivate disarms native collection. Rollback requires normal Host disablement
++  review and exact expected managed-file hashes; later user edits are not clobbered.
++- Transaction backups stay local and private. Existing ledger locations remain the
++  only accounting source; PLUGIN_DATA is not a second usage database.
++- The installed package remains immutable and rejects Serena/indexer extra files.
++
++## Automated acceptance
++
++Local source validation: 517 tests pass, including 29 plugin regression tests.
++The complete source suite covers the old routing/accounting tests plus plugin
++identity/layout, first install, conflicts, migration, upgrade, deactivation,
++rollback, failure recovery, read-only inventory and scope separation.
++
++The final exact release commit must pass the source manifest and Router Arena,
++then build and smoke both complete and plugin packages on macOS ARM64/x64 and
++Windows ARM64/x64. Plugin smoke executes the actual private Python from a
++Unicode/space cache path with no system Python on PATH, migrates a disposable
++complete install, checks inert hooks, feeds synthetic SubagentStart events twice,
++verifies idempotent collection, deactivates and restores the original package,
++profiles and hook bytes. All such events remain isolated to temporary homes.
++
++Release publication requires eight archives, eight matching SHA256 files and a
++combined SHA256SUMS, all built for the same reviewed commit/version.
++
++## Explicitly not yet proven by these tests
++
++Actual Desktop plugin directory visibility, Host cache placement, enable/disable
++and hook trust UI require field acceptance on the user's Host. Synthetic event
++execution and archive checks do not establish those facts. Diagnostics therefore
++report `host_loaded=unverified` and never self-grant trust. Keep the existing
++complete-package installation unless explicitly testing plugin migration.
++
++The inherited v2.8.2 Sol medium/max Host-attestation requirement is unchanged.
++The v2.8 historical same-session interrupted-Worker evidence limitation remains
++documented; this release does not claim to have reproduced it. Native authority,
++Cost Review and Decision Shadow remain non-authoritative.
++
++## Local field acceptance
++
++Follow `skills/codex-luna-subagent-router/references/plugin-install.md` using the
++actual installed plugin cache root. Start with `doctor --verify` and
++`plugin_control inspect --verify --json`; collect baseline configuration/ledger
++hashes before migration. Stop active turns, review six setup choices and native
++hook trust, activate explicitly, then restart the Host. Confirm one Skill entry,
++one event handler source, preserved configuration, natural Worker completion and
++no duplicate usage before claiming Host integration PASS. Deactivate and rollback
++must preserve history and refuse to overwrite post-migration user edits.
+diff --git a/plugin/manifest.json b/plugin/manifest.json
+new file mode 100644
+index 0000000..f2192f7
+--- /dev/null
++++ b/plugin/manifest.json
+@@ -0,0 +1,16 @@
++{
++  "name": "agent-router",
++  "version": "@VERSION@",
++  "description": "Cost-aware Codex routing with explicit installation, guarded Sol efforts and optional native accounting hooks.",
++  "author": {"name": "Aiyawoc", "url": "https://github.com/Aiyawoc"},
++  "repository": "https://github.com/Aiyawoc/codex-luna-subagent-router",
++  "license": "MIT",
++  "skills": "./skills/",
++  "hooks": "./hooks/hooks.json",
++  "interface": {
++    "displayName": "Agent Router",
++    "shortDescription": "Guarded model routing and optional token accounting",
++    "category": "Productivity",
++    "developerName": "Aiyawoc"
++  }
++}
+diff --git a/plugin/skills/codex-luna-subagent-router/SKILL.md b/plugin/skills/codex-luna-subagent-router/SKILL.md
+new file mode 100644
+index 0000000..894bbb4
+--- /dev/null
++++ b/plugin/skills/codex-luna-subagent-router/SKILL.md
+@@ -0,0 +1,32 @@
++---
++name: codex-luna-subagent-router
++description: Use Agent Router for explicit installation/migration or cost-aware Luna/Sol/Astra SubAgent routing in a locally enabled Codex plugin. Preserve the Lead model and user authorization.
++---
++
++# Agent Router plugin entry
++
++This is a distribution wrapper, not a second routing implementation.
++
++Resolve the plugin root from this installed skill file (two parent directories
++above its skill folder). The identical Router Core lives at
++`<plugin-root>/core/codex-luna-subagent-router`, not inside this wrapper folder.
++Resolve all subsequent Core instructions, references and commands relative to
++that Core root. Never infer the plugin root from the user's working directory.
++
++Before routing, run the Core `bin/router plugin_control inspect --current-scope
++--json` (`bin/router.cmd` on Windows). If `active` is not true, perform only
++explicitly requested setup/migration using the Core reference
++`references/plugin-install.md`; do not create Workers, configure hooks, or
++activate the plugin merely because it was loaded. A failed inspection is not
++permission to bypass this gate. Show conflicts without dumping private config.
++
++When ownership is active and conflict-free, read the Core `SKILL.md` and follow
++it. The user's existing scope, long-term authorization, routing mode, model and
++effort restrictions remain authoritative. Plugin enablement does not grant
++delegation authorization, turn accounting on, or trust hooks.
++
++Native hooks are optional and default inert until explicit migration/setup.
++Never run the Core complete-package installer while plugin ownership is active;
++use the documented deactivate/rollback path first. Never index the immutable
++plugin or Core with Serena or other tools that write project metadata. Use a
++source checkout for code navigation.
+diff --git a/skills/codex-luna-subagent-router/VERSION b/skills/codex-luna-subagent-router/VERSION
+index 1817afe..9f8d8a9 100644
+--- a/skills/codex-luna-subagent-router/VERSION
++++ b/skills/codex-luna-subagent-router/VERSION
+@@ -1 +1 @@
+-2.8.2
++2.8.3
+diff --git a/skills/codex-luna-subagent-router/references/codex-guided-install.md b/skills/codex-luna-subagent-router/references/codex-guided-install.md
+index d6de07b..e30df73 100644
+--- a/skills/codex-luna-subagent-router/references/codex-guided-install.md
++++ b/skills/codex-luna-subagent-router/references/codex-guided-install.md
+@@ -234 +234,6 @@ cat VERSION
+ - `bin/router report` 的“执行规划”只汇总脱敏计数；Decision Shadow 关闭时对应记录为 0，不影响 Core。
++
++## Native plugin distribution since 2.8.3
++
++For an explicitly requested native plugin install/migration, first follow `plugin-install.md`.
++The six questions and existing choices stay unchanged. Plugin ownership is separate from Host enablement and hook trust. Do not invoke the standalone installer from an active plugin or maintain a duplicate Skill/hook source. The native plugin uses the same Core helpers and external canonical ledgers.
