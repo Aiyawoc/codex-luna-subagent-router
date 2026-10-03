@@ -1,0 +1,70 @@
+name: Publish reviewed 2.8.3 source
+on:
+  push:
+    branches: [release-transfer/v2.8.3]
+    paths: [.github/workflows/publish-reviewed-283.yml]
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: reviewed-283-publish
+  cancel-in-progress: false
+jobs:
+  verify-and-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: transfer
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: e7e73aa86b46013863047807cc7db70074fe8844
+          path: candidate
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply reviewed patch and verify the entire tested tree
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = e7e73aa86b46013863047807cc7db70074fe8844
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          chunks = sorted(Path('../transfer/.release-patches/283').glob('[0-9][0-9].patch'))
+          assert [p.name for p in chunks] == [f'{i:02}.patch' for i in range(8)]
+          raw = b''.join(p.read_bytes() for p in chunks)
+          assert hashlib.sha256(raw).hexdigest() == '32455e694ac0485cf74332e39ff8e437e7b767e3ff4f69791862947755ffc9c3'
+          Path('../reviewed.patch').write_bytes(raw)
+          PY
+          git apply --index ../reviewed.patch
+          python - <<'PY'
+          import hashlib, subprocess
+          from pathlib import Path
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          Path('MANIFEST.sha256').write_text(''.join(hashlib.sha256(Path(p).read_bytes()).hexdigest()+'  '+p+'\n' for p in sorted(paths) if p and p != 'MANIFEST.sha256'))
+          PY
+          git add MANIFEST.sha256
+          test "$(git write-tree)" = 484cc466fb47a82e22ea7169eae87675bc7d8f2b
+          git diff --cached --check
+          python tools/verify_manifest.py
+          python -m unittest discover -s skills/codex-luna-subagent-router/tests -q
+          python benchmarks/router_arena.py route-audit
+      - name: Fast-forward the reviewed source and dispatch protected release
+        working-directory: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = e7e73aa86b46013863047807cc7db70074fe8844
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: add guarded native plugin distribution for v2.8.3'
+          TARGET=$(git rev-parse HEAD)
+          git push origin HEAD:refs/heads/main
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f commit_sha="$TARGET" -f confirmation=publish-v2.8.3
+          echo "Reviewed source commit: $TARGET" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Publication requires all four complete-package and plugin build/smoke jobs.' >> "$GITHUB_STEP_SUMMARY"
