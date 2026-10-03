@@ -1,0 +1,356 @@
+diff --git a/skills/codex-luna-subagent-router/tests/test_plugin_distribution.py b/skills/codex-luna-subagent-router/tests/test_plugin_distribution.py
+new file mode 100644
+index 0000000..3a5bee8
+--- /dev/null
++++ b/skills/codex-luna-subagent-router/tests/test_plugin_distribution.py
+@@ -0,0 +1,350 @@
++from __future__ import annotations
++
++import copy
++import json
++import os
++import shutil
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT / "scripts"))
++import configure_token_accounting as tokens
++import install_bundle
++import plugin_control as control
++import plugin_hook
++import plugin_support as ps
++import runtime_support as runtime
++
++
++def write_json(path, value):
++    path.parent.mkdir(parents=True, exist_ok=True)
++    path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
++
++
++def seal_core(core):
++    write_json(core / "PACKAGE-MANIFEST.json", {
++        "schema_version": 1, "skill_version": runtime.skill_version(core),
++        "files": runtime.package_inventory(core),
++    })
++
++
++def seal_plugin(root):
++    write_json(root / ps.PLUGIN_MANIFEST, {
++        "schema_version": 1, "version": runtime.skill_version(root / "core" / ps.CORE_NAME),
++        "files": ps.inventory(root),
++    })
++
++
++class PluginDistributionTests(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        self.base = Path(self.tmp.name).resolve()
++        self.home = self.base / "home"
++        self.home.mkdir()
++        self.legacy = self.base / "legacy" / ps.CORE_NAME
++        self.root = self.base / "plugin cache 中文"
++        self.core = self.root / "core" / ps.CORE_NAME
++        self.core.mkdir(parents=True)
++        (self.core / "VERSION").write_text("2.8.3\n")
++        (self.core / "SKILL.md").write_text("Fixture Core, not a real installed Host.")
++        shutil.copytree(ROOT / "assets/codex-agents", self.core / "assets/codex-agents")
++        seal_core(self.core)
++        write_json(self.root / ".codex-plugin/plugin.json", {
++            "name": ps.PLUGIN_NAME, "version": "2.8.3", "skills": "./skills/", "hooks": "./hooks/hooks.json",
++        })
++        write_json(self.root / "hooks/hooks.json", {
++            "hooks": {event: [{"hooks": [{"type": "command", "command": "fixture-only"}]}] for event in tokens.EVENTS},
++        })
++        wrapper = self.root / "skills" / ps.CORE_NAME / "SKILL.md"
++        wrapper.parent.mkdir(parents=True)
++        wrapper.write_text("Fixture wrapper, not a Host load test.")
++        seal_plugin(self.root)
++        self.env = patch.dict(os.environ, {
++            "CODEX_HOME": str(self.home), "CODEX_SKILLS_DIR": str(self.legacy.parent),
++            "CODEX_AGENTS_DIR": str(self.home / "agents"), "PLUGIN_ROOT": str(self.root),
++        })
++        self.env.start()
++        self.addCleanup(self.env.stop)
++        self.routing = self.home / ps.CORE_NAME / "routing.json"
++        write_json(self.routing, dict(schema_version="2.1", routing_mode="adaptive", evidence_calibration="off",
++                                     token_accounting="on", token_accounting_collection="hooks",
++                                     token_accounting_scope="main_and_subagents"))
++        self.ledger = self.home / "state" / ps.CORE_NAME / "usage.jsonl"
++        self.ledger.parent.mkdir(parents=True)
++        self.ledger.write_text("preserve historical bytes\n")
++        self.saved_routing = self.routing.read_bytes()
++
++    def legacy_install(self):
++        shutil.copytree(self.core, self.legacy)
++        write_json(self.home / "hooks.json", {"hooks": {
++            "Stop": [{"hooks": [dict(type="command", command="legacy fixture", statusMessage=tokens.OWNER),
++                                  dict(type="command", command="user keep")] }],
++        }})
++        (self.home / "AGENTS.md").write_text("Keep user authorization as-is.\n")
++
++    def activate(self, **kwargs):
++        params = dict(install_mode="fresh", confirm=True, host_installed_reviewed=True,
++                      setup_reviewed=True, quiescent=True)
++        params.update(kwargs)
++        return control.activate(self.root, **params)
++
++    def payload(self):
++        return dict(hook_event_name="SubagentStart", cwd=str(self.base), session_id="fixture-parent",
++                    agent_id="fixture-child", prompt="PRIVATE DO NOT PERSIST")
++
++    def dispatch(self):
++        with patch.object(ps, "plugin_root", return_value=self.root), patch.object(plugin_hook.store, "resolve_scope", return_value=("global", None)):
++            return plugin_hook.dispatch(self.payload())
++
++    def test_verify_layout_and_core_bytes(self):
++        result = ps.verify_plugin(self.root)
++        self.assertEqual(result["status"], "ok")
++        self.assertEqual(result["host_loaded"], "unverified")
++        self.assertEqual(result["hook_trust"], "review_required")
++
++    def test_extra_index_files_fail_integrity(self):
++        (self.root / ".serena").mkdir()
++        (self.root / ".serena/project.yml").write_text("unwanted")
++        with self.assertRaisesRegex(ValueError, "integrity mismatch"):
++            ps.verify_plugin(self.root)
++
++    def test_escaping_component_path_is_rejected(self):
++        meta = self.root / ".codex-plugin/plugin.json"
++        value = json.loads(meta.read_text()); value["hooks"] = "../../outside"
++        write_json(meta, value); seal_plugin(self.root)
++        with self.assertRaisesRegex(ValueError, "component paths"):
++            ps.verify_plugin(self.root)
++
++    def test_inspect_is_read_only_and_does_not_claim_host_loaded(self):
++        before = {p.relative_to(self.home).as_posix(): p.read_bytes() for p in self.home.rglob("*") if p.is_file()}
++        result = control.inspect(self.root, verify=True)
++        after = {p.relative_to(self.home).as_posix(): p.read_bytes() for p in self.home.rglob("*") if p.is_file()}
++        self.assertEqual(before, after)
++        self.assertFalse(result["active"])
++        self.assertEqual(result["host_loaded"], "unverified")
++
++    def test_activation_requires_all_explicit_reviews(self):
++        for key in ("confirm", "host_installed_reviewed", "setup_reviewed", "quiescent"):
++            with self.subTest(key=key), self.assertRaises(ValueError):
++                self.activate(**{key: False})
++        self.assertFalse(ps.owner_path().exists())
++
++    def test_missing_install_mode_or_absent_upgrade_target_rejected(self):
++        for mode in (None, "upgrade"):
++            with self.assertRaises(ValueError):
++                self.activate(install_mode=mode)
++
++    def test_migration_moves_legacy_preserves_config_and_other_hooks(self):
++        self.legacy_install()
++        result = self.activate(install_mode="upgrade")
++        self.assertEqual(result["status"], "activated")
++        self.assertFalse(self.legacy.exists())
++        self.assertEqual(self.routing.read_bytes(), self.saved_routing)
++        self.assertEqual(self.ledger.read_text(), "preserve historical bytes\n")
++        self.assertEqual((self.home / "AGENTS.md").read_text(), "Keep user authorization as-is.\n")
++        hooks = tokens.read_json(self.home / "hooks.json")
++        self.assertEqual(ps.owned_hook_count(hooks), 0)
++        self.assertIn("user keep", json.dumps(hooks))
++        self.assertTrue(control.inspect(self.root)["active"])
++        self.assertEqual(len(list((self.home / "agents").glob("*.toml"))), 12)
++
++    def test_fresh_does_not_turn_off_into_on(self):
++        value = tokens.read_json(self.routing); value["token_accounting"] = "off"
++        write_json(self.routing, value)
++        before = self.routing.read_bytes()
++        self.activate()
++        self.assertEqual(self.routing.read_bytes(), before)
++        with patch.object(plugin_hook.token_usage, "hook") as collect:
++            self.assertEqual(self.dispatch(), {})
++            collect.assert_not_called()
++
++    def test_native_hook_is_inert_before_activation(self):
++        before = self.ledger.read_bytes()
++        with patch.object(plugin_hook.token_usage, "hook") as collect:
++            self.assertEqual(self.dispatch(), {})
++            collect.assert_not_called()
++        self.assertEqual(self.ledger.read_bytes(), before)
++
++    def test_native_hook_dispatches_only_to_existing_core(self):
++        self.activate()
++        with patch.object(plugin_hook.token_usage, "hook", return_value={}) as collect:
++            self.assertEqual(self.dispatch(), {})
++            collect.assert_called_once_with(self.payload(), project_root=None)
++
++    def test_manual_accounting_disables_native_collection(self):
++        self.activate()
++        value = tokens.read_json(self.routing); value["token_accounting_collection"] = "manual"
++        write_json(self.routing, value)
++        with patch.object(plugin_hook.token_usage, "hook") as collect:
++            self.assertEqual(self.dispatch(), {})
++            collect.assert_not_called()
++
++    def test_duplicate_legacy_hooks_suppress_plugin_collection(self):
++        self.activate()
++        write_json(self.home / "hooks.json", {"hooks": {"Stop": [{"hooks": [{"statusMessage": tokens.OWNER, "type": "command", "command": "another"}]}]}})
++        with patch.object(plugin_hook.token_usage, "hook") as collect:
++            self.assertIn("another accounting", self.dispatch()["systemMessage"])
++            collect.assert_not_called()
++
++    def test_same_package_second_root_cannot_become_another_owner(self):
++        self.activate()
++        with patch.dict(os.environ, {"PLUGIN_ROOT": str(self.base / "different-plugin")}):
++            with patch.object(plugin_hook.token_usage, "hook") as collect:
++                self.assertIn("root mismatch", self.dispatch()["systemMessage"])
++                collect.assert_not_called()
++
++    def test_inline_owned_hooks_block_migration(self):
++        (self.home / "config.toml").write_text('[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype="command"\ncommand="old"\nstatusMessage="'+tokens.OWNER+'"\n')
++        with self.assertRaisesRegex(ValueError, "inline"):
++            self.activate()
++
++    def test_project_migration_cannot_remove_global_hooks(self):
++        self.legacy_install()
++        project = self.base / "project"; project.mkdir()
++        with self.assertRaisesRegex(ValueError, "another/inline"):
++            self.activate(project=project)
++        self.assertTrue(self.legacy.exists())
++
++    def test_idempotent_activation_does_not_add_backup_or_rewrite_state(self):
++        self.activate()
++        before = ps.owner_path().read_bytes()
++        count = len(list(ps.owner_path().parent.rglob("transaction.json")))
++        result = self.activate(install_mode="upgrade")
++        self.assertEqual(result["status"], "unchanged")
++        self.assertEqual(ps.owner_path().read_bytes(), before)
++        self.assertEqual(len(list(ps.owner_path().parent.rglob("transaction.json"))), count)
++
++    def test_plugin_upgrade_keeps_original_migration_backup(self):
++        self.legacy_install(); self.activate(install_mode="upgrade")
++        txid = ps.read_owner()["transaction_id"]
++        other = self.base / "new cache"
++        shutil.copytree(self.root, other)
++        core = other / "core" / ps.CORE_NAME
++        (core / "VERSION").write_text("2.8.4\n"); seal_core(core)
++        meta = tokens.read_json(other / ".codex-plugin/plugin.json"); meta["version"] = "2.8.4"
++        write_json(other / ".codex-plugin/plugin.json", meta); seal_plugin(other)
++        control.activate(other, install_mode="upgrade", confirm=True, host_installed_reviewed=True, setup_reviewed=True, quiescent=True)
++        self.assertEqual(ps.read_owner()["transaction_id"], txid)
++        self.assertEqual(ps.read_owner()["version"], "2.8.4")
++        self.assertEqual(self.ledger.read_text(), "preserve historical bytes\n")
++
++    def test_deactivate_prevents_all_hook_writes(self):
++        self.activate()
++        control.deactivate(confirm=True, quiescent=True)
++        with patch.object(plugin_hook.token_usage, "hook") as collect:
++            self.assertEqual(self.dispatch(), {})
++            collect.assert_not_called()
++        self.assertFalse(control.inspect(self.root)["active"])
++
++    def test_rollback_restores_legacy_profiles_and_exact_hooks(self):
++        self.legacy_install()
++        hooks_before = (self.home / "hooks.json").read_bytes()
++        self.activate(install_mode="upgrade")
++        result = control.rollback(confirm=True, quiescent=True, host_disabled_reviewed=True)
++        self.assertEqual(result["status"], "rolled_back")
++        self.assertTrue(self.legacy.exists())
++        runtime.verify_package(self.legacy)
++        self.assertEqual((self.home / "hooks.json").read_bytes(), hooks_before)
++        self.assertEqual(self.routing.read_bytes(), self.saved_routing)
++        self.assertFalse(ps.owner_path().exists())
++        self.assertEqual(len(list((self.home / "agents").glob("*.toml"))), 0)
++
++    def test_rollback_refuses_to_overwrite_later_user_edits(self):
++        self.legacy_install(); self.activate(install_mode="upgrade")
++        target = self.home / "hooks.json"
++        target.write_text('{"user_added":"keep"}')
++        with self.assertRaisesRegex(ValueError, "overwrite changes"):
++            control.rollback(confirm=True, quiescent=True, host_disabled_reviewed=True)
++        self.assertEqual(target.read_text(), '{"user_added":"keep"}')
++        self.assertFalse(self.legacy.exists())
++
++    def test_failure_during_activation_restores_previous_package(self):
++        self.legacy_install()
++        hooks_before = (self.home / "hooks.json").read_bytes()
++        real = control._write
++        def fail_profile(path, content):
++            if path.name == "sol-high.toml":
++                raise OSError("fixture failure")
++            return real(path, content)
++        with patch.object(control, "_write", side_effect=fail_profile):
++            with self.assertRaises(OSError):
++                self.activate(install_mode="upgrade")
++        self.assertTrue(self.legacy.exists())
++        self.assertEqual((self.home / "hooks.json").read_bytes(), hooks_before)
++        self.assertFalse(ps.owner_path().exists())
++
++    def test_complete_installer_refuses_parallel_plugin_ownership(self):
++        self.activate()
++        with patch.object(install_bundle, "install") as install:
++            self.assertEqual(install_bundle.main(["--global", "--install-mode", "fresh"]), 2)
++            install.assert_not_called()
++
++    def test_plugin_configuration_does_not_create_user_hook_duplicates(self):
++        self.activate()
++        with patch.object(ps, "plugin_root", return_value=self.root):
++            tokens.configure(self.routing, "on", install_hooks=True, hooks_supported=True)
++        self.assertEqual(ps.owned_hook_count(tokens.read_json(self.home / "hooks.json")), 0)
++        self.assertEqual(tokens.read_json(self.routing)["token_accounting_collection"], "hooks")
++
++    def test_native_token_setup_before_migration_cannot_remove_legacy_hooks(self):
++        self.legacy_install()
++        before = (self.home / "hooks.json").read_bytes()
++        config_before = self.routing.read_bytes()
++        with patch.object(ps, "plugin_root", return_value=self.root):
++            with self.assertRaisesRegex(ValueError, "migration before applying"):
++                tokens.configure(self.routing, "on", install_hooks=True, hooks_supported=True)
++        self.assertEqual((self.home / "hooks.json").read_bytes(), before)
++        self.assertEqual(self.routing.read_bytes(), config_before)
++
++    def test_tampered_manifest_invalidates_owner_without_guessing(self):
++        self.activate()
++        (self.root / ps.PLUGIN_MANIFEST).write_text("{}")
++        with patch.object(plugin_hook.token_usage, "hook") as collect:
++            self.assertEqual(self.dispatch(), {})
++            collect.assert_not_called()
++
++    def test_non_git_project_owner_is_resolved_from_current_ancestors(self):
++        project = self.base / "nongit"; project.mkdir()
++        self.activate(project=project)
++        child = project / "src"; child.mkdir()
++        with __import__("contextlib").chdir(child):
++            self.assertEqual(ps.current_project(), project)
++
++    def test_plugin_nested_in_legacy_destination_is_rejected(self):
++        nested = self.legacy / "nested-plugin"
++        nested.parent.mkdir(parents=True)
++        shutil.copytree(self.root, nested)
++        with self.assertRaisesRegex(ValueError, "contain each other"):
++            control.activate(nested, install_mode="fresh", confirm=True, host_installed_reviewed=True,
++                             setup_reviewed=True, quiescent=True)
++
++    def test_legacy_default_location_remains_pinned_after_directory_moved(self):
++        self.legacy = self.home / "skills" / ps.CORE_NAME
++        self.legacy_install()
++        with patch.dict(os.environ, {"CODEX_SKILLS_DIR": ""}), patch.object(Path, "home", return_value=self.base / "user-home"):
++            self.activate(install_mode="upgrade")
++            self.assertFalse(self.legacy.exists())
++            # Discovery no longer finds the old directory, but rollback must.
++            self.assertEqual(self.activate(install_mode="upgrade")["status"], "unchanged")
++            control.rollback(confirm=True, quiescent=True, host_disabled_reviewed=True)
++            self.assertTrue(self.legacy.exists())
++
++    def test_journal_cannot_redirect_rollback_to_an_unrelated_directory(self):
++        self.activate()
++        owner = ps.read_owner()
++        path = control._journal_path(None, owner["transaction_id"])
++        value = tokens.read_json(path)
++        value["legacy_destination"] = str(self.base / "unrelated")
++        write_json(path, value)
++        with self.assertRaisesRegex(ValueError, "supported installation locations"):
++            control.rollback(confirm=True, quiescent=True, host_disabled_reviewed=True)
++        self.assertFalse((self.base / "unrelated").exists())
++
++
++if __name__ == "__main__":
++    unittest.main()
