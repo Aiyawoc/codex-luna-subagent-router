@@ -541,26 +541,36 @@ class MainTurnTests(Sandbox):
 
 
 class UpgradeTests(Sandbox):
+    def setUp(self):
+        super().setUp()
+        self.skills_dir=self.home/'skills'
+        installed=self.skills_dir/'codex-luna-subagent-router'
+        installed.mkdir(parents=True)
+        (installed/'VERSION').write_text('2.8.0\n')
+
+    def inventory(self):
+        return setup.inspect(self.home,install_mode='upgrade',skills_dir=self.skills_dir)
+
     def test_missing_options_are_questions_not_off(self):
         self.rpath.write_text(json.dumps(dict(schema_version='2.0',routing_mode='adaptive')))
-        result=setup.inspect(self.home)
-        self.assertIn(5,result['pending_questions']);self.assertIn(6,result['pending_questions'])
+        result=self.inventory()
+        self.assertIn(4,result['pending_questions']);self.assertIn(5,result['pending_questions'])
         self.assertEqual(len(result['questions']),6)
 
     def test_explicit_off_preserved(self):
         self.rpath.write_text(json.dumps(dict(schema_version='2.0',routing_mode='adaptive',token_accounting='off',evidence_calibration='off')))
-        before=self.rpath.read_bytes();result=setup.inspect(self.home)
-        self.assertNotIn(5,result['pending_questions']);self.assertNotIn(6,result['pending_questions'])
+        before=self.rpath.read_bytes();result=self.inventory()
+        self.assertNotIn(4,result['pending_questions']);self.assertNotIn(5,result['pending_questions'])
         self.assertEqual(before,self.rpath.read_bytes())
 
-    def test_old_subagent_on_asks_same_sixth_question_for_expansion(self):
-        self.assertIn(6,setup.inspect(self.home)['pending_questions'])
-        q=setup.inspect(self.home)['questions'][5]
-        self.assertIn('主 Agent',q['question']);self.assertIn('SubagentStop',q['question'])
+    def test_old_subagent_on_asks_same_fifth_question_for_expansion(self):
+        self.assertIn(5,self.inventory()['pending_questions'])
+        q=self.inventory()['questions'][4]
+        self.assertIn('主 Agent',q['question']);self.assertIn('SubAgent',q['question'])
 
     def test_manual_opt_in_is_remembered_without_forcing_hooks(self):
         config.configure(self.rpath,'on')
-        self.assertNotIn(6,setup.inspect(self.home)['pending_questions'])
+        self.assertNotIn(5,self.inventory()['pending_questions'])
         self.assertFalse((self.home/'hooks.json').exists())
 
     def test_four_handlers_merged_idempotently(self):
@@ -570,16 +580,16 @@ class UpgradeTests(Sandbox):
         data=json.loads((self.home/'hooks.json').read_text());self.assertEqual(len(data['hooks']['Stop']),2)
         self.assertNotIn('matcher',data['hooks']['Stop'][-1])
         for e in config.EVENTS:self.assertEqual(sum(h.get('statusMessage')==config.OWNER for g in data['hooks'][e] for h in g['hooks']),1)
-        self.assertNotIn(6,setup.inspect(self.home)['pending_questions'])
+        self.assertNotIn(5,self.inventory()['pending_questions'])
 
     def test_old_version_or_missing_stop_requires_upgrade_question(self):
         config.configure(self.rpath,'on',install_hooks=True,hooks_supported=True)
         h=self.home/'hooks.json';data=json.loads(h.read_text());data['hooks'].pop('Stop');h.write_text(json.dumps(data))
-        self.assertIn(6,setup.inspect(self.home)['pending_questions'])
+        self.assertIn(5,self.inventory()['pending_questions'])
 
     def test_luna_only_calibration_not_applicable_but_token_question_remains(self):
         self.rpath.write_text(json.dumps(dict(schema_version='2.0',routing_mode='luna_only')))
-        r=setup.inspect(self.home);self.assertNotIn(5,r['pending_questions']);self.assertIn(6,r['pending_questions'])
+        r=self.inventory();self.assertNotIn(4,r['pending_questions']);self.assertIn(5,r['pending_questions'])
 
     def test_inventory_does_not_write(self):
         empty_home=self.home/'other';result=setup.inspect(empty_home)
@@ -596,8 +606,9 @@ class ReleaseContractTests(unittest.TestCase):
         text=(SCRIPTS.parent/'install.sh').read_text()
         self.assertIn('"$CODEX_ROUTER_PYTHON" "$DEST_SKILL/scripts/inspect_guided_install.py"',text)
         guide=(SCRIPTS.parent/'references/codex-guided-install.md').read_text()
-        self.assertIn('pending_questions',guide)
-        self.assertIn('不开第 7 个统计问题',guide)
+        self.assertIn('升级安装',guide)
+        self.assertIn('全新安装',guide)
+        self.assertIn('--install-mode upgrade',guide)
 
     def test_user_numeric_fixture_preserves_known_total_and_warnings(self):
         def snap(i,c,o,r):

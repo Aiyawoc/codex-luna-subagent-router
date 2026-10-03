@@ -40,7 +40,7 @@ def run_helper(skill, command, *args):
     subprocess.run([str(python), *FLAGS, str(skill / 'scripts/runtime_dispatch.py'), command, *args], check=True)
 
 
-def install(source, destination, agents):
+def install(source, destination, agents, install_mode='upgrade'):
     source, destination, agents = map(lambda p: Path(p).absolute(), (source, destination, agents))
     validate_runtime(source)
     bundled = (source / 'runtime/runtime.json').exists()
@@ -99,9 +99,10 @@ def install(source, destination, agents):
         for name in ('terra-medium.toml', 'terra-high.toml'):
             (agents / name).unlink(missing_ok=True)
         return {'installed': str(destination), 'version': (destination / 'VERSION').read_text().strip(),
+                'install_mode': install_mode,
                 'runtime': 'bundled' if bundled else 'source-development',
                 'previous_package': str(backup) if moved_old else None,
-                'hooks': 'unchanged; review question 6 to migrate the interpreter command',
+                'hooks': 'unchanged; review question 5 to migrate the interpreter command',
                 'user_config_and_ledgers': 'unchanged'}
     except Exception:
         if moved_new:
@@ -125,13 +126,35 @@ def main(argv=None):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--global', dest='global_install', action='store_true')
     group.add_argument('--project')
+    parser.add_argument(
+        '--install-mode',
+        choices=('upgrade', 'fresh'),
+        help='Required when an existing installation is detected: upgrade preserves explicit choices; fresh re-runs the full guided configuration.',
+    )
     args = parser.parse_args(argv)
     try:
         dest, agents = destinations(args.project)
-        result = install(ROOT, dest, agents)
+        existed = dest.exists()
+        if existed and args.install_mode is None:
+            print(
+                'ERROR: existing Agent Router installation detected. '
+                'Choose --install-mode upgrade or --install-mode fresh before replacing it.',
+                file=sys.stderr,
+            )
+            return 2
+        if not existed and args.install_mode == 'upgrade':
+            print(
+                'ERROR: --install-mode upgrade requires an existing installation at the selected target. '
+                'Use --install-mode fresh for a new installation.',
+                file=sys.stderr,
+            )
+            return 2
+        install_mode = args.install_mode or 'fresh'
+        result = install(ROOT, dest, agents, install_mode=install_mode)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         print('Read references/codex-guided-install.md and answer pending choices; hooks still need review.')
         extra = ['--project-root', str(Path(args.project).resolve())] if args.project else []
+        extra += ['--install-mode', install_mode]
         try:
             run_helper(dest, 'inspect_guided_install', *extra)
         except subprocess.CalledProcessError:

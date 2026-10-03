@@ -74,8 +74,8 @@ def main():
         (home/'hooks.json').write_text('{"hooks":{}}')
         ledger=home/'state/codex-luna-subagent-router/usage.jsonl';ledger.parent.mkdir(parents=True,exist_ok=True)
         ledger.write_text('historical-data-must-not-change\n')
-        for _ in range(2):
-            execute([*launcher(root),'install','--global'],project,env)
+        execute([*launcher(root),'install','--global','--install-mode','fresh'],project,env)
+        execute([*launcher(root),'install','--global','--install-mode','upgrade'],project,env)
         installed=base/'installed skills/codex-luna-subagent-router'
         assert rpath.read_bytes()==saved and ledger.read_text()=='historical-data-must-not-change\n'
         assert (home/'hooks.json').read_text()=='{"hooks":{}}'

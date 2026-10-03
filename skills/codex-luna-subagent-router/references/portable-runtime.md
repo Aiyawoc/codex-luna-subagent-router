@@ -11,8 +11,9 @@ Windows x64/ARM64：CPython 3.13.15 官方 embeddable；macOS x64/ARM64：python
 1. 识别宿主系统与 CPU，选择完整平台包。不把 WSL Linux 当作原生 Windows；不提供 Linux 便携包。
 2. 从指定正式 Release（或用户明确选择的 PR 产物）取完整包和对应 SHA256。用 macOS `shasum -a 256` 或 PowerShell `Get-FileHash -Algorithm SHA256` 对照摘要后再解压。摘要证明下载一致性，不代替可信发布源或代码签名。
 3. 解压到已安装 Skill 目录之外。运行 `bin/router doctor --verify`；Windows 用 `bin/router.cmd doctor --verify` 或 `bin/router.ps1`。没有 Python 的机器也可启动。
-4. macOS：`bash ./install.sh --global`；Windows：`./install.ps1 --global`。项目安装改为 `--project <项目>`。不自动绕过 PowerShell 执行策略；受组织策略限制时使用 `bin/router.cmd install --global` 或向管理员确认。
-5. 安装器输出实际 `installed` 路径。按该路径运行盘点并继续六项引导，不把文件复制成功当作配置/信任完成。
+4. 先运行 `bin/router inspect_guided_install --json` 检查目标位置是否已经安装 Router。检测到旧安装时，必须先选择 `upgrade`（保留并迁移已有明确选择）或 `fresh`（重装完整包并重新走 6 项引导；不自动删除历史账本）。
+5. macOS：`bash ./install.sh --global --install-mode upgrade`；Windows：`./install.ps1 --global --install-mode upgrade`。首次安装可使用 `fresh`；项目安装改为 `--project <项目>`。不自动绕过 PowerShell 执行策略；受组织策略限制时使用 `bin/router.cmd install --global --install-mode upgrade` 或向管理员确认。
+6. 安装器输出实际 `installed` 路径。按该路径继续六项引导，不把文件复制成功当作配置/信任完成。
 
 现有 `$CODEX_SKILLS_DIR` 与 `$CODEX_AGENTS_DIR` 覆盖保留。默认全局新装用 `~/.agents/skills`；只有旧 `$CODEX_HOME/skills` 存在时复用旧路径。两处同时安装时拒绝猜测，要求明确指定路径。项目包仍使用 `<项目>/.agents/skills`。
 
@@ -35,7 +36,7 @@ ROUTER="/实际安装目录/codex-luna-subagent-router/bin/router"
 
 所有自动 hooks 指向安装目录内的私有解释器，并经统一 `runtime_dispatch.py token_usage` 入口执行。启用 `-I -S -B -X utf8`，隔离 PYTHONHOME、PYTHONPATH 和用户 site-packages，避免旧解释器/同名模块污染；保留 CODEX_HOME 等显式用户配置。
 
-更新包不会自动写 hooks.json 或信任库。旧 hook 版本/路径在第 6 项重新盘点；用户同意后重新生成四项定义，并由客户端正常审查信任。明确 off 保留，不因为升级自动开启；手动采集继续可用。
+更新包不会自动写 hooks.json 或信任库。旧 hook 版本/路径在第 5 项重新盘点；用户同意后重新生成四项定义，并由客户端正常审查信任。明确 off 保留，不因为升级自动开启；手动采集继续可用。
 
 安装前校验全包，暂存后复核，随后更换 Skill 目录和托管 profiles。失败回滚；Windows 文件正在使用导致更换失败时应报告，不杀掉 Agent。保留旧包于同级 `.codex-luna-subagent-router.previous-*`，确认升级后由用户自行删除。旧包回滚也需检查 hook 命令/版本并重新审查，不恢复或删除统计账本。
 

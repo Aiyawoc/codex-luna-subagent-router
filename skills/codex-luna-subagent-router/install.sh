@@ -4,10 +4,15 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  ./install.sh --global
-  ./install.sh --project /path/to/repository
+  ./install.sh --global [--install-mode upgrade|fresh]
+  ./install.sh --project /path/to/repository [--install-mode upgrade|fresh]
 
-The script installs or upgrades the complete Skill package and overwrites every
+If an existing installation is detected, choose upgrade or fresh before
+replacement. Upgrade preserves/migrates existing explicit configuration.
+Fresh replaces the complete package and re-runs the full guided choices, but
+does not silently delete external Router ledgers or unrelated user files.
+
+The script installs the complete Skill package and overwrites every
 cost-aware custom-agent profile bundled by this release.
 
 When upgrading from any older version, rerun this installer from the new
@@ -33,6 +38,7 @@ fi
 # Retained source-development installer; never selected by complete packages.
 MODE="global"
 PROJECT=""
+INSTALL_MODE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --global)
@@ -43,6 +49,12 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { usage; exit 2; }
       MODE="project"
       PROJECT="$2"
+      shift 2
+      ;;
+    --install-mode)
+      [[ $# -ge 2 ]] || { usage; exit 2; }
+      [[ "$2" == "upgrade" || "$2" == "fresh" ]] || { echo "Invalid install mode: $2" >&2; usage; exit 2; }
+      INSTALL_MODE="$2"
       shift 2
       ;;
     -h|--help)
@@ -69,6 +81,17 @@ else
 fi
 
 DEST_SKILL="$SKILLS_BASE/codex-luna-subagent-router"
+if [[ -d "$DEST_SKILL" && -z "$INSTALL_MODE" ]]; then
+  echo "ERROR: existing Agent Router installation detected. Choose --install-mode upgrade or --install-mode fresh." >&2
+  exit 2
+fi
+if [[ ! -d "$DEST_SKILL" && "$INSTALL_MODE" == "upgrade" ]]; then
+  echo "ERROR: --install-mode upgrade requires an existing installation at the selected target. Use fresh for a new installation." >&2
+  exit 2
+fi
+if [[ -z "$INSTALL_MODE" ]]; then
+  INSTALL_MODE="fresh"
+fi
 mkdir -p "$SKILLS_BASE" "$AGENTS_BASE"
 
 "$CODEX_ROUTER_PYTHON" - "$SOURCE_DIR" "$DEST_SKILL" <<'PY'
@@ -128,14 +151,15 @@ echo "  Do not retain an older SKILL.md/reference/script/profile beside newer pa
 echo "  User-managed config.toml, unrelated AGENTS.md content, and routing choices are migrated separately."
 echo
 echo "Next steps:"
-echo "1. Ask Codex to follow $DEST_SKILL/references/codex-guided-install.md."
-echo "2. Choose standing delegation authorization: global / project / none."
-echo "3. Choose routing mode:"
+echo "0. Install mode: $INSTALL_MODE."
+echo "1. Choose standing delegation authorization: global / project / none."
+echo "2. Choose routing mode:"
 echo "   - luna_only: maximum economy and cost predictability; automatic Workers use Luna only."
 echo "   - adaptive: deterministic Advisor chooses the cheapest sufficient Luna/Sol/Astra route with capability-gap checks."
-echo "4. Choose the maximum concurrently open SubAgents (excluding the primary): keep current/Codex default, 3 recommended, or another integer >= 1. Q4 is Host-first; external codex-cli is optional diagnostics."
-echo "5. For adaptive, choose verified-outcome calibration: conservative (recommended) or off."
-echo "6. Choose independent token accounting: on / off (absent means off). Main and SubAgent hooks share question 6; explicitly review new scope and hook definitions."
+echo "3. Choose the maximum concurrently open SubAgents (excluding the primary): keep current/Codex default, 3 recommended, or another integer >= 1."
+echo "4. For adaptive, choose verified-outcome calibration: conservative (recommended) or off."
+echo "5. Choose token accounting: automatic hooks / manual / off."
+echo "6. Choose Default-mode structured questions: enable or keep the current explicit setting."
 echo "Existing v1 routing tables are backed up during guided migration."
 
 echo "Outcome observability: use route_advisor.py stats; conservative tasks use begin/finalize receipts."
@@ -148,12 +172,12 @@ echo "Main-turn summaries: turn_usage.py stats; review UserPromptSubmit/Stop tog
 
 echo "Read-only guided setup inventory (pending items require explicit answers):"
 if [[ "$MODE" == "project" ]]; then
-  "$CODEX_ROUTER_PYTHON" "$DEST_SKILL/scripts/inspect_guided_install.py" --project-root "$PROJECT" || {
+  "$CODEX_ROUTER_PYTHON" "$DEST_SKILL/scripts/inspect_guided_install.py" --project-root "$PROJECT" --install-mode "$INSTALL_MODE" || {
     echo "Setup inventory failed; do not skip configuration review." >&2
     exit 2
   }
 else
-  "$CODEX_ROUTER_PYTHON" "$DEST_SKILL/scripts/inspect_guided_install.py" || {
+  "$CODEX_ROUTER_PYTHON" "$DEST_SKILL/scripts/inspect_guided_install.py" --install-mode "$INSTALL_MODE" || {
     echo "Setup inventory failed; do not skip configuration review." >&2
     exit 2
   }

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Read-only six-question setup inventory. Missing is NOT an explicit off choice."""
+"""Read-only install preflight and six-question setup inventory."""
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import tomllib
 from pathlib import Path
@@ -13,17 +14,57 @@ import configure_token_accounting as tokens
 import configure_subagent_limit as concurrency
 from configure_guided_install import _authorization_block, authorization_state
 
+NAME = "codex-luna-subagent-router"
+INSTALL_MODES = ("upgrade", "fresh")
+
 
 def _toml(path):
     store.safe_path(path)
     return tomllib.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
-def inspect(codex_home, project_root=None):
+def _installed_locations(home, root=None, skills_dir=None):
+    candidates = []
+    if root:
+        candidates.append(("project", root / ".agents" / "skills" / NAME))
+    if skills_dir:
+        candidates.append(("global", Path(skills_dir).expanduser().resolve() / NAME))
+    elif os.environ.get("CODEX_SKILLS_DIR"):
+        candidates.append(("global", Path(os.environ["CODEX_SKILLS_DIR"]).expanduser().resolve() / NAME))
+    else:
+        default_home = store.codex_home().expanduser().resolve()
+        if home == default_home:
+            candidates.append(("global", Path.home().expanduser().resolve() / ".agents" / "skills" / NAME))
+        candidates.append(("global_legacy", home / "skills" / NAME))
+    seen, result = set(), []
+    for scope, path in candidates:
+        path = path.resolve()
+        if path in seen:
+            continue
+        seen.add(path)
+        if not path.is_dir():
+            continue
+        version_path = path / "VERSION"
+        version = version_path.read_text(encoding="utf-8").strip() if version_path.is_file() else None
+        result.append({"scope": scope, "path": str(path), "version": version})
+    return result
+
+
+def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
     home = Path(codex_home).expanduser().resolve()
     root = Path(project_root).expanduser().resolve() if project_root else None
     if root and not root.is_dir():
         raise ValueError("project root must exist")
+    if install_mode is not None and install_mode not in INSTALL_MODES:
+        raise ValueError("install_mode must be upgrade or fresh")
+    detected = _installed_locations(home, root, skills_dir)
+    target_scopes = {"project"} if root else {"global", "global_legacy"}
+    installed = [item for item in detected if item["scope"] in target_scopes]
+    other_installs = [item for item in detected if item["scope"] not in target_scopes]
+    if install_mode == "upgrade" and not installed:
+        raise ValueError("upgrade requested but no existing Agent Router installation was detected")
+    requires_install_mode = bool(installed) and install_mode is None
+    effective_install_mode = install_mode or ("fresh" if not installed else None)
     config = _toml(home / "config.toml")
     local = _toml(root / ".codex/config.toml") if root else {}
     global_routing = home / "codex-luna-subagent-router/routing.json"
@@ -36,9 +77,6 @@ def inspect(codex_home, project_root=None):
         items.append(dict(number=number, key=key, current=value, needs_question=bool(missing and applicable),
                           applicable=applicable, question=question))
 
-    feature = config.get("features", {}).get("default_mode_request_user_input")
-    add(1, "default_mode_request_user_input", feature, feature is None,
-        "未设置提问模式：是否开启 default_mode_request_user_input？")
     skill_root = Path(__file__).resolve().parents[1]
     snippet = (skill_root / "references" / "AGENTS-snippet.md").read_text(encoding="utf-8")
     expected_authorization = _authorization_block(snippet)
@@ -53,13 +91,17 @@ def inspect(codex_home, project_root=None):
             elif state in ("stale", "malformed"):
                 stale_scopes.append(scope)
     current_delegation = {"current": scopes, "stale": stale_scopes} if stale_scopes else (scopes or None)
-    question = (
-        "托管长期授权内容已过期或损坏：请选择全局、项目或不安装以刷新。"
-        if stale_scopes else "未发现托管长期授权：全局、项目或不安装？"
+    fresh = effective_install_mode == "fresh"
+    delegation_question = (
+        "托管长期授权内容已过期或损坏：请选择全局、项目或不安装以刷新。此选项决定 Router 是否有权自动创建 SubAgent。"
+        if stale_scopes
+        else "是否允许 Agent Router 在满足条件时自动创建 SubAgent？选择全局允许、仅当前项目允许或关闭/不安装长期授权。"
     )
-    add(2, "delegation", current_delegation, bool(stale_scopes) or not scopes, question)
+    add(1, "delegation", current_delegation, fresh or bool(stale_scopes) or not scopes,
+        delegation_question)
     mode = routing.get("routing_mode")
-    add(3, "routing_mode", mode, mode not in ("adaptive", "luna_only"), "路由策略：luna_only（极致经济）还是 adaptive（自动能力路由）？")
+    add(2, "routing_mode", mode, fresh or mode not in ("adaptive", "luna_only"),
+        "自动 Worker 可以使用哪些模型层级？adaptive 按需在 Luna / Sol / Astra 间升降级；luna_only 把自动 Worker 限制在 Luna。")
     cap_layers = []
     for layer_name, layer in (("user", config), ("project", local)):
         info = concurrency.analyze_config(layer)
@@ -71,18 +113,20 @@ def inspect(codex_home, project_root=None):
         if item["backend_safe_without_host_probe"]
     ]
     all_caps = [item["effective_subagent_limit"] for item in cap_layers]
-    q4_current = {
+    q3_current = {
         "effective_subagent_limit": min(all_caps) if all_caps else None,
         "safe_effective_subagent_limit": min(safe_caps) if safe_caps else None,
         "layers": cap_layers,
         "cli_required": False,
     }
-    q4_missing = not cap_layers or any(not item["backend_safe_without_host_probe"] for item in cap_layers)
-    add(4, "max_subagents", q4_current, q4_missing,
-        "并发设置缺失或仅对单一旧后端明确：保持 Codex 默认、3 或自定义？优先按当前 Host/Core 能力；未知 Host 时使用 portable 配置，不要求安装 codex-cli。")
+    q3_missing = not cap_layers or any(not item["backend_safe_without_host_probe"] for item in cap_layers)
+    add(3, "max_subagents", q3_current, fresh or q3_missing,
+        "最多允许同时运行多少个 SubAgent（不含主 Agent）？选择保持 Codex 当前默认、3（推荐）或自定义 >=1。")
     calibration = routing.get("evidence_calibration")
-    add(5, "evidence_calibration", calibration, calibration not in ("off", "conservative"),
-        "未设置结果校准：是否开启 conservative？", applicable=mode != "luna_only")
+    calibration_applicable = mode != "luna_only" or fresh
+    add(4, "evidence_calibration", calibration, fresh or calibration not in ("off", "conservative"),
+        "如果路由模式为 adaptive，是否允许 Router 根据已验证历史结果保守优化未来类似任务的路由？选择 conservative（推荐）或 off；luna_only 不适用。",
+        applicable=calibration_applicable)
     token_mode = routing.get("token_accounting")
     accounting_scope = routing.get("token_accounting_scope")
     collection = routing.get("token_accounting_collection")
@@ -96,31 +140,62 @@ def inspect(codex_home, project_root=None):
             if len(managed) == 1 and managed[0] == expected:
                 hook_events.append(event)
         needs = needs or set(hook_events) != set(tokens.EVENTS)
-    add(6, "token_accounting", {"mode": token_mode, "scope": accounting_scope, "collection": collection, "current_hook_events": hook_events}, needs,
-        "是否开启/升级主 Agent 与子 Agent 的 token 统计及完成摘要？同一选择包含 UserPromptSubmit、Stop、SubagentStart、SubagentStop；支持且经审查信任后安装，或选择手动采集/关闭。")
+    add(5, "token_accounting", {"mode": token_mode, "scope": accounting_scope, "collection": collection, "current_hook_events": hook_events}, fresh or needs,
+        "是否统计主 Agent / SubAgent 的实际 Token 用量和完成状态？可选择自动 hooks、手动采集或关闭；统计不改变路由结果。")
+    feature = config.get("features", {}).get("default_mode_request_user_input")
+    add(6, "default_mode_request_user_input", feature, fresh or feature is None,
+        "是否允许 Agent 在确实需要你选择配置或范围时使用结构化交互界面提问？可开启、关闭或保持现状；这只影响交互体验，不改变路由、模型或并发。")
     execution = routing.get("execution_policy")
     if not isinstance(execution, dict):
         execution = {"prefer_local_parallel_tools": True, "materialization_gate": True, "runtime_health_lease": True, "source": "v2.7_runtime_defaults"}
     decision = routing.get("decision_engine")
     if not isinstance(decision, dict):
         decision = {"enabled": False, "mode": "shadow", "provider": "off", "source": "absent_default_off"}
-    return dict(questions=items, pending_questions=[i["number"] for i in items if i["needs_question"]],
+    pending = [] if requires_install_mode else [i["number"] for i in items if i["needs_question"]]
+    installation = {
+        "installed": bool(installed),
+        "locations": installed,
+        "other_locations": other_installs,
+        "selected_mode": effective_install_mode,
+        "requires_choice": requires_install_mode,
+        "choices": {
+            "upgrade": "升级安装：替换完整程序包，保留并迁移已有明确配置、历史账本与非 Router 用户内容；只补问缺失/过期项。",
+            "fresh": "全新安装：替换完整程序包并重新走完整 6 项引导；不会自动删除历史账本或其它用户文件，避免隐式数据清除。",
+        },
+        "question": (
+            "检测到已安装 Agent Router：请选择升级安装（保留并迁移现有选择）或全新安装（重新走完整配置引导）。"
+            if requires_install_mode else None
+        ),
+    }
+    return dict(installation=installation, questions=items, pending_questions=pending,
                 routing_source=str(rpath), read_only=True,
                 optional_features={"execution_policy": execution, "decision_engine": decision},
-                rule="Ask every applicable missing option explicitly; absent runtime defaults do not count as user answers. Preserve explicit off. Decision Engine is optional opt-in and does not add a mandatory seventh question. No changes or hook trust are applied.")
+                rule="Check installation first. If an existing installation is detected, resolve upgrade versus fresh before asking Q1-Q6. Upgrade preserves explicit choices and asks only missing/stale items; fresh re-runs the complete guided choices without silently deleting ledgers. Decision Engine stays optional and adds no mandatory seventh question. No changes or hook trust are applied.")
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--codex-home", type=Path, default=store.codex_home())
     p.add_argument("--project-root")
+    p.add_argument("--skills-dir", help="Override the global Skill directory for installation detection.")
+    p.add_argument("--install-mode", choices=INSTALL_MODES)
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
     try:
-        result = inspect(args.codex_home, args.project_root)
+        result = inspect(args.codex_home, args.project_root, args.install_mode, args.skills_dir)
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
+            installation = result["installation"]
+            if installation["installed"]:
+                for item in installation["locations"]:
+                    print(f"Detected installation: {item['path']} (version={item['version'] or 'unknown'})")
+            else:
+                print("No existing Agent Router installation detected; install mode defaults to fresh.")
+            if installation["requires_choice"]:
+                print("[需先选择] install_mode: upgrade / fresh")
+                print(installation["question"])
+                return 0
             for question in result["questions"]:
                 state = "需询问" if question["needs_question"] else "保留" if question["applicable"] else "不适用"
                 print(f"{question['number']}. [{state}] {question['key']}: {question['current']}")

@@ -87,9 +87,10 @@ def _existing_feature_value(text: str) -> bool | None:
     return value
 
 
-def merge_request_user_input_feature(existing: str) -> tuple[str, str]:
+def merge_request_user_input_feature(existing: str, enabled: bool = True) -> tuple[str, str]:
+    literal = "true" if enabled else "false"
     if not existing:
-        return f"[features]\n{REQUEST_USER_INPUT_FEATURE} = true\n", "created"
+        return f"[features]\n{REQUEST_USER_INPUT_FEATURE} = {literal}\n", "created"
 
     parsed_value = _existing_feature_value(existing)
     lines = existing.splitlines(keepends=True)
@@ -141,11 +142,11 @@ def merge_request_user_input_feature(existing: str) -> tuple[str, str]:
         current_value = parsed_value
         if current_value is None and tomllib is None:
             current_value = match.group(2) == "true"
-        if current_value is True:
+        if current_value is enabled:
             return existing, "unchanged"
-        if current_value is not False:
+        if current_value is None:
             raise ConfigurationError(f"unable to verify the boolean value of {REQUEST_USER_INPUT_FEATURE}")
-        lines[index] = f"{match.group(1)}true{match.group(3)}{match.group(4)}"
+        lines[index] = f"{match.group(1)}{literal}{match.group(3)}{match.group(4)}"
         return "".join(lines), "updated"
 
     if dotted_matches:
@@ -153,19 +154,19 @@ def merge_request_user_input_feature(existing: str) -> tuple[str, str]:
         current_value = parsed_value
         if current_value is None and tomllib is None:
             current_value = match.group(2) == "true"
-        if current_value is True:
+        if current_value is enabled:
             return existing, "unchanged"
-        if current_value is not False:
+        if current_value is None:
             raise ConfigurationError(f"unable to verify the boolean value of {REQUEST_USER_INPUT_FEATURE}")
-        lines[index] = f"{match.group(1)}true{match.group(3)}{match.group(4)}"
+        lines[index] = f"{match.group(1)}{literal}{match.group(3)}{match.group(4)}"
         return "".join(lines), "updated"
 
-    if parsed_value is True:
+    if parsed_value is enabled:
         return existing, "unchanged"
-    if parsed_value is False:
+    if parsed_value is not None:
         raise ConfigurationError(
             f"{REQUEST_USER_INPUT_FEATURE} is defined in an inline or otherwise unmanaged "
-            "features value; review it manually before enabling"
+            "features value; review it manually before changing"
         )
     if root_features_assignments:
         raise ConfigurationError(
@@ -177,20 +178,20 @@ def merge_request_user_input_feature(existing: str) -> tuple[str, str]:
         insertion = feature_section_end
         if insertion and not lines[insertion - 1].endswith(("\n", "\r")):
             lines[insertion - 1] += "\n"
-        lines.insert(insertion, f"{REQUEST_USER_INPUT_FEATURE} = true\n")
+        lines.insert(insertion, f"{REQUEST_USER_INPUT_FEATURE} = {literal}\n")
         return "".join(lines), "updated"
 
     if first_nested_feature_header is not None:
         lines[first_nested_feature_header:first_nested_feature_header] = [
             "[features]\n",
-            f"{REQUEST_USER_INPUT_FEATURE} = true\n",
+            f"{REQUEST_USER_INPUT_FEATURE} = {literal}\n",
             "\n",
         ]
         return "".join(lines), "created"
 
     separator = "" if existing.endswith(("\n", "\r")) else "\n"
     spacing = "" if existing.endswith(("\n\n", "\r\n\r\n")) else "\n"
-    return existing + separator + spacing + f"[features]\n{REQUEST_USER_INPUT_FEATURE} = true\n", "created"
+    return existing + separator + spacing + f"[features]\n{REQUEST_USER_INPUT_FEATURE} = {literal}\n", "created"
 
 
 def _default_codex_home() -> Path:
@@ -274,6 +275,38 @@ def merge_authorization(existing: str, managed_block: str) -> tuple[str, str]:
     after = existing[end:].lstrip()
     pieces = [part for part in (before, managed_block, after.rstrip()) if part]
     return "\n\n".join(pieces) + "\n", "updated"
+
+
+def remove_authorization(existing: str) -> tuple[str, str]:
+    starts = existing.count(START_MARKER)
+    ends = existing.count(END_MARKER)
+    if starts != ends or starts > 1:
+        raise ConfigurationError(
+            "AGENTS.md contains malformed or duplicate codex-luna-subagent-router markers"
+        )
+    if starts == 1 and existing.index(END_MARKER) < existing.index(START_MARKER):
+        raise ConfigurationError("AGENTS.md contains managed markers in the wrong order")
+    if starts == 1:
+        start = existing.index(START_MARKER)
+        end = existing.index(END_MARKER, start) + len(END_MARKER)
+        before = existing[:start].rstrip()
+        after = existing[end:].lstrip()
+        pieces = [part for part in (before, after.rstrip()) if part]
+        return "\n\n".join(pieces) + ("\n" if pieces else ""), "removed"
+
+    legacy = LEGACY_AUTHORIZATION_V1_0.strip()
+    legacy_count = existing.count(legacy)
+    if legacy_count > 1:
+        raise ConfigurationError("AGENTS.md contains duplicate legacy authorization blocks")
+    if legacy_count == 1:
+        merged = existing.replace(legacy, "", 1).strip()
+        return merged + ("\n" if merged else ""), "removed_legacy_v1.0"
+    if LEGACY_HEADING in existing:
+        raise ConfigurationError(
+            "AGENTS.md contains an unmarked authorization section that differs from v1.0; "
+            "review it manually before removing authorization"
+        )
+    return existing, "unchanged"
 
 
 def build_routing_config(routing_mode: str) -> dict[str, Any]:
@@ -384,8 +417,10 @@ def configure(
     replace_routing: bool = False,
     request_user_input: str = "none",
 ) -> dict[str, Any]:
-    if request_user_input not in {"enable", "none"}:
-        raise ConfigurationError("request_user_input must be either 'enable' or 'none'")
+    if request_user_input not in {"enable", "disable", "none"}:
+        raise ConfigurationError("request_user_input must be enable, disable, or none")
+    if delegation not in {"global", "project", "off", "none"}:
+        raise ConfigurationError("delegation must be global, project, off, or none")
     if routing_scope not in {"user", "project", "none"}:
         raise ConfigurationError("routing_scope must be user, project, or none")
     if routing_mode not in {*ROUTING_MODES, "none"}:
@@ -406,15 +441,17 @@ def configure(
     }
     pending_writes: list[tuple[Path, str]] = []
 
-    if request_user_input == "enable":
+    if request_user_input in {"enable", "disable"}:
         config_path = codex_home / "config.toml"
         existing_config = _read_optional_regular_file(config_path)
-        merged_config, action = merge_request_user_input_feature(existing_config or "")
+        merged_config, action = merge_request_user_input_feature(
+            existing_config or "", enabled=request_user_input == "enable"
+        )
         result["request_user_input"] = {"scope": "user", "action": action, "path": str(config_path)}
         if existing_config != merged_config:
             pending_writes.append((config_path, merged_config))
 
-    if delegation != "none":
+    if delegation in {"global", "project"}:
         agents_path = codex_home / "AGENTS.md" if delegation == "global" else project / "AGENTS.md"
         existing = _read_optional_regular_file(agents_path) or ""
         merged, action = merge_authorization(existing, _authorization_block(snippet))
@@ -423,6 +460,27 @@ def configure(
             pending_writes.append((agents_path, merged))
         else:
             result["delegation"]["action"] = "unchanged"
+    elif delegation == "off":
+        targets = [codex_home / "AGENTS.md"]
+        if project_root:
+            candidate = Path(project_root).expanduser().resolve()
+            if candidate.is_dir():
+                targets.append(candidate / "AGENTS.md")
+        changed = []
+        for agents_path in targets:
+            existing = _read_optional_regular_file(agents_path)
+            if existing is None:
+                continue
+            merged, action = remove_authorization(existing)
+            if merged != existing:
+                pending_writes.append((agents_path, merged))
+                changed.append({"path": str(agents_path), "action": action})
+        result["delegation"] = {
+            "scope": "off",
+            "action": "removed" if changed else "unchanged",
+            "path": None,
+            "targets": changed,
+        }
 
     if routing_scope != "none":
         table = build_routing_config(routing_mode)
@@ -486,9 +544,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--delegation",
-        choices=("global", "project", "none"),
+        choices=("global", "project", "off", "none"),
         required=True,
-        help="Where to install standing automatic-delegation authorization.",
+        help="Install global/project standing authorization, turn managed authorization off, or use none to leave it unchanged.",
     )
     parser.add_argument(
         "--routing-scope",
@@ -517,10 +575,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--request-user-input",
-        choices=("enable", "none"),
+        choices=("enable", "disable", "none"),
         default="none",
         help=(
-            "Enable the experimental Default-mode request_user_input feature in the user "
+            "Enable/disable the Default-mode request_user_input feature in the user "
             "config; 'none' preserves the current setting."
         ),
     )

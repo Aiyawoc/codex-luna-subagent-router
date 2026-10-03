@@ -606,7 +606,7 @@ def hook(payload, path=None, project_root=None):
             return {}
         path = path or default_usage_path()
         if event in ("UserPromptSubmit", "Stop"):
-            # The expanded scope requires explicit upgrade consent under question 6.
+            # The expanded scope requires explicit upgrade consent under question 5.
             if store.effective_config(root).get("token_accounting_scope") != "main_and_subagents":
                 return {}
             import turn_usage

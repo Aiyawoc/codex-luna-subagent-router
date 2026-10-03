@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.8.1-dev — Guided install flow（开发中）
+
+- 安装引导新增独立 Preflight：先只读检测目标位置是否已有 Agent Router；检测到旧安装时必须先选择 `upgrade` 或 `fresh`，未选择时安装器拒绝覆盖。
+- `upgrade` 保留并迁移已有明确配置/账本，只补问缺失或过期项；`fresh` 重新走完整 6 项引导，但不会隐式删除历史账本、备份或其它用户文件。
+- 核心 6 项顺序调整为：长期自动委派授权 → 自动路由模式 → 最大并发 SubAgent → Verified Outcome Calibration → Token 统计 → Default 模式结构化提问；每一项在盘点输出与文档中明确说明作用。
+- Fresh 引导新增真实的显式关闭语义：`--delegation off` 只移除 Router 托管授权块，`--request-user-input disable` 显式关闭结构化提问；原有 `none` 继续表示“不修改当前设置”，保持旧调用兼容。
+- Token Accounting 从原 Q6 调整为 Q5；并发设置从原 Q4 调整为 Q3。Decision Shadow、Agents API Shadow、Native authority readiness、Route Economics 与 Cost Review 继续属于 Advanced，不新增强制安装问题。
+
 ## 2.8.0 — Stable（2026-09-30）
 
 - 正式发布 v2.8 Native Harness：保留 v2.7 planner/Execution Shape 语义，将 Host capability、Agents API lifecycle/usage 适配、read-only shadow transport、trace summary 与 authority-readiness 隔离在非权威 Host Backend 边界后。

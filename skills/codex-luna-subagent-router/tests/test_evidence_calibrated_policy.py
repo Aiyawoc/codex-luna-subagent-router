@@ -16,12 +16,13 @@ class EvidenceCalibratedPolicyTests(unittest.TestCase):
         self.assertIn("缺失或 `off`", text)
         self.assertIn("不得记录 prompt", text)
 
-    def test_guided_install_has_fifth_evidence_calibration_choice(self) -> None:
+    def test_guided_install_has_fourth_evidence_calibration_choice(self) -> None:
         text = (ROOT / "references" / "codex-guided-install.md").read_text(encoding="utf-8")
-        self.assertIn("### 5. 是否启用 Verified Outcome Calibration", text)
+        self.assertIn("### 4. Verified Outcome Calibration", text)
+        self.assertIn("允许 Router 使用过去已经真实验收过的 Worker 结果", text)
         self.assertIn("`conservative`（推荐）", text)
         self.assertIn("configure_evidence_calibration.py", text)
-        self.assertIn("缺失按 `off`", text)
+        self.assertIn("luna_only 时本项不适用", text)
 
     def test_install_refreshes_new_helpers(self) -> None:
         text = (ROOT / "install.sh").read_text(encoding="utf-8")

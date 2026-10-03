@@ -128,7 +128,7 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
             raise ConfigurationError("run guided routing setup first")
         if data.get("token_accounting", "off") not in ("on", "off"):
             raise ConfigurationError("unknown existing token_accounting")
-        # mode=on is an explicit answer to the combined question 6. Old on alone
+        # mode=on is an explicit answer to the combined question 5. Old on alone
         # does not authorize main-thread collection in the runtime handler.
         proposed = {**data, "token_accounting": mode,
                     "token_accounting_scope": "main_and_subagents",

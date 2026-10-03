@@ -9,6 +9,8 @@
 Current stable release: [**v2.8.0**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.0) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
 > **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.8.0 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
+>
+> The current development branch is **v2.8.1-dev**. The “detect existing install → choose upgrade/fresh → revised six-choice guide” flow documented here belongs to the next development version; the published v2.8.0 tag remains frozen.
 
 [Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Using with @Visualize](#using-with-visualize) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
 
@@ -43,7 +45,7 @@ The Router does not switch the user's Lead model. It decides whether to delegate
 
 ## Quick start
 
-### 1. Recommended: let Codex / an Agent perform the upgrade
+### 1. Recommended: let Codex / an Agent perform the install / upgrade
 
 You can paste this into Codex:
 
@@ -55,9 +57,21 @@ Detect the operating system and CPU architecture first, then download the matchi
 router-2.8.0-<platform> complete package and checksum files.
 Do not substitute GitHub's automatic Source code.zip/.tar.gz archive.
 
-Verify SHA256, run the bundled doctor --verify, then perform the full install/upgrade.
-Preserve my existing routing settings, explicit off/false choices, outcome/usage ledgers,
-and unrelated Agent profiles.
+Verify SHA256, run the bundled doctor --verify, then check whether Agent Router is
+already installed at the target:
+- If not installed, continue as a fresh install.
+- If installed, ask me to choose upgrade or fresh before replacing anything; do not choose for me.
+  - Upgrade preserves/migrates explicit configuration and historical ledgers, asking only for missing/stale choices.
+  - Fresh re-runs the complete six-choice guide but does not silently delete historical ledgers, backups, or unrelated user files.
+
+Ask the six core choices in this order and explain what each controls before asking:
+1. Standing automatic-delegation authorization
+2. Automatic routing mode
+3. Maximum concurrent SubAgents
+4. Verified Outcome Calibration
+5. Token accounting and completion summaries
+6. Default-mode structured questions
+
 If hooks must be installed or migrated, ask normally and use the client's trust review;
 do not grant trust automatically.
 ```
@@ -86,7 +100,11 @@ macOS:
 ```bash
 cd /extracted/codex-luna-subagent-router
 ./bin/router doctor --verify
-bash ./install.sh --global
+./bin/router inspect_guided_install --json
+# If an older installation is detected, choose explicitly:
+bash ./install.sh --global --install-mode upgrade
+# Or reinstall the package and re-run the full guided choices:
+# bash ./install.sh --global --install-mode fresh
 ```
 
 Windows:
@@ -94,7 +112,9 @@ Windows:
 ```powershell
 cd C:\extracted\codex-luna-subagent-router
 .\bin\router.cmd doctor --verify
-.\bin\router.cmd install --global
+.\bin\router.cmd inspect_guided_install --json
+# If an older installation is detected, choose upgrade or fresh:
+.\bin\router.cmd install --global --install-mode upgrade
 ```
 
 For a project-local installation, replace `--global` with:

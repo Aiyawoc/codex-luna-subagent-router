@@ -18,7 +18,7 @@ Sol high | 总量 45k | 输入 42k（缓存命中 30k）| 输出 3k tokens | 完
 
 同一线程后续继续工作时更新该线程累计快照，不把每次 stop 快照相加。fresh retry 使用新 agent ID，分别计数；一个批量 Worker 的总量不能人为均分为多个子任务。
 
-## 启用：安装指引第 6 项
+## 启用：安装指引第 5 项
 
 先全量安装，再检查当前 Codex build 是否提供 UserPromptSubmit/Stop/SubagentStart/SubagentStop，以及 hooks 是否被用户或管理员禁用。`--hooks-supported` 是操作者已确认能力的声明，不是运行时探测结果，也不是信任绕过。
 
@@ -125,7 +125,7 @@ SubagentStart 注册真实 agent_id 与父 session_id、scope。SubagentStop 只
 
 `non_usage_counter` 不再清空上一个有效累计基线；下一条增量仍必须与 last_token_usage 一致。无效事件仍标警告、真正缺口仍拒绝，不能从这项修复推定用户旧的两个 partial 变成完整。历史只读查看会更新标签；要复核旧数字，仍需原始日志 collect。没有原始 rollout 不能补出缺失区间。
 
-主线程同第 6 项显式选择 `token_accounting=on` 与 `token_accounting_scope=main_and_subagents`。UserPromptSubmit 登记明确的 session_id/turn_id 和最后完整日志行的游标（只保存偏移与哈希）；Stop 仅读本轮身份匹配的 token_count，输出 systemMessage，不要求追加模型轮次、不修改已生成的回答正文。
+主线程同第 5 项显式选择 `token_accounting=on` 与 `token_accounting_scope=main_and_subagents`。UserPromptSubmit 登记明确的 session_id/turn_id 和最后完整日志行的游标（只保存偏移与哈希）；Stop 仅读本轮身份匹配的 token_count，输出 systemMessage，不要求追加模型轮次、不修改已生成的回答正文。
 
 若真实 Host 未留下 UserPromptSubmit begin，但 Stop hook 仍到达，v2.7 的恢复路径只使用已持久化的精确 end boundary：首个无基线 turn 只登记 `main_turn_baseline_missing` 与当前 end boundary，不拿 session lifetime 冒充本轮；下一 turn 若与上一 turn 共享同一已验证 transcript locator，则可把上一 end boundary 作为本轮 cursor。reused child 同样只允许复用上一 turn 已冻结的 child end cursor。这个 fallback 是观测恢复，不代表 UserPromptSubmit hook 本身已正常触发。
 
@@ -188,4 +188,4 @@ read_usage 对同一明确日志/查询保存数字解析缓存；超过读取�
 
 refresh 只复核指定会话且同 scope 的已登记 locator，不搜索最新日志。默认整批 20 条/8 秒、每次单文件 64 MiB；processed 不等于 complete。不同 scope 使用明确的项目根或 --global-scope；token_usage 的 scope 选项在子命令前，turn_usage 在子命令后。已封存主轮次保持 sealed；旧 child 无可验证终点保持 historical_child_end_missing，不把生命周期累计混入旧轮。反复刷新取同一身份最新快照而非求和，不改变 outcome。下一自然 UserPromptSubmit 可对刚封存的前轮执行一次短预算复核，无后台任务、无 sleep、无额外模型轮次。
 
-preview 的 --json 错误包含固定 code，分别指出无活跃轮次、多候选、指定轮次未登记/不活跃、scope 不匹配和未启用统计。不要用它查看“最近一次”历史。hooks 仍不阻塞停止；v2.6.1 定义须按第 6 项审查。
+preview 的 --json 错误包含固定 code，分别指出无活跃轮次、多候选、指定轮次未登记/不活跃、scope 不匹配和未启用统计。不要用它查看“最近一次”历史。hooks 仍不阻塞停止；v2.6.1 定义须按第 5 项审查。

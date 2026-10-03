@@ -21,6 +21,7 @@ from configure_guided_install import (  # noqa: E402
     configure,
     merge_authorization,
     merge_request_user_input_feature,
+    remove_authorization,
 )
 
 
@@ -31,6 +32,10 @@ class GuidedInstallTests(unittest.TestCase):
         self.codex_home = self.root / "codex-home"
         self.project = self.root / "project"
         self.project.mkdir()
+        self.skills_dir = self.root / "skills"
+        installed = self.skills_dir / "codex-luna-subagent-router"
+        installed.mkdir(parents=True)
+        (installed / "VERSION").write_text("2.8.0\n", encoding="utf-8")
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -66,11 +71,25 @@ class GuidedInstallTests(unittest.TestCase):
         self.assertEqual(second["delegation"]["action"], "unchanged")
         self.assertEqual(target.read_text(encoding="utf-8"), original)
 
+    def test_delegation_off_removes_only_router_managed_authorization(self) -> None:
+        target = self.codex_home / "AGENTS.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("# User rule\n\nKeep me.\n", encoding="utf-8")
+        self.run_configure(delegation="global")
+        result = self.run_configure(delegation="off")
+        text = target.read_text(encoding="utf-8")
+        self.assertEqual(result["delegation"]["action"], "removed")
+        self.assertIn("Keep me.", text)
+        self.assertNotIn(START_MARKER, text)
+        self.assertNotIn(END_MARKER, text)
+
     def test_inventory_flags_stale_managed_authorization(self) -> None:
         first = self.run_configure(delegation="global")
         target = Path(first["delegation"]["path"])
-        current = setup.inspect(self.codex_home)
-        self.assertNotIn(2, current["pending_questions"])
+        current = setup.inspect(
+            self.codex_home, install_mode="upgrade", skills_dir=self.skills_dir
+        )
+        self.assertNotIn(1, current["pending_questions"])
 
         target.write_text(
             target.read_text(encoding="utf-8").replace(
@@ -79,11 +98,56 @@ class GuidedInstallTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        stale = setup.inspect(self.codex_home)
-        self.assertIn(2, stale["pending_questions"])
-        question = next(item for item in stale["questions"] if item["number"] == 2)
+        stale = setup.inspect(
+            self.codex_home, install_mode="upgrade", skills_dir=self.skills_dir
+        )
+        self.assertIn(1, stale["pending_questions"])
+        question = next(item for item in stale["questions"] if item["number"] == 1)
         self.assertEqual(question["current"]["stale"], ["global"])
         self.assertIn("过期", question["question"])
+
+    def test_install_preflight_requires_mode_for_existing_install(self) -> None:
+        result = setup.inspect(self.codex_home, skills_dir=self.skills_dir)
+        self.assertTrue(result["installation"]["installed"])
+        self.assertTrue(result["installation"]["requires_choice"])
+        self.assertIsNone(result["installation"]["selected_mode"])
+        self.assertEqual(result["pending_questions"], [])
+
+    def test_project_preflight_does_not_treat_global_install_as_project_upgrade(self) -> None:
+        result = setup.inspect(
+            self.codex_home,
+            project_root=self.project,
+            skills_dir=self.skills_dir,
+        )
+        self.assertFalse(result["installation"]["installed"])
+        self.assertFalse(result["installation"]["requires_choice"])
+        self.assertEqual(result["installation"]["selected_mode"], "fresh")
+        self.assertEqual(
+            [item["scope"] for item in result["installation"]["other_locations"]],
+            ["global"],
+        )
+
+    def test_fresh_install_reasks_all_guided_choices_without_writing(self) -> None:
+        target = self.codex_home / "codex-luna-subagent-router" / "routing.json"
+        target.parent.mkdir(parents=True)
+        target.write_text(
+            json.dumps(
+                {
+                    "schema_version": "2.1",
+                    "routing_mode": "adaptive",
+                    "evidence_calibration": "off",
+                    "token_accounting": "off",
+                }
+            ),
+            encoding="utf-8",
+        )
+        before = target.read_bytes()
+        result = setup.inspect(
+            self.codex_home, install_mode="fresh", skills_dir=self.skills_dir
+        )
+        self.assertEqual(result["pending_questions"], [1, 2, 3, 4, 5, 6])
+        self.assertEqual(target.read_bytes(), before)
+        self.assertEqual(result["installation"]["selected_mode"], "fresh")
 
     def test_authorization_state_distinguishes_current_stale_and_malformed(self) -> None:
         managed = "<!-- codex-luna-subagent-router:delegation-authorization:start -->\nnew\n<!-- codex-luna-subagent-router:delegation-authorization:end -->"
@@ -128,6 +192,16 @@ class GuidedInstallTests(unittest.TestCase):
         )
         self.assertEqual(action, "updated")
         self.assertIn("default_mode_request_user_input = true # user choice", merged)
+
+    def test_request_user_input_can_be_explicitly_disabled(self) -> None:
+        self.run_configure(request_user_input="enable")
+        result = self.run_configure(request_user_input="disable")
+        target = self.codex_home / "config.toml"
+        self.assertEqual(result["request_user_input"]["action"], "updated")
+        self.assertIn(
+            "default_mode_request_user_input = false",
+            target.read_text(encoding="utf-8"),
+        )
 
     def test_luna_only_user_config(self) -> None:
         result = self.run_configure(routing_scope="user", routing_mode="luna_only")

@@ -100,6 +100,34 @@ class RuntimeTests(unittest.TestCase):
                     installer.install(src,dest,base/'agents')
             self.assertFalse(dest.with_name('.'+installer.NAME+'.install-lock').exists())
 
+    def test_existing_install_requires_explicit_upgrade_or_fresh_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)
+            skills=base/'skills'
+            dest=skills/installer.NAME
+            dest.mkdir(parents=True)
+            with patch.dict(os.environ,{
+                'CODEX_HOME':str(base/'home'),
+                'CODEX_SKILLS_DIR':str(skills),
+                'CODEX_AGENTS_DIR':str(base/'agents'),
+            }), patch.object(installer,'install') as install_mock:
+                rc=installer.main(['--global'])
+            self.assertEqual(rc,2)
+            install_mock.assert_not_called()
+
+    def test_upgrade_mode_requires_existing_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)
+            skills=base/'skills'
+            with patch.dict(os.environ,{
+                'CODEX_HOME':str(base/'home'),
+                'CODEX_SKILLS_DIR':str(skills),
+                'CODEX_AGENTS_DIR':str(base/'agents'),
+            }), patch.object(installer,'install') as install_mock:
+                rc=installer.main(['--global','--install-mode','upgrade'])
+            self.assertEqual(rc,2)
+            install_mock.assert_not_called()
+
     def test_nested_destination_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)

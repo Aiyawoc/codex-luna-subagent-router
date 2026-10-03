@@ -136,8 +136,13 @@ class ReleaseIntegrationTests(unittest.TestCase):
         hooks = home / 'hooks.json'
         hooks.write_text('{"hooks":{}}\n')
         before = config.read_bytes(), registry.read_bytes(), usage.read_bytes(), bindings.read_bytes(), hooks.read_bytes()
-        for _ in range(2):
-            result = subprocess.run(['bash', str(ROOT / 'install.sh'), '--global'], env=env, capture_output=True, text=True)
+        for install_mode in ('fresh', 'upgrade'):
+            result = subprocess.run(
+                ['bash', str(ROOT / 'install.sh'), '--global', '--install-mode', install_mode],
+                env=env,
+                capture_output=True,
+                text=True,
+            )
             self.assertEqual(result.returncode, 0, result.stderr)
         installed = skills / 'codex-luna-subagent-router'
         for file in ('route_advisor.py', 'outcome_store.py', 'plan_work.py', 'token_usage.py', 'usage_reader.py', 'configure_token_accounting.py'):

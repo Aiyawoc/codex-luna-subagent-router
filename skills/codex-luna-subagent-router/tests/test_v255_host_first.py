@@ -30,43 +30,49 @@ class HostFirstConcurrencyTests(unittest.TestCase):
         routing = self.home / "codex-luna-subagent-router/routing.json"
         routing.parent.mkdir()
         routing.write_text(json.dumps({"schema_version": "2.0", "routing_mode": "adaptive"}))
+        self.skills_dir = self.root / "skills"
+        installed = self.skills_dir / "codex-luna-subagent-router"
+        installed.mkdir(parents=True)
+        (installed / "VERSION").write_text("2.8.0\n")
 
-    def q4(self):
-        result = inventory.inspect(self.home)
-        return result, result["questions"][3]
+    def q3(self):
+        result = inventory.inspect(
+            self.home, install_mode="upgrade", skills_dir=self.skills_dir
+        )
+        return result, result["questions"][2]
 
-    def test_canonical_0154_shape_satisfies_q4(self) -> None:
+    def test_canonical_0154_shape_satisfies_q3(self) -> None:
         (self.home / "config.toml").write_text(f"[agents]\n{KEY} = 3\n")
-        result, q4 = self.q4()
-        self.assertNotIn(4, result["pending_questions"])
-        self.assertEqual(q4["current"]["safe_effective_subagent_limit"], 3)
-        self.assertEqual(q4["current"]["layers"][0]["schema"], "canonical")
-        self.assertFalse(q4["current"]["cli_required"])
+        result, q3 = self.q3()
+        self.assertNotIn(3, result["pending_questions"])
+        self.assertEqual(q3["current"]["safe_effective_subagent_limit"], 3)
+        self.assertEqual(q3["current"]["layers"][0]["schema"], "canonical")
+        self.assertFalse(q3["current"]["cli_required"])
 
-    def test_portable_0142_0154_shape_satisfies_q4_without_cli(self) -> None:
+    def test_portable_0142_0154_shape_satisfies_q3_without_cli(self) -> None:
         (self.home / "config.toml").write_text(
             f"[agents]\n{LEGACY_KEY} = 3\n\n[{V2_TABLE}]\n{KEY} = 4\n"
         )
-        result, q4 = self.q4()
-        self.assertNotIn(4, result["pending_questions"])
-        self.assertEqual(q4["current"]["effective_subagent_limit"], 3)
-        self.assertEqual(q4["current"]["layers"][0]["schema"], "portable")
+        result, q3 = self.q3()
+        self.assertNotIn(3, result["pending_questions"])
+        self.assertEqual(q3["current"]["effective_subagent_limit"], 3)
+        self.assertEqual(q3["current"]["layers"][0]["schema"], "portable")
 
     def test_legacy_v1_only_stays_pending_when_host_backend_is_unknown(self) -> None:
         (self.home / "config.toml").write_text(f"[agents]\n{LEGACY_KEY} = 3\n")
-        result, q4 = self.q4()
-        self.assertIn(4, result["pending_questions"])
-        self.assertEqual(q4["current"]["effective_subagent_limit"], 3)
-        self.assertIsNone(q4["current"]["safe_effective_subagent_limit"])
+        result, q3 = self.q3()
+        self.assertIn(3, result["pending_questions"])
+        self.assertEqual(q3["current"]["effective_subagent_limit"], 3)
+        self.assertIsNone(q3["current"]["safe_effective_subagent_limit"])
 
     def test_explicit_legacy_v2_is_recognized(self) -> None:
         (self.home / "config.toml").write_text(
             f"[{V2_TABLE}]\nenabled = true\n{KEY} = 4\n"
         )
-        result, q4 = self.q4()
-        self.assertNotIn(4, result["pending_questions"])
-        self.assertEqual(q4["current"]["effective_subagent_limit"], 3)
-        self.assertEqual(q4["current"]["layers"][0]["schema"], "legacy_v2_only")
+        result, q3 = self.q3()
+        self.assertNotIn(3, result["pending_questions"])
+        self.assertEqual(q3["current"]["effective_subagent_limit"], 3)
+        self.assertEqual(q3["current"]["layers"][0]["schema"], "legacy_v2_only")
 
     def test_planner_reads_portable_v2_effective_limit(self) -> None:
         project = self.root / "project"

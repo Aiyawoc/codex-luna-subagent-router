@@ -9,6 +9,8 @@
 当前稳定版：[**v2.8.0**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.0) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
 > **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.8.0 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
+>
+> 当前开发分支版本为 **v2.8.1-dev**。本页的“检测旧安装 → 选择 upgrade / fresh → 新 6 项引导”属于下一版开发流程；已发布的 v2.8.0 tag 保持冻结。
 
 [主要能力](#主要能力) · [快速开始](#快速开始) · [在-codex-中使用](#在-codex-中使用) · [数据简报](#数据简报) · [配置](#配置) · [常用命令](#常用命令) · [与-visualize-配合](#与-visualize-配合) · [安全与隐私](#安全与隐私) · [文档](#文档)
 
@@ -48,7 +50,7 @@ Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker �
 
 ## 快速开始
 
-### 1. 推荐：让 Codex / Agent 执行升级
+### 1. 推荐：让 Codex / Agent 执行安装 / 升级
 
 可以把下面这段直接发送给 Codex：
 
@@ -60,7 +62,20 @@ https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.0
 不要使用 GitHub 自动生成的 Source code.zip/.tar.gz 代替完整包。
 
 校验 SHA256 后，先运行包内 doctor --verify，再执行完整安装/升级。
-保留我已有的路由配置、明确 off/false、outcome/usage 账本和其他 Agent profiles。
+然后先检查目标位置是否已经安装 Agent Router：
+- 未安装：按全新安装继续。
+- 已安装：先问我是“升级安装”还是“全新安装”，不要替我默认选择。
+  - 升级安装保留并迁移已有明确配置和历史账本，只补问缺失/过期项。
+  - 全新安装重新走完整 6 项引导，但不要自动删除历史账本、备份或其它用户文件。
+
+核心 6 项按以下顺序询问，并在每一步先说明作用：
+1. 长期自动委派授权
+2. 自动路由模式
+3. 最大并发 SubAgent
+4. Verified Outcome Calibration
+5. Token 统计与完成摘要
+6. Default 模式结构化提问
+
 如需安装或迁移 hooks，请正常询问并经过客户端信任审查；不要自行授信。
 ```
 
@@ -88,7 +103,11 @@ macOS：
 ```bash
 cd /解压目录/codex-luna-subagent-router
 ./bin/router doctor --verify
-bash ./install.sh --global
+./bin/router inspect_guided_install --json
+# 检测到旧安装时先选择：
+bash ./install.sh --global --install-mode upgrade
+# 或全新重装并重新走完整引导：
+# bash ./install.sh --global --install-mode fresh
 ```
 
 Windows：
@@ -96,7 +115,9 @@ Windows：
 ```powershell
 cd C:\解压目录\codex-luna-subagent-router
 .\bin\router.cmd doctor --verify
-.\bin\router.cmd install --global
+.\bin\router.cmd inspect_guided_install --json
+# 检测到旧安装时先选择 upgrade 或 fresh：
+.\bin\router.cmd install --global --install-mode upgrade
 ```
 
 项目级安装将 `--global` 替换为：
