@@ -1,12 +1,13 @@
 # Changelog
 
-## 2.8.1-dev — Guided install flow（开发中）
+## 2.8.1 — Guided install flow（2026-10-03）
 
 - 安装引导新增独立 Preflight：先只读检测目标位置是否已有 Agent Router；检测到旧安装时必须先选择 `upgrade` 或 `fresh`，未选择时安装器拒绝覆盖。
 - `upgrade` 保留并迁移已有明确配置/账本，只补问缺失或过期项；`fresh` 重新走完整 6 项引导，但不会隐式删除历史账本、备份或其它用户文件。
 - 核心 6 项顺序调整为：长期自动委派授权 → 自动路由模式 → 最大并发 SubAgent → Verified Outcome Calibration → Token 统计 → Default 模式结构化提问；每一项在盘点输出与文档中明确说明作用。
 - Fresh 引导新增真实的显式关闭语义：`--delegation off` 只移除 Router 托管授权块，`--request-user-input disable` 显式关闭结构化提问；原有 `none` 继续表示“不修改当前设置”，保持旧调用兼容。
 - Token Accounting 从原 Q6 调整为 Q5；并发设置从原 Q4 调整为 Q3。Decision Shadow、Agents API Shadow、Native authority readiness、Route Economics 与 Cost Review 继续属于 Advanced，不新增强制安装问题。
+- 发布前验证：474 / 474 单元测试通过，Manifest 161 / 161、Router Arena PASS，macOS ARM64 complete portable fresh → upgrade smoke PASS；正式 Release workflow 仍会在 exact main commit 上重新执行四平台 portable build/smoke 与 SHA256 校验。
 
 ## 2.8.0 — Stable（2026-09-30）
 
