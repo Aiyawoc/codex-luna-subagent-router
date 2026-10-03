@@ -1,0 +1,183 @@
+diff --git a/.github/workflows/portable-runtime.yml b/.github/workflows/portable-runtime.yml
+index 9fcc400..f4f3db9 100644
+--- a/.github/workflows/portable-runtime.yml
++++ b/.github/workflows/portable-runtime.yml
+@@ -59,2 +59,16 @@ jobs:
+         run: python tools/smoke_portable.py --target ${{ matrix.target }}
++      - name: Build native plugin from the verified complete package
++        env:
++          PYTHONUTF8: '1'
++        run: python tools/build_plugin.py --target ${{ matrix.target }}
++      - name: Verify plugin migration, inactive hooks, rollback and identical Core
++        env:
++          PYTHONUTF8: '1'
++        run: python tools/smoke_plugin.py --target ${{ matrix.target }}
++      - uses: actions/upload-artifact@v4
++        with:
++          name: native-plugin-${{ matrix.target }}
++          path: dist-plugin/*
++          if-no-files-found: error
++          retention-days: 14
+       - uses: actions/upload-artifact@v4
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 8fb8fa4..b334663 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -71,3 +71,8 @@ jobs:
+           merge-multiple: true
+-      - name: Check all four archives and their hashes before publication
++      - uses: actions/download-artifact@v4
++        with:
++          pattern: native-plugin-*
++          path: packages
++          merge-multiple: true
++      - name: Check all four complete packages and four plugin packages before publication
+         shell: python
+@@ -79,4 +84,5 @@ jobs:
+           root = Path('packages')
+-          names = [f"router-{os.environ['VERSION']}-{target}.{ext}" for target, ext in
+-                   [('windows-x64','zip'),('windows-arm64','zip'),('macos-x64','tar.gz'),('macos-arm64','tar.gz')]]
++          names = [f"{prefix}-{os.environ['VERSION']}-{target}.{ext}"
++                   for prefix in ('router', 'router-plugin')
++                   for target, ext in [('windows-x64','zip'),('windows-arm64','zip'),('macos-x64','tar.gz'),('macos-arm64','tar.gz')]]
+           assert {p.name for p in root.iterdir()} == set(names + [n+'.sha256' for n in names])
+@@ -106,3 +112,3 @@ jobs:
+           fi
+-          gh release create "$TAG" --target "$TARGET" --title "$TAG" --draft --notes "Complete platform packages with pinned private CPython. See CHANGELOG.md and the portable-runtime guide."
++          gh release create "$TAG" --target "$TARGET" --title "$TAG" --draft --notes "Complete platform packages and opt-in local-marketplace plugin packages, sharing pinned private CPython and one Router Core. Plugin packaging and synthetic migration/hooks are tested; actual Host loading/trust still needs field acceptance. See CHANGELOG.md and references/plugin-install.md."
+           gh release upload "$TAG" packages/*
+diff --git a/.gitignore b/.gitignore
+index 25522b7..c020070 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -34 +34,3 @@ skills/codex-luna-subagent-router/runtime/licenses/
+ skills/codex-luna-subagent-router/PACKAGE-MANIFEST.json
++
++dist-plugin/
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f9b4d5f..3e5dc2b 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,2 +2,11 @@
+ 
++## 2.8.3: Native plugin distribution (2026-10-03)
++
++- 新增四平台本地 marketplace 插件包 `router-plugin-*`，与 `router-*` 完整包复用同一份 Core、profiles、账本语义及私有 Python；不新增 MCP 服务、常驻进程或第二套 Router。
++- 插件默认不接管委派或 Token 统计。迁移前必须确认 upgrade/fresh、已通过 Host 原生安装和六项配置审查，并结束活跃任务；插件安装、长期授权和 hooks 信任相互独立。
++- 新增 `plugin_control inspect/activate/deactivate/rollback`：完整性校验后备份旧 Skill，仅移除当前层 Router 托管 hooks，刷新托管 profiles；历史账本与用户配置不被迁移重写。支持哈希防覆盖回退，保留原始迁移备份。
++- 原生 hooks 检查当前 root/fingerprint/作用域和旧 hooks/Skill 冲突；冲突时跳过本插件采集。off/manual 保持不采集，失败不阻断 Stop，不产生第二份账本。
++- Release 同时校验并发布四个完整包、四个插件包和全部 SHA256。原生 Host 的 marketplace 可见性、实际加载和信任审查仍需本机验收；自动化合成事件测试不冒充实机通过。原完整包持续可用。
++- 2.8.2 Sol 努力档位与所有既有权限/成本/Native authority 边界保持不变；仅在需要时另发 2.8.4，2.9 的专项重构未提前纳入。
++
+ ## 2.8.2: Sol effort expansion (2026-10-03)
+diff --git a/README.en.md b/README.en.md
+index 8bf2239..221ff99 100644
+--- a/README.en.md
++++ b/README.en.md
+@@ -8,5 +8,5 @@
+ 
+-Current stable release: [**v2.8.2**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
++Current stable release: [**v2.8.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+ 
+-> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.8.2 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
++> **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.8.3 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
+ 
+@@ -14,2 +14,8 @@ Current stable release: [**v2.8.2**](https://github.com/Aiyawoc/codex-luna-subag
+ 
++## Native plugin distribution (2.8.3)
++
++Each Release includes the existing `router-*` complete packages plus platform-matched `router-plugin-*` local marketplace packages. The same Core, profiles, private Python and historical ledger semantics are shared. Installing a plugin grants neither routing permission nor hook trust and does not enable collection by itself.
++
++Read [plugin installation, migration and rollback](skills/codex-luna-subagent-router/references/plugin-install.md). `plugin_control inspect` is read-only; activation needs explicit mode/setup/native-install/quiescence review. Packaging and synthetic hook smoke are release-gated. **Actual Desktop marketplace loading, enablement and trust still require field acceptance.** Keep using the complete package when migration is unnecessary.
++
+ ## Capabilities
+@@ -50,7 +56,7 @@ You can paste this into Codex:
+ ```text
+-Install or upgrade Agent Router (Skill ID: `$codex-luna-subagent-router`) to stable v2.8.2:
+-https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2
++Install or upgrade Agent Router (Skill ID: `$codex-luna-subagent-router`) to stable v2.8.3:
++https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3
+ 
+ Detect the operating system and CPU architecture first, then download the matching
+-router-2.8.2-<platform> complete package and checksum files.
++router-2.8.3-<platform> complete package and checksum files.
+ Do not substitute GitHub's automatic Source code.zip/.tar.gz archive.
+@@ -80,3 +86,3 @@ do not grant trust automatically.
+ 
+-From the [v2.8.2 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2), download:
++From the [v2.8.3 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3), download:
+ 
+@@ -84,6 +90,6 @@ From the [v2.8.2 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/
+ |---|---|---|
+-| macOS | Apple Silicon / ARM64 | `router-2.8.2-macos-arm64.tar.gz` |
+-| macOS | Intel / x64 | `router-2.8.2-macos-x64.tar.gz` |
+-| Windows | x64 | `router-2.8.2-windows-x64.zip` |
+-| Windows | ARM64 | `router-2.8.2-windows-arm64.zip` |
++| macOS | Apple Silicon / ARM64 | `router-2.8.3-macos-arm64.tar.gz` |
++| macOS | Intel / x64 | `router-2.8.3-macos-x64.tar.gz` |
++| Windows | x64 | `router-2.8.3-windows-x64.zip` |
++| Windows | ARM64 | `router-2.8.3-windows-arm64.zip` |
+ 
+diff --git a/README.md b/README.md
+index bf96c27..c802e45 100644
+--- a/README.md
++++ b/README.md
+@@ -8,5 +8,5 @@
+ 
+-当前稳定版：[**v2.8.2**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
++当前稳定版：[**v2.8.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
+ 
+-> **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.8.2 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
++> **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.8.3 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
+ 
+@@ -14,2 +14,8 @@
+ 
++## 原生插件分发（2.8.3）
++
++Release 继续提供原有 `router-*` 完整包，另外提供四个平台的 `router-plugin-*` 完整插件包。插件通过已校验解压目录的本地 marketplace 安装；不会自动启用授权、统计或信任 hooks。完整包与插件共用 Core 和现有历史账本，不应同时成为同一 scope 的生效入口。
++
++请先阅读 [插件安装、迁移与回退](skills/codex-luna-subagent-router/references/plugin-install.md)。`plugin_control inspect` 是只读盘点；`activate` 必须经过明确安装方式、配置、Host 安装与静止状态确认。新插件目录的打包与合成 hooks 已纳入发布验证，但**实际 Desktop marketplace 加载、启用和信任仍需本机验收**，不能仅凭 ZIP/单元测试成功视为已验证。没有迁移需求时继续使用原完整包。
++
+ ## 主要能力
+@@ -55,6 +61,6 @@ Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker 
+ ```text
+-请安装或升级 Agent Router（Skill ID：`$codex-luna-subagent-router`）到当前稳定版 v2.8.2：
+-https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2
++请安装或升级 Agent Router（Skill ID：`$codex-luna-subagent-router`）到当前稳定版 v2.8.3：
++https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3
+ 
+-先识别本机操作系统与 CPU 架构，下载匹配的 router-2.8.2-<platform> 完整包和校验文件。
++先识别本机操作系统与 CPU 架构，下载匹配的 router-2.8.3-<platform> 完整包和校验文件。
+ 不要使用 GitHub 自动生成的 Source code.zip/.tar.gz 代替完整包。
+@@ -83,3 +89,3 @@ https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2
+ 
+-从 [v2.8.2 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2) 下载：
++从 [v2.8.3 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3) 下载：
+ 
+@@ -87,6 +93,6 @@ https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.2
+ |---|---|---|
+-| macOS | Apple Silicon / ARM64 | `router-2.8.2-macos-arm64.tar.gz` |
+-| macOS | Intel / x64 | `router-2.8.2-macos-x64.tar.gz` |
+-| Windows | x64 | `router-2.8.2-windows-x64.zip` |
+-| Windows | ARM64 | `router-2.8.2-windows-arm64.zip` |
++| macOS | Apple Silicon / ARM64 | `router-2.8.3-macos-arm64.tar.gz` |
++| macOS | Intel / x64 | `router-2.8.3-macos-x64.tar.gz` |
++| Windows | x64 | `router-2.8.3-windows-x64.zip` |
++| Windows | ARM64 | `router-2.8.3-windows-arm64.zip` |
+ 
+@@ -286,3 +292,3 @@ Router 的统计与校准设计遵循以下边界：
+ 
+-- [v2.8.2 稳定版验收](docs/v2.8.2-stable-acceptance.md)
++- [v2.8.3 稳定版验收](docs/v2.8.3-stable-acceptance.md)
+ - [v2.8.0 稳定版验收](docs/v2.8.0-stable-acceptance.md)
+diff --git a/docs/v2.8-release-roadmap.md b/docs/v2.8-release-roadmap.md
+index df5370a..57fda65 100644
+--- a/docs/v2.8-release-roadmap.md
++++ b/docs/v2.8-release-roadmap.md
+@@ -5,4 +5,5 @@ GitHub Release, exact-commit tests, portable packages and checksums.
+ 
+-## 2.8.2: Sol efforts first
++## 2.8.2: Sol efforts first (released)
+ 
++- Release commit: `e7e73aa86b46013863047807cc7db70074fe8844`.
+ - GPT-6.1 Sol profiles: medium/high/xhigh/max. Do not add low yet.
