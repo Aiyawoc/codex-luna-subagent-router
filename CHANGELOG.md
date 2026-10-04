@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.0-rc.2: Staged upgrade preflight hook identity（2026-10-05）
+
+- 修复 RC.1 本机验收发现的升级预检误报：从新 Release 的解压暂存目录运行 `inspect_guided_install --install-mode upgrade` 时，不再使用暂存包自身 `__file__` 生成唯一期望 handler，而是依据已检测到的现有完整安装目录生成 Router-managed hook identity。
+- 现有 `token_accounting=on + main_and_subagents + hooks` 配置若四个 Router handlers 正确指向已安装副本，Q5 现在保持已满足，不再因为 staged/installed 路径不同而重复询问或误报 hooks 缺失。
+- 严格 handler 比较仍保留：指向暂存副本、缺失、重复或其它不匹配的 Router-owned handlers 仍被视为 stale，需要重新审查；未放宽 owner-only 匹配，也不自动修改 hooks 或 Host trust。
+- 新增正反两组 upgrade-preflight 回归；完整单元测试与 Router Arena 继续作为 RC 发布门槛。RC.2 不扩大 Native/PTC/Decision/benchmark authority，RC.1 中未验证的真实 Host evidence 继续保持 `unknown / NOT VERIFIED`。
+
 ## 2.9.0-rc.1: Reliability, native-host evidence and benchmark（2026-10-04）
 
 - Route Economics 不再用整个 receipt interval 的累计输入直接判断 272K long-context 价格档位。单个 receipt 累计输入超过 272K 且缺少 request-level boundary 时，成本保持未知并记为 `incomplete_pricing_granularity`；Cost Review 不使用这类模糊金额生成候选。

@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import inspect_guided_install as setup  # noqa: E402
+import configure_token_accounting as tokens  # noqa: E402
 
 from configure_guided_install import (  # noqa: E402
     ConfigurationError,
@@ -112,6 +113,102 @@ class GuidedInstallTests(unittest.TestCase):
         self.assertTrue(result["installation"]["requires_choice"])
         self.assertIsNone(result["installation"]["selected_mode"])
         self.assertEqual(result["pending_questions"], [])
+
+    def test_upgrade_preflight_accepts_hooks_pointing_at_installed_copy(self) -> None:
+        installed = self.skills_dir / "codex-luna-subagent-router"
+        script = installed / "scripts" / "token_usage.py"
+        script.parent.mkdir(parents=True)
+        script.write_text("# installed hook target\n", encoding="utf-8")
+        routing = self.codex_home / "codex-luna-subagent-router" / "routing.json"
+        routing.parent.mkdir(parents=True)
+        routing.write_text(
+            json.dumps(
+                {
+                    "schema_version": "2.1",
+                    "routing_mode": "adaptive",
+                    "evidence_calibration": "off",
+                    "token_accounting": "on",
+                    "token_accounting_scope": "main_and_subagents",
+                    "token_accounting_collection": "hooks",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        handler = tokens.hook_handler(script.resolve())
+        hooks = {
+            "hooks": {
+                event: [
+                    {
+                        **({"matcher": ".*"} if event.startswith("Subagent") else {}),
+                        "hooks": [handler],
+                    }
+                ]
+                for event in tokens.EVENTS
+            }
+        }
+        (self.codex_home / "hooks.json").write_text(
+            json.dumps(hooks, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        result = setup.inspect(
+            self.codex_home,
+            install_mode="upgrade",
+            skills_dir=self.skills_dir,
+        )
+        q5 = next(item for item in result["questions"] if item["number"] == 5)
+        self.assertEqual(set(q5["current"]["current_hook_events"]), set(tokens.EVENTS))
+        self.assertFalse(q5["needs_question"])
+        self.assertNotIn(5, result["pending_questions"])
+
+    def test_upgrade_preflight_does_not_accept_staging_copy_as_installed_hook(self) -> None:
+        installed = self.skills_dir / "codex-luna-subagent-router"
+        script = installed / "scripts" / "token_usage.py"
+        script.parent.mkdir(parents=True)
+        script.write_text("# installed hook target\n", encoding="utf-8")
+        routing = self.codex_home / "codex-luna-subagent-router" / "routing.json"
+        routing.parent.mkdir(parents=True)
+        routing.write_text(
+            json.dumps(
+                {
+                    "schema_version": "2.1",
+                    "routing_mode": "adaptive",
+                    "evidence_calibration": "off",
+                    "token_accounting": "on",
+                    "token_accounting_scope": "main_and_subagents",
+                    "token_accounting_collection": "hooks",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        staged_handler = tokens.hook_handler(ROOT / "scripts" / "token_usage.py")
+        hooks = {
+            "hooks": {
+                event: [
+                    {
+                        **({"matcher": ".*"} if event.startswith("Subagent") else {}),
+                        "hooks": [staged_handler],
+                    }
+                ]
+                for event in tokens.EVENTS
+            }
+        }
+        (self.codex_home / "hooks.json").write_text(
+            json.dumps(hooks, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        result = setup.inspect(
+            self.codex_home,
+            install_mode="upgrade",
+            skills_dir=self.skills_dir,
+        )
+        q5 = next(item for item in result["questions"] if item["number"] == 5)
+        self.assertEqual(q5["current"]["current_hook_events"], [])
+        self.assertTrue(q5["needs_question"])
+        self.assertIn(5, result["pending_questions"])
 
     def test_project_preflight_does_not_treat_global_install_as_project_upgrade(self) -> None:
         result = setup.inspect(

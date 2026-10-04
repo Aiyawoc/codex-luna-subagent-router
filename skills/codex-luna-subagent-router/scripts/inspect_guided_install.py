@@ -59,6 +59,35 @@ def _installed_locations(home, root=None, skills_dir=None):
     return result
 
 
+def _expected_hook_handlers(installed, *, project_root=None):
+    """Build current managed-hook identities from detected complete installs.
+
+    Upgrade preflight may run from a freshly extracted release package. In
+    that case __file__ identifies the staging copy, while the active hooks
+    still correctly point at the existing installed copy. Compare against
+    detected installed roots so staging location alone does not make valid
+    hooks look stale.
+    """
+    handlers = []
+    for item in installed:
+        if item.get("source") == "plugin":
+            continue
+        script = Path(item["path"]) / "scripts" / "token_usage.py"
+        if not script.is_file():
+            continue
+        handler = tokens.hook_handler(script, project_root=project_root)
+        if handler not in handlers:
+            handlers.append(handler)
+    if not handlers:
+        handlers.append(
+            tokens.hook_handler(
+                Path(__file__).with_name("token_usage.py"),
+                project_root=project_root,
+            )
+        )
+    return handlers
+
+
 def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
     home = Path(codex_home).expanduser().resolve()
     root = Path(project_root).expanduser().resolve() if project_root else None
@@ -143,10 +172,13 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
     hook_events = []
     if token_mode == "on" and collection == "hooks":
         hooks = tokens.read_json(rpath.parent.parent / "hooks.json").get("hooks", {})
-        expected = tokens.hook_handler(Path(__file__).with_name("token_usage.py"), project_root=root if rpath == project_routing else None)
+        expected_handlers = _expected_hook_handlers(
+            installed,
+            project_root=root if rpath == project_routing else None,
+        )
         for event in tokens.EVENTS:
             managed = [h for g in hooks.get(event, []) for h in g.get("hooks", []) if h.get("statusMessage") == tokens.OWNER]
-            if len(managed) == 1 and managed[0] == expected:
+            if len(managed) == 1 and managed[0] in expected_handlers:
                 hook_events.append(event)
         native_root = plugin_support.plugin_root()
         if native_root and plugin_support.owner_matches(native_root, root)[0] and not plugin_support.hook_sources(root):

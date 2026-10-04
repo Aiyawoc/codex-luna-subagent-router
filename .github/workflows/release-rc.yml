@@ -104,6 +104,6 @@ jobs:
             exit 1
           fi
           gh release create "$TAG" --target "$TARGET" --title "$TAG" --prerelease --draft \
-            --notes "Agent Router $TAG release candidate. Feature-frozen for real Host capability/event and benchmark field acceptance. Native evidence, benchmark review and Decision providers remain non-authoritative. Includes complete packages plus opt-in local-marketplace plugin packages. See CHANGELOG.md and docs/v2.9.0-rc1-acceptance.md."
+            --notes "Agent Router $TAG release candidate. Feature-frozen for real Host capability/event and benchmark field acceptance. Native evidence, benchmark review and Decision providers remain non-authoritative. Includes complete packages plus opt-in local-marketplace plugin packages. See CHANGELOG.md and docs/v2.9-roadmap.md for the current acceptance scope."
           gh release upload "$TAG" packages/*
           gh release edit "$TAG" --draft=false
