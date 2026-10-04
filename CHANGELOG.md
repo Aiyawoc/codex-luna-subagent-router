@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.9.0-dev: Reliability and native-host evidence（开发中）
+## 2.9.0-rc.1: Reliability, native-host evidence and benchmark（2026-10-04）
 
 - Route Economics 不再用整个 receipt interval 的累计输入直接判断 272K long-context 价格档位。单个 receipt 累计输入超过 272K 且缺少 request-level boundary 时，成本保持未知并记为 `incomplete_pricing_granularity`；Cost Review 不使用这类模糊金额生成候选。
 - Native Host Shadow 新增 same-execution identity gate：只有 Router snapshot 明确绑定同一个 Agents API backend/session/turn/subagent 后，Token 才允许比较为 `consistent/divergent`；缺失或不匹配 identity 一律 `inconclusive`。
@@ -12,6 +12,7 @@
 - P2 新增固定 workload benchmark ledger：对 `host_default / router_luna_only / router_adaptive` 记录 success、Token、耗时、工具调用、Worker、重试、成本来源和证据覆盖。缺失指标保持 null；compare 只给人工 review evidence，不输出 winner，也不改变生产路由。
 - P3 预留 `openai_decisions` shadow provider 标识，但当前官方公开资料仍不足以安全实现 endpoint/auth/request/response adapter；配置器拒绝启用，运行时遇到手写配置也只返回 `official_contract_unavailable`，不猜接口、不发网络请求。JEV/Laya/HTTP provider 边界保持原样。
 - 本阶段不提升 Agents API、Decision Shadow 或 Cost Review authority，不启用自动 cost override，也不删除 rollout 兼容路径。
+- RC.1 功能冻结：自动化 source gate、四平台完整包/插件包、迁移/回退 smoke 都是发布硬门槛；真实 Codex Desktop/App Server capability/event 仍需现场验收，未观察到的能力保持 unknown，不因为 RC 打包成功而升级为 supported。
 
 ## 2.8.3: Native plugin distribution (2026-10-03)
 

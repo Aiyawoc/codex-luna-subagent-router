@@ -10,7 +10,7 @@
 
 > **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.8.3 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
 >
-> 当前开发线为 **v2.9.0-dev**。稳定用户继续使用 v2.8.3；v2.9 首先收敛成本证据、Native Shadow 同次执行绑定、并发统计稳定性与统一只读诊断，不扩大生产 authority。
+> 当前预发布版本为 **v2.9.0-rc.1**。稳定用户继续使用 v2.8.3；RC 已完成功能冻结，重点验证真实 Host capability/event 与固定 workload benchmark，不扩大生产 authority。
 
 [主要能力](#主要能力) · [快速开始](#快速开始) · [在-codex-中使用](#在-codex-中使用) · [数据简报](#数据简报) · [配置](#配置) · [常用命令](#常用命令) · [与-visualize-配合](#与-visualize-配合) · [安全与隐私](#安全与隐私) · [文档](#文档)
 

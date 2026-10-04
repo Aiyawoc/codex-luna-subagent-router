@@ -10,7 +10,7 @@ Current stable release: [**v2.8.3**](https://github.com/Aiyawoc/codex-luna-subag
 
 > **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.8.3 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 >
-> The active development line is **v2.9.0-dev**. Stable users should remain on v2.8.3 while v2.9 first tightens cost evidence, same-execution Native Shadow binding, concurrent accounting reliability, and unified read-only diagnostics without expanding production authority.
+> The current prerelease is **v2.9.0-rc.1**. Stable users should remain on v2.8.3; the RC is feature-frozen for real Host capability/event and fixed-workload benchmark acceptance without expanding production authority.
 
 [Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Using with @Visualize](#using-with-visualize) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
 

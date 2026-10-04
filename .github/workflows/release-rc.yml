@@ -62,7 +62,12 @@ jobs:
           pattern: portable-*
           path: packages
           merge-multiple: true
-      - name: Verify all four RC archives and hashes
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: plugin-*
+          path: packages
+          merge-multiple: true
+      - name: Verify all four complete and four plugin RC archives and hashes
         shell: python
         env:
           VERSION: ${{ needs.authorize.outputs.version }}
@@ -70,8 +75,9 @@ jobs:
           import hashlib, os
           from pathlib import Path
           root = Path('packages')
-          names = [f"router-{os.environ['VERSION']}-{target}.{ext}" for target, ext in
-                   [('windows-x64','zip'),('windows-arm64','zip'),('macos-x64','tar.gz'),('macos-arm64','tar.gz')]]
+          names = [f"{prefix}-{os.environ['VERSION']}-{target}.{ext}"
+                   for prefix in ('router', 'router-plugin')
+                   for target, ext in [('windows-x64','zip'),('windows-arm64','zip'),('macos-x64','tar.gz'),('macos-arm64','tar.gz')]]
           assert {p.name for p in root.iterdir()} == set(names + [n+'.sha256' for n in names])
           lines = []
           for name in names:
@@ -98,6 +104,6 @@ jobs:
             exit 1
           fi
           gh release create "$TAG" --target "$TARGET" --title "$TAG" --prerelease --draft \
-            --notes "Agent Router $TAG release candidate. Feature-frozen for field acceptance; Agents API native evidence and cost routing remain non-authoritative. See CHANGELOG.md and docs/v2.8.0-rc1-acceptance.md."
+            --notes "Agent Router $TAG release candidate. Feature-frozen for real Host capability/event and benchmark field acceptance. Native evidence, benchmark review and Decision providers remain non-authoritative. Includes complete packages plus opt-in local-marketplace plugin packages. See CHANGELOG.md and docs/v2.9.0-rc1-acceptance.md."
           gh release upload "$TAG" packages/*
           gh release edit "$TAG" --draft=false
