@@ -499,6 +499,18 @@ class ExtraIntegrationTests(Sandbox):
         self.assertEqual(row['snapshot']['counts']['total_tokens'],45000)
         self.assertEqual(len(self.upath.read_text().splitlines()),1)
 
+    def test_explicit_transcript_collect_uses_only_final_ledger_lock(self):
+        self.transcript()
+        real_locked=usage.store.locked
+        calls=[]
+        def counted(*args,**kwargs):
+            calls.append((args,kwargs))
+            return real_locked(*args,**kwargs)
+        with patch.object(usage.store,'locked',side_effect=counted):
+            row=self.collect()
+        self.assertEqual(row['snapshot']['counts']['total_tokens'],45000)
+        self.assertEqual(len(calls),1)
+
     def test_finalize_cli_links_and_preserves_partial_quality(self):
         r=store.begin(self.registry,receipt_metadata(),'test-worker-0001')
         self.transcript();self.collect()

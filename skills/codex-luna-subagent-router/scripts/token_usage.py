@@ -335,12 +335,17 @@ def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, sourc
     # Keep transcript parsing and disposable read-cache I/O outside the ledger
     # critical section.  A slow filesystem/parser must not turn the short JSONL
     # merge lock into a cross-process timeout (notably on Windows runners).
-    with store.locked(path, timeout=0.4):
-        latest, _ = load_latest(path)
-        initial = latest.get(uid)
-        if initial is not None and initial["scope_id"] != sid:
-            raise store.StoreError("collect must use the original project scope")
-        initial = dict(initial) if initial is not None else None
+    initial = None
+    if transcript is None:
+        # Only the locator-reuse path needs a pre-read.  Explicit transcript
+        # collection already has its source location and must not contend on a
+        # redundant ledger lock before parsing.
+        with store.locked(path, timeout=0.4):
+            latest, _ = load_latest(path)
+            initial = latest.get(uid)
+            if initial is not None and initial["scope_id"] != sid:
+                raise store.StoreError("collect must use the original project scope")
+            initial = dict(initial) if initial is not None else None
 
     home = store.codex_home()
     read_source = source or (
@@ -348,7 +353,7 @@ def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, sourc
         if initial is not None and initial["snapshot"]["source"] == "codex_app_server_v2"
         else "rollout"
     )
-    target = Path(transcript) if transcript else (
+    target = Path(transcript) if transcript is not None else (
         locator_path(initial, home, root) if initial is not None else None
     )
     locator = None
