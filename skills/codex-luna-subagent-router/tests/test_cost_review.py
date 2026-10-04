@@ -159,6 +159,21 @@ class CostReviewTests(unittest.TestCase):
             result = cost_review.collect(Path("o"), Path("u"), scope="project-x")
         self.assertEqual(result["review_candidate_count"], 0)
 
+    def test_large_aggregate_receipts_do_not_create_cost_review_candidate(self):
+        rows = [
+            *[record(f"l{i}", "gpt-6-luna", "high") for i in range(3)],
+            *[record(f"s{i}", "gpt-6.1-sol", "high") for i in range(2)],
+        ]
+        with patch.object(cost_review.store, "read_records", return_value=(rows, {})), \
+             patch.object(cost_review.token_usage, "for_receipt", side_effect=lambda path, rid: usage(
+                 "gpt-6-luna" if rid.startswith("l") else "gpt-6.1-sol",
+                 "high", input_tokens=400_000, cached_tokens=200_000, output_tokens=40_000,
+             )):
+            result = cost_review.collect(Path("o"), Path("u"), scope="project-x")
+        self.assertEqual(result["comparable_groups"], 0)
+        self.assertEqual(result["review_candidate_count"], 0)
+        self.assertIn("request-level pricing boundaries", result["limitation"])
+
 
 if __name__ == "__main__":
     unittest.main()

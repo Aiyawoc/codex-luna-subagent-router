@@ -324,6 +324,7 @@ def markdown(payload):
         f"| Estimated token cost | {_money(economics.get('estimated_usd'))} |",
         f"| Missing receipt | {economics.get('missing_receipt', 0)} |",
         f"| Missing usage | {economics.get('missing_usage', 0)} |",
+        f"| Pricing granularity gaps | {economics.get('pricing_granularity_gaps', 0)} |",
         f"| Comparable safe groups | {economics_review.get('comparable_groups', 0)} |",
         f"| Cost review candidates | {economics_review.get('review_candidate_count', 0)} |",
         f"| Automatic cost override | {'enabled' if economics_review.get('automatic_override') else 'disabled'} |",

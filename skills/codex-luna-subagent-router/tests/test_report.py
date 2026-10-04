@@ -122,10 +122,16 @@ class ReportTests(unittest.TestCase):
 
     def test_markdown_keeps_unknown_economics_cost_out_of_zero_dollars(self):
         data = sample_data()
-        data["route_economics"] = {"pricing_profile": "test", "estimated_attempts": 0, "estimated_usd": None}
+        data["route_economics"] = {
+            "pricing_profile": "test",
+            "estimated_attempts": 0,
+            "estimated_usd": None,
+            "pricing_granularity_gaps": 2,
+        }
         text = report.markdown({"generated_at": "2026-09-30T00:00:00Z", "router_version": "2.8.0-rc.2",
                                 "scope": {"scope_id": "global", "mode": "current"}, "data": data})
         self.assertIn("| Estimated token cost | - |", text)
+        self.assertIn("| Pricing granularity gaps | 2 |", text)
         self.assertNotIn("Estimated token cost | $0.000000", text)
 
     def test_fixed_panel_section_order_is_stable(self):

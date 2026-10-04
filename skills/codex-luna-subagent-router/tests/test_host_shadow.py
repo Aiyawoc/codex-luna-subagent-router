@@ -35,6 +35,12 @@ def router_snapshot(total=150, input_tokens=120, cached=80, output=30, reasoning
     return {
         "source": "codex_rollout_v1",
         "status": "complete",
+        "execution_identity": {
+            "backend": "agents_api",
+            "session_id": "session_root",
+            "turn_id": "turn_child",
+            "subagent_id": "subagent_1",
+        },
         "counts": {
             "total_tokens": total,
             "input_tokens": input_tokens,
@@ -83,7 +89,28 @@ class HostShadowTests(unittest.TestCase):
         result = host_shadow.compare_usage(router_snapshot(), native_turn(usage=None))
         self.assertEqual(result["status"], "inconclusive")
         self.assertEqual(result["reason"], "native_usage_unknown")
+        self.assertEqual(result["identity_status"], "matched")
         self.assertEqual(result["deltas"], {})
+
+    def test_equal_counts_without_same_execution_identity_are_inconclusive(self):
+        snapshot = router_snapshot()
+        snapshot.pop("execution_identity")
+        result = host_shadow.compare_usage(snapshot, native_turn(usage=usage()))
+        self.assertEqual(result["status"], "inconclusive")
+        self.assertEqual(result["reason"], "router_execution_identity_missing")
+        self.assertEqual(result["identity_status"], "missing")
+        self.assertEqual(result["comparable_fields"], [])
+        self.assertEqual(result["deltas"], {})
+
+    def test_mismatched_execution_identity_is_not_usage_divergence(self):
+        snapshot = router_snapshot()
+        snapshot["execution_identity"]["turn_id"] = "different_turn"
+        result = host_shadow.compare_usage(snapshot, native_turn(usage=usage()))
+        self.assertEqual(result["status"], "inconclusive")
+        self.assertEqual(result["reason"], "execution_identity_mismatch")
+        self.assertEqual(result["identity_status"], "mismatch")
+        self.assertEqual(result["identity_mismatched_fields"], ["turn_id"])
+        self.assertEqual(result["mismatched_fields"], [])
 
     def test_interrupt_request_alone_is_unconfirmed(self):
         result = host_shadow.verify_interrupted(native_turn("in_progress"), [interrupt_item()])

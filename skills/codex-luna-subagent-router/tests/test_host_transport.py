@@ -260,6 +260,12 @@ class HostTransportTests(unittest.TestCase):
         router_snapshot = {
             "source": "codex_rollout_v1",
             "status": "complete",
+            "execution_identity": {
+                "backend": "agents_api",
+                "session_id": "session_1",
+                "turn_id": "child_1",
+                "subagent_id": "subagent_1",
+            },
             "counts": {
                 "total_tokens": 150,
                 "input_tokens": 120,

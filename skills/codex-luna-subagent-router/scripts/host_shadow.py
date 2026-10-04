@@ -18,6 +18,7 @@ FIELDS = (
 )
 CORE = ("total_tokens", "input_tokens", "output_tokens")
 ROUTER_STATES = ("requested", "materialized", "running", "completed", "errored", "interrupted", "shutdown")
+IDENTITY_FIELDS = ("session_id", "turn_id", "subagent_id")
 
 
 class ShadowError(ValueError):
@@ -36,16 +37,78 @@ def _router_counts(snapshot: dict) -> dict:
     return result
 
 
+def _router_identity(snapshot: dict) -> dict | None:
+    if not isinstance(snapshot, dict):
+        raise ShadowError("Router snapshot must be an object")
+    identity = snapshot.get("execution_identity")
+    if identity is None:
+        return None
+    if not isinstance(identity, dict):
+        raise ShadowError("Router execution_identity must be an object")
+    if identity.get("backend") != "agents_api":
+        raise ShadowError("Router execution_identity backend must be agents_api")
+    result = {"backend": "agents_api"}
+    for field in IDENTITY_FIELDS:
+        value = identity.get(field)
+        if field == "subagent_id" and value is None:
+            result[field] = None
+            continue
+        if not isinstance(value, str) or not value or len(value) > 1024 or any(ord(ch) < 32 for ch in value):
+            raise ShadowError(f"invalid Router execution identity: {field}")
+        result[field] = value
+    return result
+
+
+def _identity_evidence(router_snapshot: dict, native_turn: dict) -> dict:
+    identity = _router_identity(router_snapshot)
+    if identity is None:
+        return {"status": "missing", "mismatched_fields": []}
+    native = {
+        "backend": "agents_api",
+        "session_id": native_turn.get("session_id"),
+        "turn_id": native_turn.get("turn_id"),
+        "subagent_id": native_turn.get("subagent_id"),
+    }
+    mismatched = [
+        field for field in ("backend", *IDENTITY_FIELDS)
+        if identity.get(field) != native.get(field)
+    ]
+    return {
+        "status": "matched" if not mismatched else "mismatch",
+        "mismatched_fields": mismatched,
+    }
+
+
 def compare_usage(router_snapshot: dict, native_turn: dict) -> dict:
     """Compare the same logical turn without mutating either accounting source."""
     if not isinstance(native_turn, dict) or native_turn.get("source") != "agents_api_native":
         raise ShadowError("native turn must be normalized Agents API evidence")
+    identity = _identity_evidence(router_snapshot, native_turn)
+    if identity["status"] != "matched":
+        return {
+            "status": "inconclusive",
+            "authoritative": False,
+            "reason": (
+                "router_execution_identity_missing"
+                if identity["status"] == "missing"
+                else "execution_identity_mismatch"
+            ),
+            "identity_status": identity["status"],
+            "identity_mismatched_fields": identity["mismatched_fields"],
+            "comparable_fields": [],
+            "mismatched_fields": [],
+            "deltas": {},
+            "turn_id": native_turn.get("turn_id"),
+            "subagent_id": native_turn.get("subagent_id"),
+        }
     native_usage = native_turn.get("usage")
     if native_usage is None:
         return {
             "status": "inconclusive",
             "authoritative": False,
             "reason": "native_usage_unknown",
+            "identity_status": "matched",
+            "identity_mismatched_fields": [],
             "comparable_fields": [],
             "deltas": {},
             "turn_id": native_turn.get("turn_id"),
@@ -70,6 +133,8 @@ def compare_usage(router_snapshot: dict, native_turn: dict) -> dict:
         "status": status,
         "authoritative": False,
         "reason": reason,
+        "identity_status": "matched",
+        "identity_mismatched_fields": [],
         "comparable_fields": comparable,
         "mismatched_fields": mismatches,
         "deltas": deltas,

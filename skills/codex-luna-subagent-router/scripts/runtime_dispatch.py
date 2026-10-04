@@ -12,16 +12,19 @@ COMMANDS = {
     'configure_guided_install', 'configure_subagent_limit', 'configure_evidence_calibration',
     'configure_token_accounting', 'configure_decision_engine', 'validate_route_plan', 'decision_shadow',
     'host_adapter', 'host_shadow', 'host_transport', 'route_economics', 'cost_review',
-    'plugin_control', 'plugin_hook',
+    'plugin_control', 'plugin_hook', 'system_diagnostics',
 }
+ALIASES = {'diagnostics': 'system_diagnostics'}
 
 
 def main(argv=None):
     args = list(sys.argv[1:] if argv is None else argv)
     if not args or args[0] in ('-h', '--help'):
-        print('router <doctor|install|' + '|'.join(sorted(COMMANDS)) + '> [arguments]')
+        visible = sorted((COMMANDS - set(ALIASES.values())) | set(ALIASES))
+        print('router <doctor|install|' + '|'.join(visible) + '> [arguments]')
         return 0
     command = args.pop(0).removesuffix('.py')
+    command = ALIASES.get(command, command)
     try:
         from runtime_support import validate_runtime, doctor
         validate_runtime()

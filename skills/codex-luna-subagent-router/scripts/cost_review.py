@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conservative, non-authoritative cost review candidates for v2.8.
+"""Conservative, non-authoritative cost review candidates.
 
 This helper never changes routing. It compares only exact task-family + axes
 buckets with receipt-bound verified-pass usage and emits human-review candidates.
@@ -110,7 +110,9 @@ def collect(registry=None, usage_path=None, *, scope=None, min_candidate_passes=
         if (snapshot.get("model"), snapshot.get("effort")) != route:
             bucket["incomplete_pass_usage"] += 1
             continue
-        estimate = cost_estimator.estimate(route[0], snapshot.get("counts") or {})
+        estimate = cost_estimator.estimate(
+            route[0], snapshot.get("counts") or {}, granularity="receipt_interval"
+        )
         if estimate.get("status") != "estimated":
             bucket["incomplete_pass_usage"] += 1
             continue
@@ -179,7 +181,8 @@ def collect(registry=None, usage_path=None, *, scope=None, min_candidate_passes=
         "registry_diagnostics": diagnostics,
         "limitation": (
             "Observed same-family/axes receipt-bound economics only. A review candidate is not causal evidence, "
-            "not a savings claim, and never changes production routing automatically."
+            "not a savings claim, and never changes production routing automatically. Receipt intervals whose cumulative "
+            "input exceeds the long-context threshold are excluded until request-level pricing boundaries are available."
         ),
     }
 

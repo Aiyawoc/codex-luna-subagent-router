@@ -30,6 +30,29 @@ class CostEstimatorTests(unittest.TestCase):
         self.assertEqual(result["context_class"], "long")
         # 0.2M*$4 + 0.1M*$0.20 + 0.02M*$15 = $1.12
         self.assertEqual(result["estimated_usd"], 1.12)
+        self.assertEqual(result["pricing_granularity"], "request")
+
+    def test_receipt_interval_above_threshold_is_not_guessed_long(self):
+        result = cost_estimator.estimate("gpt-6.1-sol", {
+            "input_tokens": 400_000,
+            "cached_input_tokens": 200_000,
+            "output_tokens": 40_000,
+        }, granularity="receipt_interval")
+        self.assertEqual(result["status"], "incomplete_pricing_granularity")
+        self.assertEqual(result["reason"], "request_level_context_class_unknown")
+        self.assertEqual(result["pricing_granularity"], "receipt_interval")
+        self.assertIsNone(result["estimated_usd"])
+        self.assertNotIn("context_class", result)
+
+    def test_receipt_interval_at_or_below_threshold_proves_short(self):
+        result = cost_estimator.estimate("gpt-6.1-sol", {
+            "input_tokens": 272_000,
+            "cached_input_tokens": 100_000,
+            "output_tokens": 20_000,
+        }, granularity="receipt_interval")
+        self.assertEqual(result["status"], "estimated")
+        self.assertEqual(result["context_class"], "short")
+        self.assertEqual(result["pricing_granularity"], "receipt_interval")
 
     def test_short_context_sol61_uses_current_cached_rate(self):
         result = cost_estimator.estimate("gpt-6.1-sol", {
@@ -66,6 +89,12 @@ class CostEstimatorTests(unittest.TestCase):
             cost_estimator.estimate("gpt-6-luna", {
                 "input_tokens": 10, "cached_input_tokens": 11, "output_tokens": 1,
             })
+
+    def test_unknown_pricing_granularity_is_rejected(self):
+        with self.assertRaisesRegex(cost_estimator.CostEstimateError, "granularity"):
+            cost_estimator.estimate("gpt-6-luna", {
+                "input_tokens": 10, "cached_input_tokens": 0, "output_tokens": 1,
+            }, granularity="session")
 
 
 if __name__ == "__main__":

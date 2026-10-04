@@ -92,6 +92,25 @@ class RouteEconomicsTests(unittest.TestCase):
         self.assertIsNone(result["routes"][0]["estimated_usd"])
         self.assertIsNone(result["estimated_usd"])
 
+    def test_large_receipt_interval_is_pricing_gap_not_assumed_long_request(self):
+        large = usage(
+            "gpt-6.1-sol", "high",
+            input_tokens=400_000, cached=200_000, output=40_000,
+        )
+        with patch.object(route_economics.store, "read_records", return_value=([outcome("r1")], {})), \
+             patch.object(route_economics.token_usage, "for_receipt", return_value=large):
+            result = route_economics.collect(
+                Path("outcomes.jsonl"), Path("usage.jsonl"), scope="project-x"
+            )
+        route = result["routes"][0]
+        self.assertEqual(route["attempts"], 1)
+        self.assertEqual(route["estimated_attempts"], 0)
+        self.assertEqual(route["incomplete_pricing_granularity"], 1)
+        self.assertEqual(result["pricing_granularity_gaps"], 1)
+        self.assertIsNone(route["estimated_usd"])
+        self.assertIsNone(result["estimated_usd"])
+        self.assertIn("cumulative interval input is never", result["limitation"])
+
     def test_scope_filter_prevents_cross_project_cost_mix(self):
         records = [outcome("r1", scope="project-x"), outcome("r2", scope="project-y")]
         with patch.object(route_economics.store, "read_records", return_value=(records, {})), \

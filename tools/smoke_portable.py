@@ -80,6 +80,9 @@ def main():
         assert rpath.read_bytes()==saved and ledger.read_text()=='historical-data-must-not-change\n'
         assert (home/'hooks.json').read_text()=='{"hooks":{}}'
         execute([*launcher(installed),'doctor','--verify'],project,env)
+        diagnostics=json.loads(execute([*launcher(installed),'diagnostics','--project-root',str(project),'--json'],project,env))
+        assert diagnostics['read_only'] is True and diagnostics['refresh_performed'] is False
+        assert diagnostics['trust_changed'] is False and diagnostics['runtime']['status']=='ok'
         report_root=base/'reports'
         generated=json.loads(execute([*launcher(installed),'report','--project-root',str(project),'--output-dir',str(report_root),'--json'],project,env))
         assert Path(generated['brief']).is_file() and Path(generated['json']).is_file() and Path(generated['csv']).is_file()

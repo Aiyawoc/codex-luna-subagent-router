@@ -1,4 +1,4 @@
-"""Receipt-bound shadow economics for v2.8; never changes production routing."""
+"""Receipt-bound shadow economics; never changes production routing."""
 from __future__ import annotations
 
 import argparse
@@ -24,6 +24,7 @@ def collect(registry=None, usage_path=None, *, scope=None):
         "estimated_usd": 0.0,
         "outcomes": Counter(),
         "incomplete_usage": 0,
+        "incomplete_pricing_granularity": 0,
         "unsupported_model": 0,
     })
     missing_receipt = 0
@@ -52,7 +53,9 @@ def collect(registry=None, usage_path=None, *, scope=None):
         route["attempts"] += 1
         route["outcomes"][row.get("outcome")] += 1
         try:
-            estimate = cost_estimator.estimate(model, snapshot.get("counts") or {})
+            estimate = cost_estimator.estimate(
+                model, snapshot.get("counts") or {}, granularity="receipt_interval"
+            )
         except cost_estimator.CostEstimateError:
             route["incomplete_usage"] += 1
             continue
@@ -61,6 +64,8 @@ def collect(registry=None, usage_path=None, *, scope=None):
             route["estimated_usd"] += estimate["estimated_usd"]
         elif estimate["status"] == "unsupported_model":
             route["unsupported_model"] += 1
+        elif estimate["status"] == "incomplete_pricing_granularity":
+            route["incomplete_pricing_granularity"] += 1
         else:
             route["incomplete_usage"] += 1
 
@@ -82,6 +87,7 @@ def collect(registry=None, usage_path=None, *, scope=None):
             if values["estimated_attempts"] else None,
             "outcomes": dict(values["outcomes"]),
             "incomplete_usage": values["incomplete_usage"],
+            "incomplete_pricing_granularity": values["incomplete_pricing_granularity"],
             "unsupported_model": values["unsupported_model"],
         })
 
@@ -98,11 +104,16 @@ def collect(registry=None, usage_path=None, *, scope=None):
         "missing_receipt": missing_receipt,
         "missing_usage": missing_usage,
         "malformed_usage": malformed_usage,
+        "pricing_granularity_gaps": sum(
+            route["incomplete_pricing_granularity"] for route in routes
+        ),
         "routes": routes,
         "registry_diagnostics": diagnostics,
         "limitation": (
-            "Receipt-bound Standard text-token estimate only; excludes cache writes, tool fees, regional/processing-tier "
-            "adjustments and non-text modalities. No counterfactual savings claim and no production routing effect."
+            "Receipt-bound Standard text-token estimate only. Receipt intervals above the long-context threshold are "
+            "left unestimated unless request-level context boundaries are available; cumulative interval input is never "
+            "treated as one long request. Excludes cache writes, tool fees, regional/processing-tier adjustments and "
+            "non-text modalities. No counterfactual savings claim and no production routing effect."
         ),
     }
 

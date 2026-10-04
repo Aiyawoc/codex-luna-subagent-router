@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.0-dev: Reliability and native-host evidence（开发中）
+
+- Route Economics 不再用整个 receipt interval 的累计输入直接判断 272K long-context 价格档位。单个 receipt 累计输入超过 272K 且缺少 request-level boundary 时，成本保持未知并记为 `incomplete_pricing_granularity`；Cost Review 不使用这类模糊金额生成候选。
+- Native Host Shadow 新增 same-execution identity gate：只有 Router snapshot 明确绑定同一个 Agents API backend/session/turn/subagent 后，Token 才允许比较为 `consistent/divergent`；缺失或不匹配 identity 一律 `inconclusive`。
+- 修复反复出现的并发 usage collection 时序问题：transcript 读取、解析与 disposable read-cache I/O 移出 0.4s usage-ledger 写锁，仅最终 reload/merge/write 持短锁；新增慢 reader 断言与多进程压力回归。
+- 新增默认只读 `router diagnostics`，统一汇总 runtime/package、有效配置、hooks 定义、usage/turn 已保存账本、插件 owner、Native Shadow 与 report 输出提示。配置存在不再被描述成 Host 已信任/已执行；无法证明的 Host loaded/trust/event execution 明确保持 `unverified`。
+- 本阶段不提升 Agents API、Decision Shadow 或 Cost Review authority，不启用自动 cost override，也不删除 rollout 兼容路径。
+
 ## 2.8.3: Native plugin distribution (2026-10-03)
 
 - 新增四平台本地 marketplace 插件包 `router-plugin-*`，与 `router-*` 完整包复用同一份 Core、profiles、账本语义及私有 Python；不新增 MCP 服务、常驻进程或第二套 Router。

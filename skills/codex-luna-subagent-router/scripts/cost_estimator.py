@@ -1,4 +1,4 @@
-"""Versioned, non-billing token-cost estimates for v2.8 shadow economics."""
+"""Versioned, non-billing token-cost estimates for Router shadow economics."""
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
@@ -46,8 +46,17 @@ def _counter(counts, field):
     return value
 
 
-def estimate(model, counts):
-    """Estimate Standard text-token cost; never present the result as a bill."""
+def estimate(model, counts, *, granularity="request"):
+    """Estimate Standard text-token cost; never present the result as a bill.
+
+    Request granularity means the counters belong to one model request, so the
+    272K threshold can be applied directly. Receipt-interval granularity means
+    the counters are cumulative across an attempt interval. Such an interval can
+    prove every request was short only while its total input is <= the threshold.
+    Above that point request-level boundaries are required.
+    """
+    if granularity not in ("request", "receipt_interval"):
+        raise CostEstimateError("granularity must be request or receipt_interval")
     if model not in RATES:
         return {
             "status": "unsupported_model",
@@ -69,7 +78,21 @@ def estimate(model, counts):
         }
     if cached_tokens > input_tokens:
         raise CostEstimateError("cached_input_tokens cannot exceed input_tokens")
-    context_class = "long" if input_tokens > LONG_CONTEXT_THRESHOLD else "short"
+    if granularity == "receipt_interval" and input_tokens > LONG_CONTEXT_THRESHOLD:
+        return {
+            "status": "incomplete_pricing_granularity",
+            "model": model,
+            "pricing_profile": PROFILE_VERSION,
+            "pricing_granularity": granularity,
+            "estimated_usd": None,
+            "reason": "request_level_context_class_unknown",
+            "counts_used": {
+                "input_tokens": input_tokens,
+                "cached_input_tokens": cached_tokens,
+                "output_tokens": output_tokens,
+            },
+        }
+    context_class = "long" if granularity == "request" and input_tokens > LONG_CONTEXT_THRESHOLD else "short"
     rate = RATES[model][context_class]
     uncached = input_tokens - cached_tokens
     amount = (
@@ -81,6 +104,7 @@ def estimate(model, counts):
         "status": "estimated",
         "model": model,
         "pricing_profile": PROFILE_VERSION,
+        "pricing_granularity": granularity,
         "context_class": context_class,
         "estimated_usd": float(amount.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)),
         "counts_used": {

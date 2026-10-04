@@ -332,22 +332,48 @@ def locator_path(row, home, root=None):
 
 def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, source=None, agent_type=None, max_seconds=2.0, max_bytes=MAX_BYTES):
     uid = usage_id(agent_id, parent_id)
+    # Keep transcript parsing and disposable read-cache I/O outside the ledger
+    # critical section.  A slow filesystem/parser must not turn the short JSONL
+    # merge lock into a cross-process timeout (notably on Windows runners).
+    with store.locked(path, timeout=0.4):
+        latest, _ = load_latest(path)
+        initial = latest.get(uid)
+        if initial is not None and initial["scope_id"] != sid:
+            raise store.StoreError("collect must use the original project scope")
+        initial = dict(initial) if initial is not None else None
+
+    home = store.codex_home()
+    read_source = source or (
+        "app-server"
+        if initial is not None and initial["snapshot"]["source"] == "codex_app_server_v2"
+        else "rollout"
+    )
+    target = Path(transcript) if transcript else (
+        locator_path(initial, home, root) if initial is not None else None
+    )
+    locator = None
+    if target:
+        snap = read_usage(
+            target, agent_id, parent_id,
+            codex_home=home, project_root=root, source=read_source,
+            cache_ledger=path, max_seconds=max_seconds, max_bytes=max_bytes,
+        )
+        if snap["bytes_read"] > 0:
+            locator = locator_for(target, home, root)
+    else:
+        snap = empty("transcript_unavailable")
+
+    # Re-read under the short write lock.  Another collector may have committed
+    # a newer lifetime snapshot while this process was parsing.  Merge against
+    # that current row, never against the stale pre-read copy.
     with store.locked(path, timeout=0.4):
         latest, _ = load_latest(path)
         old = latest.get(uid)
         row = dict(old or _new(agent_id, parent_id, sid, agent_type))
         if row["scope_id"] != sid:
             raise store.StoreError("collect must use the original project scope")
-        home = store.codex_home()
-        source = source or ("app-server" if row["snapshot"]["source"] == "codex_app_server_v2" else "rollout")
-        target = Path(transcript) if transcript else locator_path(row, home, root)
-        if target:
-            snap = read_usage(target, agent_id, parent_id, codex_home=home, project_root=root, source=source, cache_ledger=path, max_seconds=max_seconds, max_bytes=max_bytes)
-            # Keep only a relative locator, never the absolute project/home path.
-            if snap["bytes_read"] > 0:
-                row["locator"] = locator_for(target, home, root)
-        else:
-            snap = empty("transcript_unavailable")
+        if locator is not None:
+            row["locator"] = locator
         if old and old["snapshot"]["status"] != "unavailable":
             prev = old["snapshot"]
             if snap["status"] == "unavailable" or (snap["counts"]["total_tokens"] < prev["counts"]["total_tokens"]):

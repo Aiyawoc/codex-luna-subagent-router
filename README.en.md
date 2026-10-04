@@ -9,6 +9,8 @@
 Current stable release: [**v2.8.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.8.3) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
 > **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.8.3 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
+>
+> The active development line is **v2.9.0-dev**. Stable users should remain on v2.8.3 while v2.9 first tightens cost evidence, same-execution Native Shadow binding, concurrent accounting reliability, and unified read-only diagnostics without expanding production authority.
 
 [Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Using with @Visualize](#using-with-visualize) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
 
@@ -30,6 +32,7 @@ Read [plugin installation, migration and rollback](skills/codex-luna-subagent-ro
 | **Verified-outcome calibration** | Optionally use local verified results to adjust later routing conservatively. |
 | **Token accounting** | Optionally track total, input, cached input, output, and completeness for main/child Agents. |
 | **Data brief** | `router report` renders a fixed statistics panel and saves Markdown, JSON, and CSV. |
+| **Unified diagnostics** | `router diagnostics --json` reads package/config/hooks/ledger/plugin/Native Shadow status without refreshing transcripts or changing Host trust. |
 | **Portable Python** | macOS and Windows complete packages carry pinned CPython 3.13.15. |
 
 ### Routing modes

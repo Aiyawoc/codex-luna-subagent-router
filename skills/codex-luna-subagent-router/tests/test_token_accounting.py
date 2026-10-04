@@ -486,6 +486,19 @@ class ExtraIntegrationTests(Sandbox):
         self.assertEqual(len(self.upath.read_text().splitlines()),1)
         self.assertEqual(usage.statistics(self.upath)['known_usage']['counts']['total_tokens'],45000)
 
+    def test_collect_parses_transcript_outside_ledger_write_lock(self):
+        self.transcript()
+        parsed=self.read()
+        lock=self.upath.with_name(self.upath.name+'.lock')
+        def slow_reader(*args,**kwargs):
+            self.assertFalse(lock.exists(),'transcript parsing must not hold the usage ledger write lock')
+            __import__('time').sleep(0.45)
+            return parsed
+        with patch.object(usage,'read_usage',side_effect=slow_reader):
+            row=self.collect()
+        self.assertEqual(row['snapshot']['counts']['total_tokens'],45000)
+        self.assertEqual(len(self.upath.read_text().splitlines()),1)
+
     def test_finalize_cli_links_and_preserves_partial_quality(self):
         r=store.begin(self.registry,receipt_metadata(),'test-worker-0001')
         self.transcript();self.collect()
