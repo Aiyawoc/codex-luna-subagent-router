@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 
 import host_adapter
+import app_server_events
 import outcome_store as store
 import runtime_support
 
@@ -158,9 +159,45 @@ def main(argv=None):
     record.add_argument("--source", choices=SOURCES, required=True)
     record.add_argument("--confirm", action="store_true")
     record.add_argument("--json", action="store_true")
+    record_event = sub.add_parser("record-event")
+    record_event.add_argument("--host-version", required=True)
+    record_event.add_argument("--event-json")
+    record_event.add_argument("--confirm", action="store_true")
+    record_event.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    if args.command == "record":
+    if args.command == "record-event":
+        if not args.confirm:
+            raise store.StoreError("record-event requires --confirm; event evidence never self-promotes")
+        raw = args.event_json if args.event_json is not None else __import__("sys").stdin.read()
+        event = app_server_events.normalize(json.loads(raw))
+        capability = {
+            "turn/started": "structured_lifecycle_events",
+            "turn/completed": "structured_lifecycle_events",
+            "thread/tokenUsage/updated": "native_usage",
+        }.get(event["event_type"])
+        if capability is None:
+            raise store.StoreError("this app-server event does not prove a tracked Host capability")
+        row = observation(
+            backend="codex_desktop",
+            host_version=args.host_version,
+            capability=capability,
+            status="supported",
+            source="host_runtime",
+        )
+        append(args.evidence_file, row)
+        result = {
+            "status": "recorded",
+            "backend": row["backend"],
+            "host_version": row["host_version"],
+            "capability": row["capability"],
+            "capability_status": "supported",
+            "source": "host_runtime",
+            "event_type": event["event_type"],
+            "authoritative": False,
+            "routing_unchanged": True,
+        }
+    elif args.command == "record":
         if not args.confirm:
             raise store.StoreError("record requires --confirm; capability evidence never self-promotes")
         row = observation(

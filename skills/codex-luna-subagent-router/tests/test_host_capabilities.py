@@ -97,6 +97,69 @@ class HostCapabilityTests(unittest.TestCase):
         self.assertNotIn("session", raw.lower())
         self.assertNotIn("turn_", raw.lower())
 
+    def test_record_event_sanitizes_content_and_proves_only_observed_capability(self):
+        event = {
+            "method": "turn/completed",
+            "params": {
+                "threadId": "private-thread-id",
+                "turn": {
+                    "id": "private-turn-id",
+                    "items": [{"type": "userMessage", "text": "PRIVATE PROMPT"}],
+                    "itemsView": "summary",
+                    "status": "completed",
+                    "error": None,
+                    "startedAt": 1,
+                    "completedAt": 2,
+                    "durationMs": 100,
+                },
+            },
+        }
+        cmd = [
+            sys.executable, *runtime_support.FLAGS,
+            str(ROOT / "scripts/runtime_dispatch.py"), "host_capabilities",
+            "--evidence-file", str(self.path), "record-event",
+            "--host-version", "26.928.20755",
+            "--event-json", json.dumps(event),
+            "--confirm", "--json",
+        ]
+        result = subprocess.run(
+            cmd, env={**os.environ, "CODEX_HOME": str(self.home)},
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["capability"], "structured_lifecycle_events")
+        raw = self.path.read_text(encoding="utf-8")
+        self.assertNotIn("PRIVATE", raw)
+        self.assertNotIn("private-thread-id", raw)
+        self.assertNotIn("private-turn-id", raw)
+
+    def test_model_reroute_event_is_observable_but_not_capability_proof(self):
+        event = {
+            "method": "model/rerouted",
+            "params": {
+                "threadId": "thread-1",
+                "turnId": "turn-1",
+                "fromModel": "gpt-6.1-sol",
+                "toModel": "gpt-6-astra",
+                "reason": "highRiskCyberActivity",
+            },
+        }
+        cmd = [
+            sys.executable, *runtime_support.FLAGS,
+            str(ROOT / "scripts/runtime_dispatch.py"), "host_capabilities",
+            "--evidence-file", str(self.path), "record-event",
+            "--host-version", "26.928.20755",
+            "--event-json", json.dumps(event),
+            "--confirm", "--json",
+        ]
+        result = subprocess.run(
+            cmd, env={**os.environ, "CODEX_HOME": str(self.home)},
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(self.path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
