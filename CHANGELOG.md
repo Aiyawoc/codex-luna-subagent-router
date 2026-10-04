@@ -8,6 +8,7 @@
 - 新增默认只读 `router diagnostics`，统一汇总 runtime/package、有效配置、hooks 定义、usage/turn 已保存账本、插件 owner、Native Shadow 与 report 输出提示。配置存在不再被描述成 Host 已信任/已执行；无法证明的 Host loaded/trust/event execution 明确保持 `unverified`。
 - P1 新增 version-bound Host capability evidence：`router host_capabilities show/record` 只记录 backend、Host version、能力名、supported/unsupported 和受限证据来源；默认 unknown，不根据版本号推断。不同来源冲突保持 unknown，record 必须显式确认，当前不自动改变生产路由。
 - P1 增加当前 Codex app-server v2 结构化事件适配：只接受已核对的 `turn/started`、`turn/completed`、`thread/tokenUsage/updated` 与 `model/rerouted`。生命周期会丢弃 items/错误正文；thread total 与 last usage 明确分口径，后者不自动冒充可计价 request boundary。经显式 `host_capabilities record-event --confirm` 后，真实生命周期/usage 事件可作为当前 Host/version 的 capability evidence，但不会替换 rollout accounting 或提升 authority。
+- P2 新增 capability-gated native execution policy：Execution Shape 仍由原 planner 决定；只有 `local_parallel_tools` 且当前 backend+Host version 已有 PTC supported 证据、stage 明确为多工具/只读/可预测控制流/结构化输出并且无需逐结果语义判断、审批、引用或原生 artifact 保真时，才推荐 `programmatic_tool_calling`。其它情况明确回退 direct/native tools。
 - 本阶段不提升 Agents API、Decision Shadow 或 Cost Review authority，不启用自动 cost override，也不删除 rollout 兼容路径。
 
 ## 2.8.3: Native plugin distribution (2026-10-03)
