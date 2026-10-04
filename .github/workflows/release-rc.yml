@@ -64,7 +64,7 @@ jobs:
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
-          pattern: plugin-*
+          pattern: native-plugin-*
           path: packages
           merge-multiple: true
       - name: Verify all four complete and four plugin RC archives and hashes
