@@ -11,6 +11,7 @@ from pathlib import Path
 
 import configure_subagent_limit as concurrency
 import configure_token_accounting as tokens
+import benchmark_store
 import host_shadow_store
 import host_capabilities
 import outcome_store as store
@@ -285,6 +286,28 @@ def _host_capabilities(backend=None, host_version=None):
         return _error("host_capability_evidence_invalid")
 
 
+def _benchmark():
+    try:
+        stats = benchmark_store.statistics()
+        compare = benchmark_store.comparisons()
+        return {
+            "status": "ok",
+            "rows": stats.get("rows", 0),
+            "invalid_rows": stats.get("invalid_rows", 0),
+            "groups": len(stats.get("groups", [])),
+            "full_evidence_passes": sum(
+                group.get("full_evidence_passes", 0)
+                for group in stats.get("groups", [])
+            ),
+            "comparison_rows": len(compare.get("comparisons", [])),
+            "eligible_for_review": compare.get("eligible_for_review", 0),
+            "automatic_routing_change": False,
+            "source": "saved_benchmark_ledger_only",
+        }
+    except (OSError, ValueError, TypeError, KeyError):
+        return _error("benchmark_ledger_invalid")
+
+
 def _report_output():
     root = store.codex_home().expanduser().resolve() / "state/codex-luna-subagent-router/reports"
     try:
@@ -315,6 +338,7 @@ def collect(*, project_root=None, global_scope=False, verify_package=False,
         "plugin": _plugin(root),
         "native_shadow": _native_shadow(scope_id),
         "host_capabilities": _host_capabilities(host_backend, host_version),
+        "benchmark": _benchmark(),
         "report_output": _report_output(),
     }
     unavailable = sorted(
@@ -328,6 +352,8 @@ def collect(*, project_root=None, global_scope=False, verify_package=False,
         warnings.append("invalid_usage_binding_rows")
     if sections["native_shadow"].get("invalid_rows", 0):
         warnings.append("invalid_native_shadow_rows")
+    if sections["benchmark"].get("invalid_rows", 0):
+        warnings.append("invalid_benchmark_rows")
     if sections["hooks"].get("managed_source_count", 0) > 1:
         warnings.append("multiple_managed_hook_sources")
     if (
@@ -383,6 +409,7 @@ def main(argv=None):
         caps = result["host_capabilities"]
         print(f"Host capabilities: {caps.get('status')} · backend={caps.get('backend') or '-'} · version={caps.get('host_version') or '-'}")
         print(f"Native shadow evidence: {result['native_shadow'].get('unique_evidence', 0)} · authority=false")
+        print(f"Benchmark rows: {result['benchmark'].get('rows', 0)} · review={result['benchmark'].get('eligible_for_review', 0)}")
         if result["unavailable_sections"]:
             print("Unavailable: " + ", ".join(result["unavailable_sections"]))
     return 0

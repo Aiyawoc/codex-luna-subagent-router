@@ -126,6 +126,17 @@ class DecisionProviderTests(unittest.TestCase):
                 "enabled": True, "provider": "http", "endpoint": "http://example.com/ask"
             }, state(), decision_policy.QUESTIONS)
 
+    def test_openai_decisions_placeholder_never_guesses_network_contract(self):
+        called = []
+        result = decision_provider.evaluate(
+            {"enabled": True, "provider": "openai_decisions"},
+            state(), decision_policy.QUESTIONS,
+            opener=lambda *args, **kwargs: called.append((args, kwargs)),
+        )
+        self.assertFalse(result["available"])
+        self.assertEqual(result["reason"], "official_contract_unavailable")
+        self.assertEqual(called, [])
+
 
 class DecisionLedgerTests(unittest.TestCase):
     def test_ledger_refuses_state_or_prompt_content(self):

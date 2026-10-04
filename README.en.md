@@ -33,6 +33,7 @@ Read [plugin installation, migration and rollback](skills/codex-luna-subagent-ro
 | **Token accounting** | Optionally track total, input, cached input, output, and completeness for main/child Agents. |
 | **Data brief** | `router report` renders a fixed statistics panel and saves Markdown, JSON, and CSV. |
 | **Unified diagnostics** | `router diagnostics --json` reads package/config/hooks/ledger/plugin/Native Shadow status without refreshing transcripts or changing Host trust. |
+| **Fixed-workload evaluation** | `router benchmark_store` records success, Token, latency, tools/Workers/retries, and evidence-backed cost for Host default / Luna-only / Adaptive; review only, never automatic routing. |
 | **Portable Python** | macOS and Windows complete packages carry pinned CPython 3.13.15. |
 
 ### Routing modes

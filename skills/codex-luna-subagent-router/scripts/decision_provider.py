@@ -13,7 +13,7 @@ import urllib.request
 import outcome_store as store
 import decision_state
 
-PROVIDERS = ("off", "jev", "http", "jev_ask")
+PROVIDERS = ("off", "jev", "http", "jev_ask", "openai_decisions")
 QUESTION_TYPES = ("choice", "score", "noul")
 MAX_RESPONSE_BYTES = 1024 * 1024
 JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
@@ -122,6 +122,17 @@ def evaluate(config, state, questions, *, opener=None):
         raise store.StoreError("invalid decision provider configuration")
     if not enabled or provider == "off":
         return {"available": False, "provider": provider, "reason": "disabled", "latency_ms": 0}
+    if provider == "openai_decisions":
+        # DevDay 2026 announced Decisions API as a Luna-powered finite-answer
+        # decision service, but this build intentionally has no guessed endpoint,
+        # auth header, request envelope or response schema. Until the public
+        # contract is documented and implemented, fail closed without network.
+        return {
+            "available": False,
+            "provider": provider,
+            "reason": "official_contract_unavailable",
+            "latency_ms": 0,
+        }
     state = decision_state.build(state)
     questions = validate_questions(questions)
     endpoint = _endpoint(config.get("endpoint"), provider)

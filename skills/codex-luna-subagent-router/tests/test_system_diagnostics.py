@@ -57,6 +57,7 @@ class SystemDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result["hooks"]["host_event_execution"], "unverified")
         self.assertFalse(result["native_shadow"]["authoritative"])
         self.assertFalse(result["native_shadow"]["automatic_promotion"])
+        self.assertFalse(result["benchmark"]["automatic_routing_change"])
 
     def test_empty_ledgers_are_zero_observations_not_errors(self):
         result = diagnostics.collect(project_root=self.project)
@@ -66,6 +67,7 @@ class SystemDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result["usage"]["observed_subagents"], 0)
         self.assertEqual(result["turns"]["registered_turns"], 0)
         self.assertEqual(result["native_shadow"]["unique_evidence"], 0)
+        self.assertEqual(result["benchmark"]["rows"], 0)
 
     def test_invalid_saved_usage_row_is_visible_as_warning_not_hidden(self):
         usage = self.home / "state/codex-luna-subagent-router/usage.jsonl"

@@ -23,6 +23,10 @@ class V270ConfigTests(unittest.TestCase):
         self.write()
         with self.assertRaisesRegex(decision.ConfigurationError,"HTTPS"):
             decision.configure(self.path,provider="http",endpoint="http://example.com/ask",enabled=True)
+    def test_openai_decisions_cannot_be_enabled_without_official_contract(self):
+        self.write()
+        with self.assertRaisesRegex(decision.ConfigurationError,"public endpoint/response contract"):
+            decision.configure(self.path,provider="openai_decisions",enabled=True)
     def test_evidence_helper_accepts_21(self):
         self.write("2.1"); evidence.configure(self.path,"conservative")
         self.assertEqual(json.loads(self.path.read_text())["evidence_calibration"],"conservative")

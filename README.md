@@ -33,6 +33,7 @@ Release 继续提供原有 `router-*` 完整包，另外提供四个平台的 `r
 | **Token 统计** | 可选统计主／子 Agent 的总量、输入、缓存输入、输出与完整度。 |
 | **数据简报** | `router report` 以固定面板汇总统计，同时保存 Markdown、JSON 和 CSV。 |
 | **统一诊断** | `router diagnostics --json` 只读汇总安装、配置、hooks、账本、插件与 Native Shadow 状态；不会刷新日志或修改 Host trust。 |
+| **固定工作负载评估** | `router benchmark_store` 记录 Host default / Luna-only / Adaptive 的成功率、Token、耗时、工具/Worker/重试和可证明成本；只供人工 review，不自动改路由。 |
 
 ### 路由策略
 

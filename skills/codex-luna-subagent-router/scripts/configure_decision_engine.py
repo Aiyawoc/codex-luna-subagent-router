@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse, json, os, stat, sys, tempfile, urllib.parse
 from pathlib import Path
 
-PROVIDERS = ("off", "jev", "http", "jev_ask")
+PROVIDERS = ("off", "jev", "http", "jev_ask", "openai_decisions")
 class ConfigurationError(ValueError): pass
 
 def default_codex_home():
@@ -64,6 +64,11 @@ def configure(path, *, provider, endpoint=None, api_key_env=None, timeout_ms=800
     if api_key_env is not None and (not isinstance(api_key_env, str) or not api_key_env or len(api_key_env) > 128):
         raise ConfigurationError("invalid api-key-env")
     if enabled and provider == "off": raise ConfigurationError("enabled Decision Engine requires a non-off provider")
+    if enabled and provider == "openai_decisions":
+        raise ConfigurationError(
+            "openai_decisions is reserved for the official Decisions API adapter; "
+            "the public endpoint/response contract is not available in this Router build"
+        )
     endpoint = validate_endpoint(provider, endpoint)
     data = read_routing(path); data["schema_version"] = "2.1"
     data.setdefault("execution_policy", {"prefer_local_parallel_tools": True, "materialization_gate": True, "runtime_health_lease": True})

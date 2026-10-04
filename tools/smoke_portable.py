@@ -83,6 +83,8 @@ def main():
         diagnostics=json.loads(execute([*launcher(installed),'diagnostics','--project-root',str(project),'--json'],project,env))
         assert diagnostics['read_only'] is True and diagnostics['refresh_performed'] is False
         assert diagnostics['trust_changed'] is False and diagnostics['runtime']['status']=='ok'
+        benchmark=json.loads(execute([*launcher(installed),'benchmark_store','stats','--json'],project,env))
+        assert benchmark['rows']==0 and benchmark['automatic_routing_change'] is False
         report_root=base/'reports'
         generated=json.loads(execute([*launcher(installed),'report','--project-root',str(project),'--output-dir',str(report_root),'--json'],project,env))
         assert Path(generated['brief']).is_file() and Path(generated['json']).is_file() and Path(generated['csv']).is_file()
