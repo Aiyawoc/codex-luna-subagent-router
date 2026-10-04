@@ -96,6 +96,20 @@ class SystemDiagnosticsTests(unittest.TestCase):
         self.assertNotIn(str(self.home), raw)
         self.assertNotIn(str(self.project), raw)
 
+    def test_host_capabilities_are_optional_and_version_bound(self):
+        empty = diagnostics.collect(project_root=self.project)
+        self.assertEqual(empty["host_capabilities"]["status"], "not_selected")
+        selected = diagnostics.collect(
+            project_root=self.project,
+            host_backend="codex_desktop",
+            host_version="26.928.20755",
+        )
+        self.assertEqual(selected["host_capabilities"]["status"], "ok")
+        self.assertEqual(
+            selected["host_capabilities"]["capabilities"]["sol_medium"]["status"],
+            "unknown",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

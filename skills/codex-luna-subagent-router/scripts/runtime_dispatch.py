@@ -12,7 +12,7 @@ COMMANDS = {
     'configure_guided_install', 'configure_subagent_limit', 'configure_evidence_calibration',
     'configure_token_accounting', 'configure_decision_engine', 'validate_route_plan', 'decision_shadow',
     'host_adapter', 'host_shadow', 'host_transport', 'route_economics', 'cost_review',
-    'plugin_control', 'plugin_hook', 'system_diagnostics',
+    'plugin_control', 'plugin_hook', 'system_diagnostics', 'host_capabilities',
 }
 ALIASES = {'diagnostics': 'system_diagnostics'}
 

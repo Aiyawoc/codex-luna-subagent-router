@@ -12,6 +12,7 @@ from pathlib import Path
 import configure_subagent_limit as concurrency
 import configure_token_accounting as tokens
 import host_shadow_store
+import host_capabilities
 import outcome_store as store
 import plugin_support
 import runtime_support
@@ -264,6 +265,26 @@ def _native_shadow(scope_id):
         return _error("native_shadow_invalid")
 
 
+def _host_capabilities(backend=None, host_version=None):
+    if backend is None and host_version is None:
+        return {
+            "status": "not_selected",
+            "backend": None,
+            "host_version": None,
+            "authoritative": False,
+        }
+    if backend is None or host_version is None:
+        return _error("host_capability_identity_incomplete")
+    try:
+        result = host_capabilities.snapshot(
+            backend=backend,
+            host_version=host_version,
+        )
+        return {"status": "ok", **result}
+    except (OSError, ValueError, TypeError, KeyError):
+        return _error("host_capability_evidence_invalid")
+
+
 def _report_output():
     root = store.codex_home().expanduser().resolve() / "state/codex-luna-subagent-router/reports"
     try:
@@ -281,7 +302,8 @@ def _report_output():
         return _error("report_output_path_invalid")
 
 
-def collect(*, project_root=None, global_scope=False, verify_package=False):
+def collect(*, project_root=None, global_scope=False, verify_package=False,
+            host_backend=None, host_version=None):
     scope_id, root = store.resolve_scope(project_root, global_scope)
     config = _config(root)
     sections = {
@@ -292,6 +314,7 @@ def collect(*, project_root=None, global_scope=False, verify_package=False):
         "turns": _turns(scope_id),
         "plugin": _plugin(root),
         "native_shadow": _native_shadow(scope_id),
+        "host_capabilities": _host_capabilities(host_backend, host_version),
         "report_output": _report_output(),
     }
     unavailable = sorted(
@@ -337,12 +360,16 @@ def main(argv=None):
     scope.add_argument("--project-root")
     scope.add_argument("--global-scope", action="store_true")
     parser.add_argument("--verify-package", action="store_true")
+    parser.add_argument("--host-backend", choices=tuple(host_capabilities.host_adapter.BACKENDS))
+    parser.add_argument("--host-version")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     result = collect(
         project_root=args.project_root,
         global_scope=args.global_scope,
         verify_package=args.verify_package,
+        host_backend=args.host_backend,
+        host_version=args.host_version,
     )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -353,6 +380,8 @@ def main(argv=None):
         print(f"Hooks configured: {len(result['hooks'].get('configured_events', []))}/4 · trust={result['hooks'].get('host_hook_trust', 'unverified')}")
         print(f"Usage workers: {result['usage'].get('observed_subagents', 0)} · turns={result['turns'].get('registered_turns', 0)}")
         print(f"Plugin: {result['plugin'].get('active_source') or 'none'} · host_loaded={result['plugin'].get('host_loaded', 'unverified')}")
+        caps = result["host_capabilities"]
+        print(f"Host capabilities: {caps.get('status')} · backend={caps.get('backend') or '-'} · version={caps.get('host_version') or '-'}")
         print(f"Native shadow evidence: {result['native_shadow'].get('unique_evidence', 0)} · authority=false")
         if result["unavailable_sections"]:
             print("Unavailable: " + ", ".join(result["unavailable_sections"]))
