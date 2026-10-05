@@ -1,7 +1,10 @@
 name: Release
 
-# Publishing is an explicit maintainer operation, never a side effect of a PR or CI run.
+# Publishing is an explicit maintainer operation: workflow dispatch or an exact release/vX.Y.Z branch at main HEAD.
 on:
+  push:
+    branches:
+      - 'release/v*'
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -21,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.check.outputs.version }}
+      target: ${{ steps.check.outputs.target }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,15 +34,25 @@ jobs:
       - name: Check explicit release target and approval
         id: check
         env:
-          EXPECTED: ${{ inputs.commit_sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_EXPECTED: ${{ inputs.commit_sha }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          PUSH_SHA: ${{ github.sha }}
         run: |
-          [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$(git rev-parse HEAD)" == "$EXPECTED" ]]
           VERSION=$(cat skills/codex-luna-subagent-router/VERSION)
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          [[ "$CONFIRMATION" == "publish-v$VERSION" ]]
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            [[ "$REF_NAME" == "release/v$VERSION" ]]
+            EXPECTED="$PUSH_SHA"
+          else
+            EXPECTED="$INPUT_EXPECTED"
+            [[ "$CONFIRMATION" == "publish-v$VERSION" ]]
+          fi
+          [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED" ]]
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "target=$EXPECTED" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -51,7 +65,7 @@ jobs:
     needs: authorize
     uses: ./.github/workflows/portable-runtime.yml
     with:
-      ref: ${{ inputs.commit_sha }}
+      ref: ${{ needs.authorize.outputs.target }}
     permissions:
       contents: read
   publish:
@@ -62,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.commit_sha }}
+          ref: ${{ needs.authorize.outputs.target }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
@@ -98,7 +112,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.authorize.outputs.version }}
-          TARGET: ${{ inputs.commit_sha }}
+          TARGET: ${{ needs.authorize.outputs.target }}
         run: |
           set -euo pipefail
           TAG="v$VERSION"
@@ -110,6 +124,6 @@ jobs:
             echo 'Tag already exists; refusing to move it.' >&2
             exit 1
           fi
-          gh release create "$TAG" --target "$TARGET" --title "$TAG" --draft --notes "Complete platform packages and opt-in local-marketplace plugin packages, sharing pinned private CPython and one Router Core. Plugin packaging and synthetic migration/hooks are tested; actual Host loading/trust still needs field acceptance. See CHANGELOG.md and references/plugin-install.md."
+          gh release create "$TAG" --target "$TARGET" --title "$TAG" --draft --notes "Agent Router $TAG Stable. Reliability and evidence layers are Stable without promoting unknown Host capabilities. PTC remains capability-gated with native/direct fallback; this release makes no comparative quality/Token/latency/cost claim versus Host default. Four-platform complete/plugin packages, staged upgrade preflight, migration/rollback and SHA256 are release-gated. Real Desktop plugin marketplace load/trust and unobserved structured Host capabilities remain unclaimed. See CHANGELOG.md and docs/v2.9.0-stable-acceptance.md."
           gh release upload "$TAG" packages/*
           gh release edit "$TAG" --draft=false

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.9.0: Stable（2026-10-05）
+
+- 正式封板 v2.9 Reliability / Host Evidence / Benchmark 工具链。P0 的 request-vs-receipt 定价粒度、Native Shadow same-execution identity、短锁 usage collection 与只读 diagnostics 均进入 Stable。
+- Host capability snapshot 与 app-server structured-event adapter 进入 Stable 的**证据接口**，不是当前 Desktop 能力承诺：缺少 exact backend + Host version 的真实 observation 时继续返回 `unknown`；不同来源冲突仍退回 unknown，不根据版本号猜 supported。
+- capability-gated PTC 进入 Stable，但 `programmatic_tool_calling` 未经当前 Host/version 实证时始终 fallback 到 native/direct tools；write、approval、semantic judgment、citation/native-artifact boundary 继续保持 direct，不扩大 production authority。
+- `benchmark_store` 与 8×3 fixed-workload comparison 作为观测/人工 review 工具发布。本 Stable **不宣称** Router 相对 Host default 的成功率、Token、延迟或成本提升，因此当前没有真实 frozen-workload rows 不构成未兑现的效率声明；未来任何比较性发布声明仍必须先有真实 Host benchmark evidence。
+- RC.2 real-Host 验收观察到 fresh completion、同 Worker natural reuse 的 exact-cursor 增量账本、已 finalized 历史冻结、真实 interrupt terminal 状态以及 unknown usage 保持 null；未观察到 Desktop lifecycle/accounting regression。structured app-server event JSON 本机不可得的部分继续 `NOT VERIFIED`，不冒充 synthetic proof。
+- RC.1/RC.2 staged upgrade preflight blocker 已在 RC.3 实机关闭：staging complete package 可只读识别另一 bundled 安装的四个 Router-managed hooks，不再误判路径或触发 cross-root interpreter-affinity；实际执行/configure 路径仍强制目标安装自己的 bundled interpreter。
+- 四平台 Stable 发布门继续包含 exact source/Manifest/Arena、complete-package build + install/upgrade/hooks/full-tests、staged→installed upgrade-preflight 复现、native-plugin migration/rollback smoke 与 8 个归档 SHA256 聚合。Native plugin **真实 Desktop marketplace load/trust** 仍为未声明现场能力，自动 smoke 不冒充 Host loading 验证。
+- `openai_decisions` 继续 fail-closed/network-inert；官方 endpoint/auth/request/response contract 未公开完整前不是 Stable blocker，也不会猜接口。
+
 ## 2.9.0-rc.3: Cross-root bundled preflight affinity（2026-10-05）
 
 - 修复 RC.2 本机复验发现的第二层升级预检阻断：staged RC 进程在描述旧 bundled 安装的 expected hook handler 时，不再调用要求 `sys.executable` 必须属于目标 root 的执行期 runtime-affinity 校验，因此不会因 `complete packages must run their bundled interpreter` 在 Q5 JSON 生成前退出。
