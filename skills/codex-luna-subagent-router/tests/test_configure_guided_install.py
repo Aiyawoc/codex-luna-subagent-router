@@ -231,7 +231,7 @@ class GuidedInstallTests(unittest.TestCase):
         self.assertEqual(set(q5["current"]["current_hook_events"]), set(tokens.EVENTS))
         self.assertFalse(q5["needs_question"])
         self.assertNotIn(5, result["pending_questions"])
-        self.assertIn(str(bundled_python), handler["command"])
+        self.assertIn(str(bundled_python.resolve()), handler["command"])
 
     def test_upgrade_preflight_does_not_accept_staging_copy_as_installed_hook(self) -> None:
         installed = self.skills_dir / "codex-luna-subagent-router"

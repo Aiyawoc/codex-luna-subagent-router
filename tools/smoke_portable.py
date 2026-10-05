@@ -92,6 +92,14 @@ def main():
         execute([*launcher(installed),'configure_token_accounting','--scope','user','--mode','on','--install-hooks','--hooks-supported'],project,env)
         definitions=json.loads((home/'hooks.json').read_text())['hooks']
         assert set(definitions)=={'UserPromptSubmit','Stop','SubagentStart','SubagentStop'}
+        # Reproduce the real staged-upgrade preflight: the staging package is
+        # running, while managed hooks point at a different installed bundled
+        # root. Q5 must recognize all four installed handlers without requiring
+        # the staging interpreter to satisfy the installed root's runtime affinity.
+        staged_preflight=json.loads(execute([*launcher(root),'inspect_guided_install','--install-mode','upgrade','--json'],project,env))
+        q5=next(item for item in staged_preflight['questions'] if item['number']==5)
+        assert set(q5['current']['current_hook_events'])=={'UserPromptSubmit','Stop','SubagentStart','SubagentStop'}
+        assert q5['needs_question'] is False and 5 not in staged_preflight['pending_questions']
         handler=definitions['Stop'][0]['hooks'][0]
         command=handler.get('commandWindows',handler['command']) if os.name=='nt' else shlex.split(handler['command'])
         assert 'runtime_dispatch.py' in handler['command']
@@ -105,7 +113,8 @@ def main():
         test_env.pop('PYTHONHOME',None);test_env.pop('PYTHONPATH',None)
         execute([str(python),'-I','-S','-B','-X','utf8','-m','unittest','discover','-s','tests','-v'],installed,test_env)
         print(json.dumps({'target':args.target,'status':'passed','no_python_on_path':True,'unicode_space_path':True,
-                          'install_upgrade':True,'report_export':True,'hook_dispatch':True,'real_bundled_python_tests':True},indent=2))
+                          'install_upgrade':True,'staged_upgrade_preflight':True,'report_export':True,
+                          'hook_dispatch':True,'real_bundled_python_tests':True},indent=2))
 
 
 if __name__=='__main__':
