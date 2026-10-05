@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.0-rc.3: Cross-root bundled preflight affinity（2026-10-05）
+
+- 修复 RC.2 本机复验发现的第二层升级预检阻断：staged RC 进程在描述旧 bundled 安装的 expected hook handler 时，不再调用要求 `sys.executable` 必须属于目标 root 的执行期 runtime-affinity 校验，因此不会因 `complete packages must run their bundled interpreter` 在 Q5 JSON 生成前退出。
+- `hook_handler()` 新增仅供只读描述路径使用的受限开关；默认行为保持严格，安装/写 hooks/正常执行仍会调用 `validate_runtime()` 并拒绝错误 bundled interpreter。预检只跳过“当前进程属于目标 root”这一执行期要求，生成的命令仍精确指向目标安装自己的 bundled Python 与 `runtime_dispatch.py`。
+- 新增“staging interpreter + other bundled installed root”回归，同时断言默认 `hook_handler()` 在同一场景仍抛出 bundled-interpreter affinity 错误；既解决跨 root 盘点，也防止安全边界被顺带放宽。
+- RC.3 不改变 routing、Token accounting 数据模型、Host capability、PTC、Native authority、Decision provider 或 benchmark 规则。RC.2/RC.1 中未验证的 Host 证据继续保持 `unknown / NOT VERIFIED`。
+
 ## 2.9.0-rc.2: Staged upgrade preflight hook identity（2026-10-05）
 
 - 修复 RC.1 本机验收发现的升级预检误报：从新 Release 的解压暂存目录运行 `inspect_guided_install --install-mode upgrade` 时，不再使用暂存包自身 `__file__` 生成唯一期望 handler，而是依据已检测到的现有完整安装目录生成 Router-managed hook identity。

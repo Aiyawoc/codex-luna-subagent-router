@@ -75,7 +75,11 @@ def _expected_hook_handlers(installed, *, project_root=None):
         script = Path(item["path"]) / "scripts" / "token_usage.py"
         if not script.is_file():
             continue
-        handler = tokens.hook_handler(script, project_root=project_root)
+        handler = tokens.hook_handler(
+            script,
+            project_root=project_root,
+            validate_bundled_runtime=False,
+        )
         if handler not in handlers:
             handlers.append(handler)
     if not handlers:

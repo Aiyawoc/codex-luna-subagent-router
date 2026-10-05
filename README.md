@@ -10,7 +10,7 @@
 
 > **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.8.3 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
 >
-> 当前预发布版本为 **v2.9.0-rc.2**。稳定用户继续使用 v2.8.3；RC.2 仅修复升级预检从暂存包运行时误判既有 Router hooks 的路径身份问题，功能仍冻结，继续进行真实 Host capability/event 与固定 workload benchmark 验收。
+> 当前预发布版本为 **v2.9.0-rc.3**。稳定用户继续使用 v2.8.3；RC.3 继续收敛升级预检：只读盘点可以描述其它已安装 bundled Router 的 hook identity，而真正执行该安装时仍强制使用其自身解释器。功能保持冻结，继续真实 Host 与 benchmark 验收。
 
 [主要能力](#主要能力) · [快速开始](#快速开始) · [在-codex-中使用](#在-codex-中使用) · [数据简报](#数据简报) · [配置](#配置) · [常用命令](#常用命令) · [与-visualize-配合](#与-visualize-配合) · [安全与隐私](#安全与隐私) · [文档](#文档)
 

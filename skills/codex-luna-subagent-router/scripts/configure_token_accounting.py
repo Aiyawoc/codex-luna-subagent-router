@@ -38,13 +38,14 @@ def read_json(path):
     return value
 
 
-def hook_handler(script, python=None, project_root=None):
+def hook_handler(script, python=None, project_root=None, *, validate_bundled_runtime=True):
     script_path = Path(script).absolute()
     skill_root = script_path.parent.parent
     bundled = (skill_root / "runtime/runtime.json").exists()
     if bundled:
         from runtime_support import runtime_executable, validate_runtime
-        validate_runtime(skill_root)
+        if validate_bundled_runtime:
+            validate_runtime(skill_root)
         python = str(runtime_executable(skill_root))
     else:
         python = str(python or sys.executable)

@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import inspect_guided_install as setup  # noqa: E402
 import configure_token_accounting as tokens  # noqa: E402
+import runtime_support  # noqa: E402
 
 from configure_guided_install import (  # noqa: E402
     ConfigurationError,
@@ -161,6 +162,76 @@ class GuidedInstallTests(unittest.TestCase):
         self.assertEqual(set(q5["current"]["current_hook_events"]), set(tokens.EVENTS))
         self.assertFalse(q5["needs_question"])
         self.assertNotIn(5, result["pending_questions"])
+
+    def test_upgrade_preflight_describes_other_bundled_install_without_runtime_affinity(self) -> None:
+        installed = self.skills_dir / "codex-luna-subagent-router"
+        script = installed / "scripts" / "token_usage.py"
+        script.parent.mkdir(parents=True)
+        script.write_text("# installed hook target\n", encoding="utf-8")
+        runtime = installed / "runtime"
+        runtime.mkdir()
+        (runtime / "runtime.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "target": runtime_support.target_name(),
+                    "python_version": list(sys.version_info[:3]),
+                }
+            ),
+            encoding="utf-8",
+        )
+        bundled_python = runtime_support.runtime_executable(installed)
+        bundled_python.parent.mkdir(parents=True)
+        bundled_python.write_text("placeholder", encoding="utf-8")
+        routing = self.codex_home / "codex-luna-subagent-router" / "routing.json"
+        routing.parent.mkdir(parents=True)
+        routing.write_text(
+            json.dumps(
+                {
+                    "schema_version": "2.1",
+                    "routing_mode": "adaptive",
+                    "evidence_calibration": "off",
+                    "token_accounting": "on",
+                    "token_accounting_scope": "main_and_subagents",
+                    "token_accounting_collection": "hooks",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        handler = tokens.hook_handler(
+            script.resolve(),
+            validate_bundled_runtime=False,
+        )
+        hooks = {
+            "hooks": {
+                event: [
+                    {
+                        **({"matcher": ".*"} if event.startswith("Subagent") else {}),
+                        "hooks": [handler],
+                    }
+                ]
+                for event in tokens.EVENTS
+            }
+        }
+        (self.codex_home / "hooks.json").write_text(
+            json.dumps(hooks, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(ValueError, "bundled interpreter"):
+            tokens.hook_handler(script.resolve())
+
+        result = setup.inspect(
+            self.codex_home,
+            install_mode="upgrade",
+            skills_dir=self.skills_dir,
+        )
+        q5 = next(item for item in result["questions"] if item["number"] == 5)
+        self.assertEqual(set(q5["current"]["current_hook_events"]), set(tokens.EVENTS))
+        self.assertFalse(q5["needs_question"])
+        self.assertNotIn(5, result["pending_questions"])
+        self.assertIn(str(bundled_python), handler["command"])
 
     def test_upgrade_preflight_does_not_accept_staging_copy_as_installed_hook(self) -> None:
         installed = self.skills_dir / "codex-luna-subagent-router"

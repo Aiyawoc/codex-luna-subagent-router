@@ -10,7 +10,7 @@ Current stable release: [**v2.8.3**](https://github.com/Aiyawoc/codex-luna-subag
 
 > **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.8.3 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 >
-> The current prerelease is **v2.9.0-rc.2**. Stable users should remain on v2.8.3. RC.2 only fixes upgrade-preflight hook identity when preflight runs from a staging package; scope remains feature-frozen for real Host capability/event and fixed-workload benchmark acceptance.
+> The current prerelease is **v2.9.0-rc.3**. Stable users should remain on v2.8.3. RC.3 lets read-only upgrade preflight describe hook identity for another installed bundled Router while preserving bundled-interpreter affinity for actual execution. Scope remains feature-frozen for real Host and benchmark acceptance.
 
 [Capabilities](#capabilities) · [Quick start](#quick-start) · [Using it in Codex](#using-it-in-codex) · [Data brief](#data-brief) · [Configuration](#configuration) · [Common commands](#common-commands) · [Using with @Visualize](#using-with-visualize) · [Security and privacy](#security-and-privacy) · [Documentation](#documentation)
 
