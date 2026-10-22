@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.9.1-rc.1: Hook compatibility and observable lifecycle（2026-10-22）
+
+- 保持默认四事件和既有 usage/turn 账本 schema；新增显式确认后启用的 Interrupt / SessionEnd。两者为 3 秒同步轻量 handler，不扫描用量/日志，不请求模型继续。
+- Interrupt 单独记录精确身份并冻结既有轮次快照；SessionEnd 不猜 turn、不宣称任务成功。执行观察与用量完整度分别展示，未知值仍为未知。
+- 新增无内容 handler receipts，按当前 scope/安装/产品版本区分 received / handled / failed / stale；diagnostics 不再只能盘点文件，但仍不把本地调用等同 Desktop 信任或执行证明。
+- 统计开关与 silent / brief / detailed 自动摘要分离；已有显示设置保留，新开启默认 silent；自动 preview 使用 --respect-summary。
+- 诊断盘点 JSON/内联 TOML 及用户/项目层；检测重复来源后拒绝叠加安装。正常警告/失败输出兼容 advisory 事件，不返回阻止/继续控制字段。
+- 默认插件包保留四事件，六事件现场验收包须显式构建，不自动成为正式发布入口。新增专项测试与 bundled 六事件 smoke。
+- 完整包、默认插件及六事件插件在 macOS ARM64 隔离环境复验；六事件插件覆盖启用前无写入、重复事件幂等、诊断与停用/回退。四平台工作流增加该变体的构建与 smoke，但默认发布资产集合不变。结果与未验证范围见 docs/v2.9.1-rc.1-validation.md。
+- 本 RC 不宣称最新 Desktop marketplace 加载/信任/实际触发 PASS，不连接未验证的 Desktop 内部事件流，也不宣称相对 Host default 的节约收益。详见 docs/v2.9.1-hook-compatibility.md。
+
 ## 2.9.0: Stable（2026-10-05）
 
 - 正式封板 v2.9 Reliability / Host Evidence / Benchmark 工具链。P0 的 request-vs-receipt 定价粒度、Native Shadow same-execution identity、短锁 usage collection 与只读 diagnostics 均进入 Stable。

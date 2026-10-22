@@ -104,6 +104,29 @@ def main():
         command=handler.get('commandWindows',handler['command']) if os.name=='nt' else shlex.split(handler['command'])
         assert 'runtime_dispatch.py' in handler['command']
         execute(command,project,env,stdin=json.dumps({'hook_event_name':'portable_smoke_noop'}))
+        # v2.9.1 optional terminal hooks: use a disposable synthetic scope, never
+        # the operator's live configuration or trust. No transcript is read here.
+        saved_ledger = ledger.read_bytes()
+        saved_host_config = (home/'config.toml').read_bytes()
+        execute([*launcher(installed),'configure_token_accounting','--scope','user','--mode','on',
+                 '--install-hooks','--hooks-supported','--lifecycle-hooks','on',
+                 '--lifecycle-hooks-supported','--summary','silent'],project,env)
+        definitions=json.loads((home/'hooks.json').read_text())['hooks']
+        assert set(definitions)=={'UserPromptSubmit','Stop','SubagentStart','SubagentStop','Interrupt','SessionEnd'}
+        for event in ('Interrupt','SessionEnd'):
+            handler=definitions[event][0]['hooks'][0]
+            assert handler['timeout']==3 and not handler.get('async',False)
+            command=handler.get('commandWindows',handler['command']) if os.name=='nt' else shlex.split(handler['command'])
+            payload={'hook_event_name':event,'session_id':'portable-terminal-session','cwd':str(project)}
+            if event=='Interrupt':
+                payload['turn_id']='portable-terminal-turn'
+            else:
+                payload['reason']='other'
+            assert json.loads(execute(command,project,env,stdin=json.dumps(payload)))=={}
+        assert ledger.read_bytes()==saved_ledger and (home/'config.toml').read_bytes()==saved_host_config
+        staged=json.loads(execute([*launcher(root),'inspect_guided_install','--install-mode','upgrade','--json'],project,env))
+        q5=next(item for item in staged['questions'] if item['number']==5)
+        assert len(q5['current']['current_hook_events'])==6 and q5['needs_question'] is False
         # Native .cmd entry is an additional Windows contract, not a substitute for PowerShell testing.
         if os.name=='nt':
             execute([os.environ.get('COMSPEC',str(Path(os.environ['SystemRoot'])/'System32/cmd.exe')),'/d','/c',str(installed/'bin/router.cmd'),'doctor'],project,env)

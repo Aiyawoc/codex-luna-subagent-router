@@ -49,15 +49,17 @@ def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def hook_definitions():
+def hook_definitions(*, lifecycle_hooks=False):
     unix = '"${PLUGIN_ROOT}/core/codex-luna-subagent-router/runtime/python/bin/python3" -I -S -B -X utf8 "${PLUGIN_ROOT}/core/codex-luna-subagent-router/scripts/runtime_dispatch.py" plugin_hook'
     windows = '"%PLUGIN_ROOT%/core/codex-luna-subagent-router/runtime/python/python.exe" -I -S -B -X utf8 "%PLUGIN_ROOT%/core/codex-luna-subagent-router/scripts/runtime_dispatch.py" plugin_hook'
     handler = dict(type="command", command=unix, commandWindows=windows,
                    timeout=5, statusMessage="agent-router:plugin-accounting")
-    return {"hooks": {event: [{"hooks": [dict(handler)]}] for event in ps.tokens.EVENTS}}
+    events = ps.tokens.ALL_EVENTS if lifecycle_hooks else ps.tokens.EVENTS
+    return {"hooks": {event: [{"hooks": [{**handler, "timeout": 3 if event in ps.tokens.TERMINAL_EVENTS else 5}]}]
+                      for event in events}}
 
 
-def assemble(core, destination, template=REPO / "plugin"):
+def assemble(core, destination, template=REPO / "plugin", *, lifecycle_hooks=False):
     runtime.verify_package(core)
     version = runtime.skill_version(core)
     plugin = destination / "plugins" / ps.PLUGIN_NAME
@@ -66,7 +68,7 @@ def assemble(core, destination, template=REPO / "plugin"):
     manifest = json.loads((template / "manifest.json").read_text(encoding="utf-8"))
     manifest["version"] = version
     write_json(plugin / ".codex-plugin/plugin.json", manifest)
-    write_json(plugin / "hooks/hooks.json", hook_definitions())
+    write_json(plugin / "hooks/hooks.json", hook_definitions(lifecycle_hooks=lifecycle_hooks))
     write_json(plugin / ps.PLUGIN_MANIFEST, {"schema_version": 1, "version": version, "files": ps.inventory(plugin)})
     write_json(destination / ".agents/plugins/marketplace.json", {
         "name": "agent-router-local", "interface": {"displayName": "Agent Router Local"},
@@ -89,7 +91,7 @@ def assemble(core, destination, template=REPO / "plugin"):
     return plugin
 
 
-def build(target, portable_dist=Path("dist"), output=Path("dist-plugin")):
+def build(target, portable_dist=Path("dist"), output=Path("dist-plugin"), *, lifecycle_hooks=False):
     if target not in TARGETS:
         raise ValueError("unsupported plugin platform")
     version = runtime.skill_version(CORE)
@@ -99,7 +101,8 @@ def build(target, portable_dist=Path("dist"), output=Path("dist-plugin")):
     if check != [runtime.file_digest(archive), archive.name]:
         raise ValueError("complete package checksum mismatch")
     output.mkdir(parents=True, exist_ok=True)
-    result = output / f"router-plugin-{version}-{target}{ext}"
+    variant = "plugin-lifecycle" if lifecycle_hooks else "plugin"
+    result = output / f"router-{variant}-{version}-{target}{ext}"
     with tempfile.TemporaryDirectory(prefix="router-plugin-build-") as tmp:
         base = Path(tmp)
         extract(archive, base / "portable")
@@ -108,7 +111,7 @@ def build(target, portable_dist=Path("dist"), output=Path("dist-plugin")):
         if meta.get("target") != target or runtime.skill_version(core) != version:
             raise ValueError("complete package target/version mismatch")
         market = base / "agent-router-marketplace"
-        assemble(core, market)
+        assemble(core, market, lifecycle_hooks=lifecycle_hooks)
         if ext == ".zip":
             with zipfile.ZipFile(result, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
                 for path in sorted(market.rglob("*")):
@@ -131,5 +134,6 @@ if __name__ == "__main__":
     p.add_argument("--target", choices=TARGETS, required=True)
     p.add_argument("--portable-dist", type=Path, default=Path("dist"))
     p.add_argument("--output", type=Path, default=Path("dist-plugin"))
+    p.add_argument("--lifecycle-hooks", action="store_true", help="Opt-in six-event package for field acceptance; not the default distribution.")
     a = p.parse_args()
-    build(a.target, a.portable_dist, a.output)
+    build(a.target, a.portable_dist, a.output, lifecycle_hooks=a.lifecycle_hooks)

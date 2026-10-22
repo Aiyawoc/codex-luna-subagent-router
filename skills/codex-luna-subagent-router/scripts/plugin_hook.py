@@ -13,11 +13,11 @@ import token_usage
 
 def dispatch(payload):
     root = ps.plugin_root()
-    if root is None or payload.get("hook_event_name") not in ps.tokens.EVENTS:
+    if root is None or payload.get("hook_event_name") not in ps.tokens.ALL_EVENTS:
         return {}
     supplied = os.environ.get("PLUGIN_ROOT")
     if not supplied or Path(supplied).resolve() != root:
-        return {"continue": True, "systemMessage": "Router plugin root mismatch; no collection performed."}
+        return {"systemMessage": "Router plugin root mismatch; no collection performed."}
     cwd = Path(payload.get("cwd", ""))
     if not cwd.is_absolute() or not cwd.is_dir():
         return {}
@@ -27,13 +27,13 @@ def dispatch(payload):
         if not matched:
             return {}
         if ps.hook_sources(project):
-            return {"continue": True, "systemMessage": "Router plugin detected another accounting hook source; plugin collection skipped. Review migration."}
+            return {"systemMessage": "Router plugin detected another accounting hook source; plugin collection skipped. Review migration."}
         # A revived legacy installation is also a conflict, even with hooks disabled.
         import install_bundle
         for scope in (None, project) if project else (None,):
             legacy, _ = install_bundle.destinations(scope)
             if legacy.exists():
-                return {"continue": True, "systemMessage": "Router plugin detected a legacy Skill installation; plugin collection skipped."}
+                return {"systemMessage": "Router plugin detected a legacy Skill installation; plugin collection skipped."}
         config = store.effective_config(project)
         if (config.get("token_accounting") != "on" or config.get("token_accounting_collection") != "hooks"
                 or config.get("token_accounting_scope") != "main_and_subagents"):
@@ -51,7 +51,7 @@ def main():
             raise ValueError("hook payload must be an object")
         result = dispatch(payload)
     except (ValueError, OSError, KeyError, TypeError):
-        result = {"continue": True, "systemMessage": "Router plugin accounting unavailable; no inferred usage and no blocked Stop."}
+        result = {"systemMessage": "Router plugin accounting unavailable; no inferred usage and no blocked Stop."}
     print(json.dumps(result, ensure_ascii=False))
     return 0
 

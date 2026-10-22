@@ -1,5 +1,7 @@
 # 主／子 Agent token 统计（v2.6.1）
 
+> v2.9.1-rc.1 增量：统计与摘要独立设置、可选 Interrupt / SessionEnd、内容无关的 handler receipts。见 [Hook 兼容性与诊断](hook-compatibility.md)。本页的 v2.6.1 是既有 reader/hook 协议版本，不是当前产品版本。原四事件安装和 usage/turn 账本格式保持兼容。
+
 仅 `token_accounting=on` 采集；缺失/off 保持关闭。此选项独立于 luna_only/adaptive 和 evidence_calibration，关闭历史校准也能查看用量。不会切换模型、修改路由成本表、估算账单或绕过 hooks 信任。
 
 ## 口径与显示

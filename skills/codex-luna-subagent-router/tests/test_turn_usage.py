@@ -537,7 +537,7 @@ class MainTurnTests(Sandbox):
         self.assertEqual(json.loads(proc.stdout)[0]['main_snapshot']['counts']['total_tokens'],45000)
         payload=self.payload('Stop');payload.pop('turn_id')
         proc=subprocess.run([sys.executable,str(SCRIPTS/'token_usage.py'),'hook'],input=json.dumps(payload),text=True,capture_output=True)
-        self.assertEqual(proc.returncode,0);self.assertTrue(json.loads(proc.stdout)['continue'])
+        self.assertEqual(proc.returncode,0);self.assertTrue(json.loads(proc.stdout).get('continue', True))
 
 
 class UpgradeTests(Sandbox):

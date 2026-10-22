@@ -379,7 +379,7 @@ class LedgerAndHooksTests(Sandbox):
         for args,body in [(["hook"],"invalid"),(["--hook-version","old","hook"],"{}"),(["--bad-option","hook"],"{}")]:
             proc=subprocess.run([sys.executable,str(SCRIPTS/'token_usage.py'),*args],input=body,text=True,capture_output=True)
             self.assertEqual(proc.returncode,0,proc.stderr)
-            out=json.loads(proc.stdout);self.assertTrue(out["continue"]);self.assertNotEqual(out.get("decision"),"block")
+            out=json.loads(proc.stdout);self.assertTrue(out.get("continue", True));self.assertNotEqual(out.get("decision"),"block")
 
     def test_cli_hook_and_stats_json_preserve_raw_integers(self):
         self.transcript()

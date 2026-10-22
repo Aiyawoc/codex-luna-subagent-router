@@ -49,7 +49,7 @@ Astra/Sol Lead 不重复已适合廉价 Worker 的工作；关键路径、不可
 
 `token_accounting` 缺失按 off。开启后按需读 `references/token-accounting.md`；只用观察到的线程数据，缓存是输入子项，不让 Worker 自报。UserPromptSubmit/Stop 记录主线程本轮；父 transcript 的 Started/Interacted activity 关联真实子线程，不能假定父子 turn_id 相同。
 
-`main_and_subagents` 下准备最终回复前运行 `turn_usage.py preview`；成功时把“截至最终回复前”的简报附到正文末尾，失败/歧义则省略。Stop 仍保存更晚快照；不要为补 token 再触发模型轮次。
+`main_and_subagents` 回复前用 `turn_usage.py preview --respect-summary`；silent 不展示、不读日志；否则成功时附“截至最终回复前”简报，失败省略。Stop 保存后续快照；不为统计续跑模型。
 
 用户要求汇总时运行 `bin/router report`：只读 stats、不 refresh；正文展示固定面板，并保留 JSON/CSV。
 
