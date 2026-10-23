@@ -8,7 +8,7 @@
 
 当前稳定版：[**v2.9.0**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.0) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
-开发候选版：**v2.9.1-rc.1**，聚焦可选结束事件、hook 执行诊断和静默统计。不是已发布的 Stable，也不表示已完成最新 Desktop 现场验收。见 [本轮升级与验收](docs/v2.9.1-hook-compatibility.md)。
+开发候选版：**v2.9.1-rc.2**，聚焦可选结束事件、hook 执行诊断和静默统计。不是已发布的 Stable，也不表示已完成最新 Desktop 现场验收。见 [本轮升级与验收](docs/v2.9.1-rc.2-validation.md)。
 
 > **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.9.0 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
 >

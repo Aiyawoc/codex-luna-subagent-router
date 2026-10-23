@@ -170,6 +170,37 @@ def _health_path(upath, scope, event):
     return state_dir(upath) / "health" / _digest(_id(scope)) / (event + ".json")
 
 
+PATH_FIELDS = ("transcript_path", "agent_transcript_path")
+IDENTITY_FIELDS = ("session_id", "turn_id", "agent_id")
+FIELD_STATES = ("missing", "null", "empty", "nonempty", "invalid")
+
+
+def input_shape(payload):
+    """Presence and hashed identities only; never paths, messages or commands."""
+    fields = {}
+    for name in PATH_FIELDS + IDENTITY_FIELDS:
+        value = payload.get(name)
+        state = ("missing" if name not in payload else "null" if value is None else
+                 "invalid" if not isinstance(value, str) else "empty" if not value else "nonempty")
+        fields[name] = state
+    identities = {name: _digest(payload[name]) for name in IDENTITY_FIELDS
+                  if fields[name] == "nonempty" and ID_RE.fullmatch(payload[name])}
+    return dict(fields=fields, identity_keys=identities, context_kind="unknown")
+
+
+def _validate_shape(value):
+    if not isinstance(value, dict) or set(value) != {"fields", "identity_keys", "context_kind"}:
+        raise store.StoreError("invalid hook input shape")
+    fields, keys = value["fields"], value["identity_keys"]
+    if (not isinstance(fields, dict) or set(fields) != set(PATH_FIELDS+IDENTITY_FIELDS)
+            or any(state not in FIELD_STATES for state in fields.values())
+            or not isinstance(keys, dict) or set(keys)-set(IDENTITY_FIELDS)
+            or any(not isinstance(v, str) or not re.fullmatch('[a-f0-9]{64}', v) for v in keys.values())
+            or value["context_kind"] != "unknown"):
+        raise store.StoreError("invalid hook input shape")
+    return value
+
+
 def received(upath, scope, payload):
     """Best-effort receipt; diagnostic storage must never disable accounting."""
     try:
@@ -179,7 +210,7 @@ def received(upath, scope, payload):
         row = dict(schema_version=1, event=event, scope_id=_id(scope),
                    invocation_id=uuid.uuid4().hex, runtime_key=runtime_key,
                    router_version=version, phase="received", reason=None,
-                   recorded_at=store.timestamp(), elapsed_ms=None)
+                   recorded_at=store.timestamp(), elapsed_ms=None, input_shape=input_shape(payload))
         with store.locked(path, timeout=0.04):
             _write(path, row)
         return path, row["invocation_id"], time.monotonic()
@@ -226,6 +257,7 @@ def health(upath, scope):
             if elapsed is not None and (type(elapsed) is not int or elapsed < 0):
                 raise store.StoreError("invalid elapsed time")
             events[event] = {k: row[k] for k in ("phase", "recorded_at", "elapsed_ms")}
+            events[event]["input_shape"] = _validate_shape(row["input_shape"]) if "input_shape" in row else None
         except (OSError, ValueError, KeyError, TypeError):
             events[event] = {"phase": "unavailable"}
     return dict(events=events, source="local_handler_receipts",

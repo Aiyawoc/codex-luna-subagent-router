@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.9.1-rc.2: Evidence-driven accounting closure（2026-10-23）
+
+- 修复子线程 Stop 早于终止记录时的临时读取上界：在后续自然停止/轮次事件预算内，按精确 child turn 观察结束；不靠计数相等提升完整度，不扩展已封存历史，不等待或要求模型继续。
+- 生命周期使用独立的有界重读，不复制某个轮次的 token；每次最多复核两个相关 Worker。子轮次读取绑定 child turn，已确认的旧区间结束边界不被下一轮扩大。迟到旧采集不覆盖更新的完整生命周期快照。
+- 主轮次 transcript I/O 移出短写锁，写入前重新核对旧记录；并发更新、中断和封存优先，不覆盖新记录。
+- 新增有限内存的超长 JSONL 校验，仅对完整且结构有效的 event_msg/item_completed/CommandExecution 提取元数据。64 KiB 分块、16 MiB 单记录上限、深度/节点/键/时间/总读取预算并存；未知类型、损坏和不完整记录保持未知，不无限放大上限。
+- Reader/cache 协议升级为 2.9.1-rc.2，旧缓存自动失效；usage/turn/outcome 账本 schema 和 hook 定义标记 2.6.1 保持不变。
+- 新增只读 model_bindings 盘点与显式元数据比较，严格区分 configured/requested/observed 和 Router 决策来源。旧请求与旧观察一致不误报 Host 替换；AGENTS 中旧模型引用只提示语义复核，不自动改写。
+- Hook 健康记录增加字段缺失/空值/非空状态与身份哈希；缺少历史 payload 不补造上下文、不排除分母。新增回归覆盖晚到终止、复用/中断、短锁冲突、超长记录及元数据隐私。
+- 本候选不升级生产安装、不改生产账本或项目指令、不接入私有 App Server，不宣称 Desktop 实测或成本收益。验证详情见 docs/v2.9.1-rc.2-validation.md。
+
 ## 2.9.1-rc.1: Hook compatibility and observable lifecycle（2026-10-22）
 
 - 保持默认四事件和既有 usage/turn 账本 schema；新增显式确认后启用的 Interrupt / SessionEnd。两者为 3 秒同步轻量 handler，不扫描用量/日志，不请求模型继续。

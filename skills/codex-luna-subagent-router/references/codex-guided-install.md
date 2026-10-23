@@ -237,3 +237,8 @@ cat VERSION
 
 For an explicitly requested native plugin install/migration, first follow `plugin-install.md`.
 The six questions and existing choices stay unchanged. Plugin ownership is separate from Host enablement and hook trust. Do not invoke the standalone installer from an active plugin or maintain a duplicate Skill/hook source. The native plugin uses the same Core helpers and external canonical ledgers.
+
+
+## RC.2 只读来源核对
+
+升级预检后可运行 `bin/router model_bindings --project-root /实际项目 --json`，只盘点配置候选、已保存观察和旧型号提及，不改配置或项目指令。不能把当前配置当历史请求，也不能把禁止旧型号的指令误判为主动指定。见 `references/accounting-closure.md`；这个诊断不是每次普通任务必须执行的新门槛。

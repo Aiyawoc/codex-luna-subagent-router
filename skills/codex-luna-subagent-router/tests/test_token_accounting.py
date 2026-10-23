@@ -80,7 +80,7 @@ class Sandbox(unittest.TestCase):
         return usage.collect(self.upath, AGENT, PARENT, "global", transcript=self.path, **kwargs)
 
     def hook_payload(self, event="SubagentStop"):
-        return dict(hook_event_name=event, agent_id=AGENT, session_id=PARENT, turn_id="child-turn-001",
+        return dict(hook_event_name=event, agent_id=AGENT, session_id=PARENT, turn_id="turn-001",
                     agent_type="sol_high", cwd=str(self.project), agent_transcript_path=str(self.path),
                     transcript_path=str(self.home / "parent.jsonl"), last_assistant_message="SECRET DO NOT PERSIST")
 

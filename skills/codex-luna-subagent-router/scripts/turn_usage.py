@@ -193,7 +193,8 @@ def begin(payload, upath, sid, root):
                     # when the parent turn is sealed without a normal Stop hook.
                     if member["locator"] is None and newer["locator"] is not None:
                         member["locator"] = newer["locator"]
-                    if newer["locator"] == member["locator"]:
+                    confirmed = old["child_snapshots"].get(agent, {}).get("terminal_observed") is True
+                    if newer["locator"] == member["locator"] and not (confirmed and member.get("end_cursor")):
                         member["end_cursor"] = newer["cursor"]
                 to_recheck = old["turn_id"]
             save(path, sealed, old)
@@ -398,6 +399,7 @@ def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
     try:
         snapshot = read_usage(Path(target), agent, session, codex_home=store.codex_home(),
             project_root=root, cursor=sealed_member["cursor"], end_cursor=sealed_member["end_cursor"],
+            turn_id=sealed_member.get("child_turn_id"),
             cache_ledger=upath, max_seconds=max(0.01, max_seconds))
     except (OSError, ValueError, TypeError, KeyError):
         return saved
@@ -513,8 +515,28 @@ def _refresh_row(old, latest, payload, upath, sid, root, *, deadline,
         elif child_target:
             snap = read_usage(child_target, agent, row["session_id"], codex_home=store.codex_home(),
                 project_root=root, cursor=member["cursor"], end_cursor=child_end,
+                turn_id=member.get("child_turn_id"),
                 cache_ledger=upath, max_bytes=max_bytes,
                 max_seconds=max(0.01, deadline-time.monotonic()))
+            # SubagentStop can arrive before the terminal record is appended.
+            # That checkpoint is only a provisional read ceiling. Observe one
+            # exact child-turn terminal; never extend a sealed historical turn,
+            # an already complete interval, an interrupted turn or an unknown ID.
+            if (row["phase"] != "sealed" and member.get("child_turn_id")
+                    and "terminal_not_observed" in snap["reasons"]
+                    and time.monotonic() < deadline):
+                boundary = {}
+                repaired = read_usage(child_target, agent, row["session_id"],
+                    codex_home=store.codex_home(), project_root=root,
+                    cursor=member["cursor"], turn_id=member["child_turn_id"],
+                    terminal_out=boundary, max_bytes=max_bytes,
+                    max_seconds=max(0.01, min(0.75, deadline-time.monotonic())))
+                if (boundary and repaired["terminal_observed"] and repaired["status"] != "unavailable"
+                        and (child_end is None or boundary["end_cursor"]["offset"] >= child_end["offset"])
+                        and (snap["counts"]["total_tokens"] is None or
+                             repaired["counts"]["total_tokens"] >= snap["counts"]["total_tokens"])):
+                    member["end_cursor"] = boundary["end_cursor"]
+                    snap = repaired
         else:
             snap = empty("transcript_unavailable")
         row["child_snapshots"][agent] = snap
@@ -528,22 +550,59 @@ def _refresh_row(old, latest, payload, upath, sid, root, *, deadline,
     return row
 
 
+def _reconcile_lifetimes(row, upath, sid, root, deadline):
+    """Bounded natural-event followup, never promote an interval to lifetime.
+
+    Independently re-read at most two registered Workers outside the turn lock.
+    preview/stats never enter this path. Missing budget/evidence stays partial.
+    """
+    if time.monotonic() >= deadline or hook_state.interrupted(upath, row):
+        return
+    children, _ = usage.load_latest(upath)
+    checked = 0
+    for agent, snap in row["child_snapshots"].items():
+        if checked >= 2 or time.monotonic() >= deadline:
+            break
+        child = children.get(usage.usage_id(agent, row["session_id"]))
+        member = row["members"][agent]
+        if (snap["status"] != "complete" or not snap["terminal_observed"]
+                or child is None or child["scope_id"] != sid or not member.get("child_turn_id")
+                or child["locator"] is None or child["locator"] != member["locator"]
+                or child["snapshot"]["status"] == "complete"
+                or "terminal_not_observed" not in child["snapshot"]["reasons"]):
+            continue
+        checked += 1
+        try:
+            if hook_state.interrupted(upath, row):
+                return
+            usage.collect(upath, agent, row["session_id"], sid,
+                transcript=_path(child["locator"], sid, root), root=root,
+                max_seconds=max(0.01, min(0.5, deadline-time.monotonic())))
+        except (OSError, ValueError, TypeError, KeyError):
+            pass  # Accounting failure cannot affect Host execution or quality receipts.
+
+
 def finish(payload, upath, sid, root, *, mark_stopped=True, refresh_sealed=False,
            max_seconds=3.0, max_bytes=MAX_BYTES):
     session, turn = usage._id(payload.get("session_id")), usage._id(payload.get("turn_id"))
     path = ledger_path(upath)
     deadline = time.monotonic() + max_seconds
+    latest = load(path)
+    old = latest.get((session, turn))
+    if old is None:
+        return None
+    row = _refresh_row(old, latest, payload, upath, sid, root, deadline=deadline,
+                       mark_stopped=mark_stopped, refresh_sealed=refresh_sealed,
+                       max_bytes=max_bytes)
+    # Transcript I/O stays outside the short write lock. A concurrent stop,
+    # seal or child update wins; never overwrite it with this stale computation.
     with store.locked(path, timeout=0.4):
-        latest = load(path)
-        old = latest.get((session, turn))
-        if old is None:
-            return None
-        row = _refresh_row(old, latest, payload, upath, sid, root, deadline=deadline,
-                           mark_stopped=mark_stopped, refresh_sealed=refresh_sealed,
-                           max_bytes=max_bytes)
-        if hook_state.interrupted(upath, old):
-            return old  # An interrupt may have arrived while the transcript was read.
-        return save(path, row, old)
+        current = load(path).get((session, turn))
+        if current != old or hook_state.interrupted(upath, old):
+            return current
+        saved = save(path, row, old)
+    _reconcile_lifetimes(saved, upath, sid, root, deadline)
+    return saved
 
 def report(row, heading="本轮 Token 用量", *, include_context=False):
     snapshots = [row["main_snapshot"], *row["child_snapshots"].values()]

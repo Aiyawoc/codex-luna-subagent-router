@@ -54,7 +54,7 @@ def compact(value: int | None) -> str:
 
 
 WAIT_REASONS = {"terminal_not_observed", "unflushed_tail"}
-INFO_REASONS = {"non_usage_counter", "repeated_session_header"}
+INFO_REASONS = {"non_usage_counter", "repeated_session_header", "oversized_tool_record_validated"}
 REASON_LABELS = {
     "source_advanced_during_read": "读取期间日志继续增长，下次复核继续",
     "unassociated_children": "存在尚未关联的子线程",
@@ -100,6 +100,9 @@ REASON_LABELS.update({
     "receipt_baseline_missing": "缺少前一任务的 Worker 用量基线",
     "receipt_baseline_partial": "前一任务基线不完整，本次区间按已知计数计算",
     "receipt_scope_attribution": "按 outcome receipt 归属项目范围",
+    "oversized_tool_record_validated": "已流式验证超长工具记录，仅投影元数据",
+    "oversized_record_invalid": "超长记录结构无效，未跳过",
+    "exact_terminal_identity_required": "缺少精确结束轮次身份",
 })
 
 MODEL_NAMES = {
@@ -382,6 +385,16 @@ def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, sourc
             row["locator"] = locator
         if old and old["snapshot"]["status"] != "unavailable":
             prev = old["snapshot"]
+            if (prev["status"] == "complete" and snap["status"] == "partial"
+                    and snap["counts"] == prev["counts"]
+                    and snap["bytes_read"] <= prev["bytes_read"]
+                    and snap["source"] == prev["source"]
+                    and (snap["model"], snap["effort"]) == (prev["model"], prev["effort"])
+                    and old.get("locator") == locator
+                    and set(snap["reasons"]) <= WAIT_REASONS | INFO_REASONS):
+                # An older in-flight read must not erase a newer observed terminal.
+                # A later reuse has a larger byte boundary and remains independent.
+                snap = prev
             if snap["status"] == "unavailable" or (snap["counts"]["total_tokens"] < prev["counts"]["total_tokens"]):
                 snap = dict(prev, status="partial", terminal_observed=False,
                             reasons=sorted(set(prev["reasons"]) | set(snap["reasons"]) | {"stale_previous_snapshot"}))

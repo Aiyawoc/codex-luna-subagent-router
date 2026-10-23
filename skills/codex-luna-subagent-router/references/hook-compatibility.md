@@ -4,7 +4,7 @@
 
 ## 兼容范围
 
-默认仍为 `UserPromptSubmit / Stop / SubagentStart / SubagentStop` 四个事件。已有四事件安装不会因缺少新增事件而被判定为安装失败。Reader/hook 协议仍为 2.6.1；产品版本从 VERSION 读取。
+默认仍为 `UserPromptSubmit / Stop / SubagentStart / SubagentStop` 四个事件。已有四事件安装不会因缺少新增事件而被判定为安装失败。Hook 定义协议仍为 2.6.1；RC.2 reader/cache 为 2.9.1-rc.2；产品版本从 VERSION 读取。
 
 `Interrupt / SessionEnd` 为单独确认后启用的本地 command hooks，不根据 Host 版本字符串自动启用，不把云端编排或独立 CLI 的成功当作 Desktop 当前会话支持证明。`--hooks-supported` 与 `--lifecycle-hooks-supported` 均是操作者声明，不是能力探测、授权或信任绕过。
 

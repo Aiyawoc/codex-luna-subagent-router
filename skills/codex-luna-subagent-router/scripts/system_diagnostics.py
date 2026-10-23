@@ -20,6 +20,7 @@ import runtime_support
 import token_usage
 import turn_usage
 import hook_observability as hook_state
+import model_bindings
 
 
 def _error(code):
@@ -346,6 +347,18 @@ def _report_output():
         return _error("report_output_path_invalid")
 
 
+def _model_bindings(scope_id, root):
+    try:
+        workers = token_usage.statistics(scope=scope_id)['workers']
+    except (OSError, ValueError, TypeError, KeyError):
+        workers = None
+    result = model_bindings.inventory(root, workers)
+    if workers is None:
+        result['issues'].append('observed_usage_unavailable')
+        result['status'] = 'partial'
+    return result
+
+
 def collect(*, project_root=None, global_scope=False, verify_package=False,
             host_backend=None, host_version=None):
     scope_id, root = store.resolve_scope(project_root, global_scope)
@@ -361,12 +374,17 @@ def collect(*, project_root=None, global_scope=False, verify_package=False,
         "host_capabilities": _host_capabilities(host_backend, host_version),
         "benchmark": _benchmark(),
         "report_output": _report_output(),
+        "model_bindings": _model_bindings(scope_id, root),
     }
     unavailable = sorted(
         name for name, value in sections.items()
         if value.get("status") == "unavailable"
     )
     warnings = []
+    if sections["model_bindings"].get("instruction_model_mentions"):
+        warnings.append("legacy_model_mentions_require_semantic_review")
+    if sections["model_bindings"].get("issues"):
+        warnings.append("model_binding_inventory_incomplete")
     if sections["usage"].get("invalid_usage_rows", 0):
         warnings.append("invalid_usage_rows")
     if sections["usage"].get("invalid_binding_rows", 0):
@@ -434,7 +452,7 @@ def main(argv=None):
         print(f"Router diagnostics: {result['status']} · scope={result['scope_id']}")
         print(f"Runtime: {result['runtime'].get('status')} · version={result['runtime'].get('version', '-')}")
         print(f"Routing: {result['config'].get('routing_mode') or '-'} · token={result['config'].get('token_accounting') or '-'}")
-        print(f"Hooks configured: {len(result['hooks'].get('configured_events', []))}/4 · trust={result['hooks'].get('host_hook_trust', 'unverified')}")
+        print(f"Hooks configured: {len(result['hooks'].get('configured_events', []))}/{len(result['hooks'].get('required_events', tokens.EVENTS))} · trust={result['hooks'].get('host_hook_trust', 'unverified')}")
         print(f"Usage workers: {result['usage'].get('observed_subagents', 0)} · turns={result['turns'].get('registered_turns', 0)}")
         print(f"Plugin: {result['plugin'].get('active_source') or 'none'} · host_loaded={result['plugin'].get('host_loaded', 'unverified')}")
         caps = result["host_capabilities"]

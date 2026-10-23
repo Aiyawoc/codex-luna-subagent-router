@@ -283,7 +283,9 @@ class MainTurnTests(Sandbox):
         self.hook()
         start=self.hook_payload('SubagentStart');start['turn_id']='child-turn-999'
         usage.hook(start,self.upath)
-        self.transcript();stop=self.hook_payload();stop['turn_id']='child-turn-999';usage.hook(stop,self.upath)
+        child_context=context();child_context['payload']['turn_id']='child-turn-999'
+        child_end=end();child_end['payload']['turn_id']='child-turn-999'
+        self.transcript([meta(),child_context,event(),child_end]);stop=self.hook_payload();stop['turn_id']='child-turn-999';usage.hook(stop,self.upath)
         self.add([ctx(),activity(),event(),terminal()]);out=self.hook('Stop')
         self.assertIn('本轮合计\n输入 84k（缓存 60k 71%） · 输出 6k',out['systemMessage'])
         self.assertEqual(len(self.row()['child_snapshots']),1)
@@ -341,7 +343,9 @@ class MainTurnTests(Sandbox):
         self.hook()
         start=self.hook_payload("SubagentStart");start["turn_id"]="child-turn-a"
         usage.hook(start,self.upath)
-        self.transcript()
+        child_context=context();child_context["payload"]["turn_id"]="child-turn-a"
+        child_end=end();child_end["payload"]["turn_id"]="child-turn-a"
+        self.transcript([meta(),child_context,event(),child_end])
         stop=self.hook_payload("SubagentStop");stop["turn_id"]="child-turn-a"
         usage.hook(stop,self.upath)
         self.add([ctx(),activity(),event(),terminal()]);self.hook("Stop")
@@ -360,7 +364,9 @@ class MainTurnTests(Sandbox):
 
         total={k:v*2 for k,v in counter().items()}
         self.add([ctx(TURN2,T3),v2_activity(kind="interacted",turn=TURN2,stamp=T3)],self.main_path)
-        self.add([context(T3),event(total,counter(),T3),end(T4)],self.path)
+        child_context=context(T3);child_context["payload"]["turn_id"]="child-turn-b"
+        child_end=end(T4);child_end["payload"]["turn_id"]="child-turn-b"
+        self.add([child_context,event(total,counter(),T3),child_end],self.path)
         followup_stop=self.hook_payload("SubagentStop");followup_stop["turn_id"]="child-turn-b"
         followup_stop["transcript_path"]=str(self.main_path)
         usage.hook(followup_stop,self.upath)
@@ -382,7 +388,9 @@ class MainTurnTests(Sandbox):
         self.hook()
         start=self.hook_payload("SubagentStart");start["turn_id"]="child-turn-a"
         usage.hook(start,self.upath)
-        self.transcript()
+        child_context=context();child_context["payload"]["turn_id"]="child-turn-a"
+        child_end=end();child_end["payload"]["turn_id"]="child-turn-a"
+        self.transcript([meta(),child_context,event(),child_end])
         stop=self.hook_payload("SubagentStop");stop["turn_id"]="child-turn-a"
         stop["transcript_path"]=str(self.main_path)
         usage.hook(stop,self.upath)
@@ -397,7 +405,9 @@ class MainTurnTests(Sandbox):
         self.assertFalse(baseline["active"])
         self.assertIsNotNone(baseline["cursor"])
         total={k:v*2 for k,v in counter().items()}
-        self.add([context(T3),event(total,counter(),T3),end(T4)],self.path)
+        child_context=context(T3);child_context["payload"]["turn_id"]="child-turn-b"
+        child_end=end(T4);child_end["payload"]["turn_id"]="child-turn-b"
+        self.add([child_context,event(total,counter(),T3),child_end],self.path)
         early_stop=self.hook_payload("SubagentStop");early_stop["turn_id"]="child-turn-b"
         early_stop["transcript_path"]=str(self.main_path)
         usage.hook(early_stop,self.upath)

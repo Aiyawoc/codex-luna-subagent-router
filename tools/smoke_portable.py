@@ -83,6 +83,16 @@ def main():
         diagnostics=json.loads(execute([*launcher(installed),'diagnostics','--project-root',str(project),'--json'],project,env))
         assert diagnostics['read_only'] is True and diagnostics['refresh_performed'] is False
         assert diagnostics['trust_changed'] is False and diagnostics['runtime']['status']=='ok'
+        assert diagnostics['model_bindings']['read_only'] is True
+        evidence=base/'binding-metadata.json'
+        evidence.write_text(json.dumps(dict(schema_version=1,
+            request=dict(call_id='smoke-call',parent_id='smoke-parent',turn_id='smoke-turn',model='gpt-5.6-luna',effort='high'),
+            activity=dict(call_id='smoke-call',parent_id='smoke-parent',turn_id='smoke-turn',child_id='smoke-child',model='gpt-5.6-luna',effort='high'),
+            context=dict(child_id='smoke-child',model='gpt-5.6-luna',effort='high'),
+            configured=dict(model='gpt-6-luna',effort='high'))),encoding='utf-8')
+        binding=json.loads(execute([*launcher(installed),'model_bindings','--evidence',str(evidence),'--json'],project,env))
+        assert binding['requested_observed']=='matched' and binding['current_configured_vs_historical_request']=='different'
+        assert binding['authoritative'] is False and binding['routing_unchanged'] is True
         benchmark=json.loads(execute([*launcher(installed),'benchmark_store','stats','--json'],project,env))
         assert benchmark['rows']==0 and benchmark['automatic_routing_change'] is False
         report_root=base/'reports'
