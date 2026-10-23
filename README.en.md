@@ -8,7 +8,7 @@
 
 Current stable release: [**v2.9.0**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.0) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-Development candidate: **v2.9.1-rc.2**, with opt-in advisory terminal hooks, content-free handler diagnostics and independent summary settings. This is not a published Stable release or proof of current Desktop field acceptance. See [upgrade and acceptance notes](docs/v2.9.1-rc.2-validation.md).
+Development candidate: **v2.9.1-rc.3**, fixing a transcript descriptor leak exposed by cross-platform CI on top of RC.2. This is not a published Stable release or proof of complete Desktop field acceptance. See [fix and validation notes](docs/v2.9.1-rc.3-validation.md).
 
 > **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.9.0 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 >

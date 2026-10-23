@@ -402,10 +402,22 @@ def read_usage(path: Path, agent_id: str, parent_id: str | None, *, codex_home: 
         return empty('parent_is_not_child', source_name)
     if type(max_bytes) is not int or max_bytes < 1 or not isinstance(max_seconds, (float,int)) or not 0 < max_seconds <= 60:
         return empty('invalid_read_budget', source_name)
+    # Reject invalid lookahead before acquiring a transcript descriptor.
+    # Exact-terminal queries must observe their own event, not cached state.
+    if terminal_out is not None:
+        terminal_out.clear()
+        if not turn_id or source != 'rollout':
+            return empty('exact_terminal_identity_required', source_name)
     path = Path(path).expanduser().absolute()
     allowed = [Path(codex_home).expanduser().resolve()]
     if project_root:
         allowed.append(Path(project_root).resolve() / '.codex')
+    query = [agent_id, parent_id, thread_kind, turn_id, cursor, source]
+    cache_path = (usage_cache.path_for(cache_ledger, path, query)
+                  if cache_ledger and terminal_out is None else None)
+    scan = _Scan(agent_id, parent_id, thread_kind, turn_id, cursor, source)
+    transient, offset, spent = set(), 0, 0
+    deadline = time.monotonic() + max_seconds
     try:
         store.safe_path(path)
         if path.suffix != '.jsonl' or not any(path.resolve().is_relative_to(root) for root in allowed):
@@ -413,20 +425,10 @@ def read_usage(path: Path, agent_id: str, parent_id: str | None, *, codex_home: 
         fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
     except (OSError, ValueError):
         return empty('transcript_unavailable', source_name)
-    query = [agent_id, parent_id, thread_kind, turn_id, cursor, source]
-    cache_path = usage_cache.path_for(cache_ledger, path, query) if cache_ledger else None
-    scan = _Scan(agent_id, parent_id, thread_kind, turn_id, cursor, source)
-    # Exact-terminal lookahead must observe its own event, never infer it from a
-    # cached boolean or from another turn. It stops at that event, before reuse.
-    if terminal_out is not None:
-        terminal_out.clear()
-        cache_path = None
-        if not turn_id or source != 'rollout':
-            return empty('exact_terminal_identity_required', source_name)
-    transient, offset, spent = set(), 0, 0
-    deadline = time.monotonic() + max_seconds
     try:
-        with os.fdopen(fd, 'rb') as handle:
+        handle = os.fdopen(fd, 'rb')
+        fd = None  # Ownership transferred; the context closes every exit path.
+        with handle:
             st = os.fstat(handle.fileno())
             if not stat.S_ISREG(st.st_mode):
                 return empty('not_regular_file', source_name)
@@ -509,6 +511,9 @@ def read_usage(path: Path, agent_id: str, parent_id: str | None, *, codex_home: 
                 usage_cache.save(cache_path, handle, query, header_digest, offset, scan.export())
     except OSError:
         transient.add('transcript_read_failed')
+    finally:
+        if fd is not None:
+            os.close(fd)  # fdopen failed before it could take ownership.
     if activity_out is not None:
         activity_out.update(scan.activities)
     return scan.snapshot(source_name, offset, transient)

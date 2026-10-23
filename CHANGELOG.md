@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.1-rc.3: Transcript descriptor ownership（2026-10-23）
+
+- 修复四平台 CI 暴露的真实文件描述符泄漏：精确终止查询缺少 turn_id 或使用非 rollout 来源时，在打开日志之前拒绝，继续返回 exact_terminal_identity_required，不放宽身份要求。
+- 查询和缓存准备移至打开文件之前；fdopen 成功后明确转交描述符所有权，包装失败时释放原始描述符，正常返回、保守拒绝及异常路径均受资源释放保护。
+- 新增 11 项跨平台资源生命周期回归。未修改原失败断言、忽略 Windows 清理错误或跳过失败测试；不改路由、信任、账本 schema、用量计算或生产安装。
+- 产品候选版本为 RC.3，避免覆盖既有 RC.2 包。reader/cache 协议仍为 2.9.1-rc.2，因为解析和缓存结构未改变；hook 协议标记仍为 2.6.1。
+- 四平台远端 CI 与本地包验证独立记录，原有现场未验证范围继续保留。详见 docs/v2.9.1-rc.3-validation.md。
+
 ## 2.9.1-rc.2: Evidence-driven accounting closure（2026-10-23）
 
 - 修复子线程 Stop 早于终止记录时的临时读取上界：在后续自然停止/轮次事件预算内，按精确 child turn 观察结束；不靠计数相等提升完整度，不扩展已封存历史，不等待或要求模型继续。
