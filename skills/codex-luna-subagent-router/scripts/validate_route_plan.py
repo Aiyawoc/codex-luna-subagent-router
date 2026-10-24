@@ -15,6 +15,7 @@ SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import sol_policy
+import outcome_store
 
 SUPPORTED_SCHEMA_VERSIONS = ("2.0", "2.1")
 ALLOWED_ROUTING_MODES = ("luna_only", "adaptive")
@@ -37,12 +38,8 @@ ALLOWED_TASK_KINDS = (
 ALLOWED_FAILURE_COSTS = ("low", "medium", "high")
 CAPABILITY_LEVELS = ("luna", "terra", "sol", "astra")
 CAPABILITY_RANK = {name: index for index, name in enumerate(CAPABILITY_LEVELS)}
-ADAPTIVE_MODELS = (
-    "gpt-6-luna",
-    "gpt-5.6-terra",
-    "gpt-6.1-sol",
-    "gpt-6-astra",
-)
+# Use the same current candidate set as the planner; historical models stay separate.
+ADAPTIVE_MODELS = tuple(dict.fromkeys(model for model, _ in outcome_store.PAIRS))
 MODEL_CAPABILITY = {
     "gpt-6-luna": "luna",
     "gpt-5.6-terra": "terra",
@@ -52,20 +49,8 @@ MODEL_CAPABILITY = {
     "gpt-6-astra": "astra",
 }
 PROFILE_BY_ROUTE = {
-    ("gpt-6-luna", "low"): "luna_low",
-    ("gpt-6-luna", "medium"): "luna_medium",
-    ("gpt-6-luna", "high"): "luna_high",
-    ("gpt-6-luna", "xhigh"): "luna_xhigh",
-    ("gpt-6-luna", "max"): "luna_max",
-    ("gpt-5.6-terra", "medium"): "terra_medium",
-    ("gpt-5.6-terra", "high"): "terra_high",
-    ("gpt-6.1-sol", "medium"): "sol_medium",
-    ("gpt-6.1-sol", "max"): "sol_max",
-    ("gpt-6.1-sol", "high"): "sol_high",
-    ("gpt-6.1-sol", "xhigh"): "sol_xhigh",
-    ("gpt-6-astra", "high"): "astra_high",
-    ("gpt-6-astra", "xhigh"): "astra_xhigh",
-    ("gpt-6-astra", "max"): "astra_max",
+    (model, effort): MODEL_CAPABILITY[model] + "_" + effort
+    for model, effort in outcome_store.PAIRS
 }
 LEGACY_PROFILE_BY_ROUTE = {
     ("gpt-6-sol", "high"): "sol_high",

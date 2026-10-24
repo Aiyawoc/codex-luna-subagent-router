@@ -383,6 +383,8 @@ def collect(*, project_root=None, global_scope=False, verify_package=False,
     warnings = []
     if sections["model_bindings"].get("instruction_model_mentions"):
         warnings.append("legacy_model_mentions_require_semantic_review")
+    if sections["model_bindings"].get("warnings"):
+        warnings.append("model_binding_candidates_require_review")
     if sections["model_bindings"].get("issues"):
         warnings.append("model_binding_inventory_incomplete")
     if sections["usage"].get("invalid_usage_rows", 0):
