@@ -378,7 +378,7 @@ def main(argv=None):
         sid, root = store.resolve_scope(args.project_root)
         import token_usage
         result = inventory(root, token_usage.statistics(scope=sid)['workers'],
-                           working_directory=args.working_directory or Path.cwd())
+                           working_directory=args.working_directory or (Path.cwd() if root is None else None))
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
