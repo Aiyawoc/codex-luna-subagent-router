@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import ctypes
 import io
 import json
 import os
@@ -10,7 +11,7 @@ import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -450,6 +451,87 @@ class CredentialTests(unittest.TestCase):
                 self.assertIsNone(secrets.resolve(
                     {"credential_source": "keychain", "credential_scope": "user"},
                     "openai_decisions"))
+
+
+class MacKeychainABITests(unittest.TestCase):
+    """Exercise the native pointer ownership and argument order without a real key."""
+
+    def setUp(self):
+        self.buffer = ctypes.create_string_buffer(b"sk-local-test")
+        self.data = ctypes.c_void_p(ctypes.addressof(self.buffer))
+        self.size = ctypes.c_uint32(len(b"sk-local-test"))
+        self.item = ctypes.c_void_p(0x12345)
+        self.security = Mock()
+        self.security.SecKeychainItemFreeContent.return_value = 0
+        self.security.SecKeychainItemModifyContent.return_value = 0
+        self.security.SecKeychainAddGenericPassword.return_value = 0
+        self.foundation = Mock()
+
+    def _run(self, function, *, status=0, data=None, item=None, size=None):
+        returned = (status, size if size is not None else self.size,
+                    data if data is not None else self.data,
+                    item if item is not None else self.item)
+        with patch.object(secrets, "_mac_library", return_value=self.security), \
+             patch.object(secrets, "_mac_find", return_value=returned), \
+             patch.object(secrets.ctypes, "CDLL", return_value=self.foundation):
+            return function()
+
+    def _assert_release(self):
+        self.security.SecKeychainItemFreeContent.assert_called_once_with(None, self.data)
+        self.assertEqual(self.security.SecKeychainItemFreeContent.argtypes,
+                         [ctypes.c_void_p, ctypes.c_void_p])
+        self.assertEqual(self.security.SecKeychainItemFreeContent.restype,
+                         ctypes.c_int32)
+        self.foundation.CFRelease.assert_called_once_with(self.item)
+        self.assertEqual(self.foundation.CFRelease.restype, None)
+
+    def test_mac_read_free_content_first_arg_must_be_null(self):
+        self.assertEqual(self._run(lambda: secrets._mac_load("test")), "sk-local-test")
+        self._assert_release()
+
+    def test_mac_overwrite_existing_key_cleans_up_using_correct_abi(self):
+        self._run(lambda: secrets._mac_save("test", b"sk-replacement"))
+        self.security.SecKeychainItemModifyContent.assert_called_once()
+        self.security.SecKeychainAddGenericPassword.assert_not_called()
+        self._assert_release()
+
+    def test_mac_no_data_does_not_call_free_or_read_null(self):
+        empty = ctypes.c_void_p()
+        self.assertIsNone(self._run(lambda: secrets._mac_load("test"), data=empty))
+        self.security.SecKeychainItemFreeContent.assert_not_called()
+        self.foundation.CFRelease.assert_called_once_with(self.item)
+
+    def test_mac_missing_key_does_not_release_unallocated_data(self):
+        data, item = ctypes.c_void_p(), ctypes.c_void_p()
+        self.assertIsNone(self._run(lambda: secrets._mac_load("missing"),
+                                    status=-25300, data=data, item=item))
+        self.security.SecKeychainItemFreeContent.assert_not_called()
+        self.foundation.CFRelease.assert_not_called()
+
+    def test_mac_create_new_key_does_not_free_absent_buffer(self):
+        data, item = ctypes.c_void_p(), ctypes.c_void_p()
+        self._run(lambda: secrets._mac_save("new", b"sk-test"),
+                  status=-25300, data=data, item=item)
+        self.security.SecKeychainAddGenericPassword.assert_called_once()
+        self.security.SecKeychainItemModifyContent.assert_not_called()
+        self.security.SecKeychainItemFreeContent.assert_not_called()
+        self.foundation.CFRelease.assert_not_called()
+
+    def test_mac_decode_failure_still_frees_buffer_and_item(self):
+        bad = ctypes.create_string_buffer(b"\xff")
+        ptr = ctypes.c_void_p(ctypes.addressof(bad))
+        with self.assertRaises(UnicodeDecodeError):
+            self._run(lambda: secrets._mac_load("invalid"),
+                      data=ptr, size=ctypes.c_uint32(1))
+        self.security.SecKeychainItemFreeContent.assert_called_once_with(None, ptr)
+        self.foundation.CFRelease.assert_called_once_with(self.item)
+
+    def test_mac_free_error_still_releases_item_reference(self):
+        self.security.SecKeychainItemFreeContent.return_value = -50
+        with self.assertRaisesRegex(secrets.CredentialError, "cleanup"):
+            self._run(lambda: secrets._mac_load("test"))
+        self.security.SecKeychainItemFreeContent.assert_called_once_with(None, self.data)
+        self.foundation.CFRelease.assert_called_once_with(self.item)
 
 
 class ShadowUsageTests(unittest.TestCase):

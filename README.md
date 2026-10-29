@@ -6,13 +6,13 @@
 
 **Agent Router** 是一个面向 Codex 的成本优先 SubAgent 路由 Skill。它可以按任务复杂度在 **Luna / Sol / Astra + reasoning effort** 之间选择 Worker，支持整组任务规划、并发执行、验证结果校准，以及可选的主／子 Agent token 统计。
 
-当前稳定版：[**v2.9.2**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.2) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
+当前稳定版：[**v2.9.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.3) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
-**v2.9.2 Stable**：正式包含可选 Decisions API Shadow、安装引导第七问（开启/关闭、供应商、安全密钥）、随时重新配置，以及 2.9.1 的统计修复与模型来源审计。默认关闭决策 API，不扩大实际 Worker 权限。见 [发布说明](docs/v2.9.2-release-notes.md) 与 [稳定版验收边界](docs/v2.9.2-stable-acceptance.md)。
+**v2.9.3 Stable 热修复**：修复 macOS Keychain 已有凭据读取及覆盖写入时错误释放指针导致的 SIGSEGV。延续 v2.9.2 的 Decisions API Shadow、第七项安全配置引导和 2.9.1 可靠性修复，不更改实际 Worker 路由。见 [热修复说明](docs/v2.9.3-release-notes.md) 与 [验收边界](docs/v2.9.3-stable-acceptance.md)。
 
-> **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.9.2 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
+> **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.9.3 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
 >
-> v2.9.2 的 Host capability、structured events、PTC 与 benchmark 层保持证据优先：没有当前 Host/version 的真实证据时能力仍为 `unknown`，PTC 回退 native/direct tools；本版不宣称相对 Host default 的质量、Token、延迟或成本优势。
+> v2.9.3 的 Host capability、structured events、PTC 与 benchmark 层保持证据优先：没有当前 Host/version 的真实证据时能力仍为 `unknown`，PTC 回退 native/direct tools；本版不宣称相对 Host default 的质量、Token、延迟或成本优势。
 
 [主要能力](#主要能力) · [快速开始](#快速开始) · [在-codex-中使用](#在-codex-中使用) · [数据简报](#数据简报) · [配置](#配置) · [常用命令](#常用命令) · [与-visualize-配合](#与-visualize-配合) · [安全与隐私](#安全与隐私) · [文档](#文档)
 
@@ -65,10 +65,10 @@ Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker �
 可以把下面这段直接发送给 Codex：
 
 ```text
-请安装或升级 Agent Router（Skill ID：`$codex-luna-subagent-router`）到当前稳定版 v2.9.2：
-https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.2
+请安装或升级 Agent Router（Skill ID：`$codex-luna-subagent-router`）到当前稳定版 v2.9.3：
+https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.3
 
-先识别本机操作系统与 CPU 架构，下载匹配的 router-2.9.2-<platform> 完整包和校验文件。
+先识别本机操作系统与 CPU 架构，下载匹配的 router-2.9.3-<platform> 完整包和校验文件。
 不要使用 GitHub 自动生成的 Source code.zip/.tar.gz 代替完整包。
 
 校验 SHA256 后，先运行包内 doctor --verify，再执行完整安装/升级。
@@ -94,14 +94,14 @@ https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.2
 
 #### 2.1 下载正确的平台包
 
-从 [v2.9.2 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.2) 下载：
+从 [v2.9.3 Release](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.3) 下载：
 
 | 系统 | CPU | 完整包 |
 |---|---|---|
-| macOS | Apple Silicon / ARM64 | `router-2.9.2-macos-arm64.tar.gz` |
-| macOS | Intel / x64 | `router-2.9.2-macos-x64.tar.gz` |
-| Windows | x64 | `router-2.9.2-windows-x64.zip` |
-| Windows | ARM64 | `router-2.9.2-windows-arm64.zip` |
+| macOS | Apple Silicon / ARM64 | `router-2.9.3-macos-arm64.tar.gz` |
+| macOS | Intel / x64 | `router-2.9.3-macos-x64.tar.gz` |
+| Windows | x64 | `router-2.9.3-windows-x64.zip` |
+| Windows | ARM64 | `router-2.9.3-windows-arm64.zip` |
 
 每个完整包都附带独立 `.sha256`，Release 中同时提供 `SHA256SUMS`。
 
@@ -304,6 +304,8 @@ Router 的统计与校准设计遵循以下边界：
 - [v2.7 专项说明](docs/README-v2.7.md)
 
 - [v2.6.2 数据简报](docs/v2.6.2-report.md)
+- [v2.9.3 Keychain 热修复说明](docs/v2.9.3-release-notes.md)
+- [v2.9.3 Stable 验收边界](docs/v2.9.3-stable-acceptance.md)
 - [v2.9.2 发布说明](docs/v2.9.2-release-notes.md)
 - [v2.9.2 Stable 验收边界](docs/v2.9.2-stable-acceptance.md)
 - [决策供应商与 API Key 配置](docs/v2.9.2-decision-onboarding.md)

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.3: macOS Keychain cleanup hotfix（2026-10-29）
+
+- 修复 v2.9.2 首次真实 Decisions Shadow CLI 验收发现的 macOS Keychain `SIGSEGV`：`SecKeychainItemFreeContent` 的 C 参数应为 `(attrList, data)`，旧版错误地传入 `(data, NULL)`，在成功取回条目后的释放路径发生原生崩溃。
+- 读取 `_mac_load` 与已有条目覆盖写入 `_mac_save` 共用 ABI 正确的清理函数。仅当系统实际返回非空数据缓冲区才释放；返回的 `SecKeychainItemRef` 独立通过 `CFRelease` 释放。设置显式 ctypes 参数／返回类型；失败时仍尝试释放 item，补充空指针保护。
+- 新增 7 项隔离回归，覆盖读取、覆盖写入、创建新条目、缺失条目、空数据、解码异常和清理异常；测试使用内存假凭据，不触碰真实 Keychain。
+- 不改变 `routing.json`、API Key 内容、用户默认选项、已有账本、自动 Worker 模型或 Decision Shadow 权限。OpenAI API 原生联网、真实 macOS Keychain 的下一轮用户验收仍不得以 Mock 测试冒充 PASS。
+- 通过 `v2.9.3` 全新不可变 tag/Release 交付，不覆盖 `v2.9.2` 文件。详见 `docs/v2.9.3-release-notes.md` 与 `docs/v2.9.3-stable-acceptance.md`。
+
 ## 2.9.2: Stable（2026-10-29）
 
 - 从已通过四平台 Source CI 与 Portable Runtime 的 `v2.9.2-rc.1` 晋升；安装引导新增显式 **Q7 决策供应商选择**，默认关闭，可在安装后重复运行配置引导。现有六项的次序与已明确选择保持不变。
