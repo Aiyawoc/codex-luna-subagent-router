@@ -68,6 +68,27 @@ def _mac_find(lib, acct):
     return status, size, data, item
 
 
+def _mac_release_find_result(lib, status, data, item):
+    """Release the Security-framework data buffer and item in their own ABIs.
+
+    SecKeychainItemFreeContent(attrList, data): attrList must be NULL here.
+    SecKeychainFindGenericPassword's itemRef is released separately via CFRelease.
+    """
+    try:
+        if status == 0 and data.value:
+            free = lib.SecKeychainItemFreeContent
+            free.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+            free.restype = ctypes.c_int32
+            if free(None, data) != 0:
+                raise CredentialError("macOS Keychain buffer cleanup failed")
+    finally:
+        if item.value:
+            cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+            cf.CFRelease.argtypes = [ctypes.c_void_p]
+            cf.CFRelease.restype = None
+            cf.CFRelease(item)
+
+
 def _mac_save(acct, secret):
     lib = _mac_library()
     status, size, data, item = _mac_find(lib, acct)
@@ -95,13 +116,7 @@ def _mac_save(acct, secret):
         if result != 0:
             raise CredentialError("macOS Keychain save was denied or unavailable")
     finally:
-        if status == 0:
-            lib.SecKeychainItemFreeContent.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-            lib.SecKeychainItemFreeContent(data, None)
-        if item.value:
-            cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
-            cf.CFRelease.argtypes = [ctypes.c_void_p]
-            cf.CFRelease(item)
+        _mac_release_find_result(lib, status, data, item)
 
 
 def _mac_load(acct):
@@ -110,17 +125,11 @@ def _mac_load(acct):
     try:
         if status != 0:
             return None
-        if size.value == 0 or size.value > MAX_SECRET_BYTES:
+        if not data.value or size.value == 0 or size.value > MAX_SECRET_BYTES:
             return None
         return ctypes.string_at(data, size.value).decode("utf-8")
     finally:
-        if status == 0:
-            lib.SecKeychainItemFreeContent.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-            lib.SecKeychainItemFreeContent(data, None)
-        if item.value:
-            cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
-            cf.CFRelease.argtypes = [ctypes.c_void_p]
-            cf.CFRelease(item)
+        _mac_release_find_result(lib, status, data, item)
 
 
 class _CREDENTIALW(ctypes.Structure):
