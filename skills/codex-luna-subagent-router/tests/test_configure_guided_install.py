@@ -313,7 +313,7 @@ class GuidedInstallTests(unittest.TestCase):
         result = setup.inspect(
             self.codex_home, install_mode="fresh", skills_dir=self.skills_dir
         )
-        self.assertEqual(result["pending_questions"], [1, 2, 3, 4, 5, 6])
+        self.assertEqual(result["pending_questions"], [1, 2, 3, 4, 5, 6, 7])
         self.assertEqual(target.read_bytes(), before)
         self.assertEqual(result["installation"]["selected_mode"], "fresh")
 

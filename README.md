@@ -8,7 +8,7 @@
 
 当前稳定版：[**v2.9.0**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.0) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
-开发候选版：**v2.9.1-rc.4**，修正旧模型文案、统一自动路由校验，并扩展只读模型来源诊断。不是已发布的 Stable，也不表示其它对话的旧模型来源已经确认。见 [本轮验证](docs/v2.9.1-rc.4-validation.md)。
+开发候选版：**v2.9.2-rc.1**，新增可选 Decisions API Shadow 适配、安装第七问（是否开启、供应商选择和安全密钥引导），支持以后单独重新配置。默认关闭，不改变正常路由；不是 Stable。见 [专项文档](docs/v2.9.2-decision-onboarding.md)。
 
 > **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.9.0 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。
 >
@@ -76,15 +76,16 @@ https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.0
 - 未安装：按全新安装继续。
 - 已安装：先问我是“升级安装”还是“全新安装”，不要替我默认选择。
   - 升级安装保留并迁移已有明确配置和历史账本，只补问缺失/过期项。
-  - 全新安装重新走完整 6 项引导，但不要自动删除历史账本、备份或其它用户文件。
+  - 全新安装重新走完整 7 项引导，但不要自动删除历史账本、备份或其它用户文件。
 
-核心 6 项按以下顺序询问，并在每一步先说明作用：
+核心 7 项按以下顺序询问，并在每一步先说明作用：
 1. 长期自动委派授权
 2. 自动路由模式
 3. 最大并发 SubAgent
 4. Verified Outcome Calibration
 5. Token 统计与完成摘要
 6. Default 模式结构化提问
+7. 决策模型：是否启用、供应商（OpenAI Decisions / TypeSafe / 本地 JEV / 兼容 HTTP）和安全 API Key 配置（默认关闭，Shadow 只观察）
 
 如需安装或迁移 hooks，请正常询问并经过客户端信任审查；不要自行授信。
 ```

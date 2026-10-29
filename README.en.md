@@ -8,7 +8,7 @@
 
 Current stable release: [**v2.9.0**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.0) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-Development candidate: **v2.9.1-rc.4**, with consistent current-model validation and bounded model-source diagnostics. This is not a Stable release or proof of the model source in other live conversations. See [validation notes](docs/v2.9.1-rc.4-validation.md).
+Development candidate: **v2.9.2-rc.1**, adding optional GA Decisions API Shadow integration, an explicit seventh install question, provider selection, and secure credential setup that can be rerun later. Disabled by default; no production routing changes. See [onboarding guide](docs/v2.9.2-decision-onboarding.md).
 
 > **End users should download the complete package matching their OS and CPU from the Release page.** GitHub's automatic `Source code.zip/.tar.gz` archives do not contain the private Python runtime. v2.9.0 complete packages include pinned CPython 3.13.15 and do not depend on system Python, pip, uv, or PATH.
 >
@@ -72,15 +72,16 @@ already installed at the target:
 - If not installed, continue as a fresh install.
 - If installed, ask me to choose upgrade or fresh before replacing anything; do not choose for me.
   - Upgrade preserves/migrates explicit configuration and historical ledgers, asking only for missing/stale choices.
-  - Fresh re-runs the complete six-choice guide but does not silently delete historical ledgers, backups, or unrelated user files.
+  - Fresh re-runs the complete seven-choice guide but does not silently delete historical ledgers, backups, or unrelated user files.
 
-Ask the six core choices in this order and explain what each controls before asking:
+Ask the seven core choices in this order and explain what each controls before asking:
 1. Standing automatic-delegation authorization
 2. Automatic routing mode
 3. Maximum concurrent SubAgents
 4. Verified Outcome Calibration
 5. Token accounting and completion summaries
 6. Default-mode structured questions
+7. Optional decision model: enable/disable, provider selection and secure API key setup (Shadow only, disabled by default)
 
 If hooks must be installed or migrated, ask normally and use the client's trust review;
 do not grant trust automatically.

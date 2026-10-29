@@ -5,17 +5,19 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 # Agent Router
 
-可靠完成并最小化总成本。主 Agent 保持用户选择的模型和 reasoning。用户要求优先；权限、精确绑定和不可逆边界仍生效。
+可靠完成、降低成本；主 Agent 保留用户选择的模型/effort，遵守权限与精确绑定。
 
 ## 入口
 
 辅助脚本用 `bin/router <脚本名>`（Windows `bin/router.cmd`），不用系统 Python。
 
-安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
+安装／升级按 `references/codex-guided-install.md` 先盘点并逐项询问；第七项明确选择决策供应商及安全密钥，默认关闭。已安装者可随时运行 `bin/router configure_decision_engine --scope user --guided`；密钥只在本机交互终端输入，不进聊天／配置。普通任务按项目优先的 `routing.json`，缺失按 `luna_only`；校准缺失或 `off` 不读历史。
 
 - `luna_only`：只用 `gpt-6-luna`；能力不足由 Lead 接管。
 - `adaptive`：`gpt-6-luna` → `gpt-6.1-sol` → `gpt-6-astra`；Terra 不参与新自动路由，`gpt-6-sol` 仅历史兼容。
 - Sol 不得用旧 `gpt-5.6` alias 做自动 spawn；精确绑定不可证明时 `lead_only`，不静默替换。
+
+仅显式启用 `mode=shadow` 且证据、checkpoint 必要时调用 `decision_shadow`，详见 `references/decision-layer.md`；失败继续确定性 Advisor，不改变路由、权限或并发，不每轮调用。
 
 ## Adaptive Capability Gap Gate + Advisor
 
@@ -31,23 +33,23 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 非 micro 在 `lead_only` 前先读 `work-planning.md` 做 Delegation Opportunity Scan；发现可独立拥有且边际净收益为正的工作就列为候选，“Lead 自己能做”不是理由。
 
-多个候选用 `route_advisor.py plan` 整组评估并生成 RoutePlan 2.1。共享上下文可合并；独立任务同波创建再 wait。复杂任务若最终 0 Worker，保留具体 `lead_only_reason`；不设 Worker 配额。
+多候选用 `route_advisor.py plan` 生成 RoutePlan 2.1；共享上下文可合并，独立任务同波再 wait。复杂任务 0 Worker 须有 `lead_only_reason`；不设总配额。
 
-Astra/Sol Lead 不重复已适合廉价 Worker 的工作；关键路径、不可交接上下文、权限或外部副作用可留 Lead。已派目标不要重复实现；不强制开满或混用模型，规划不证明 spawn。
+Astra/Sol Lead 不重复廉价 Worker 的工作；关键路径、权限及不可交接上下文留 Lead。已派目标不重复实现，规划不等于 spawn。
 
 ## 采集闭环
 
 仅 `adaptive + evidence_calibration=conservative` 使用。Worker Materialized 后 `begin` 固化 scope、六轴、请求路由与 task ID 的哈希回执；未创建成功的 spawn 不留 pending receipt。
 
-验收后、close 前调用 `finalize`。未知身份、环境阻塞、取消、early stop 或 Lead 实质返工只能 `partial`；可观察到精确 model+effort 且通过相关验收才 `verified_pass`。明确质量失败且身份已知才 `verified_fail`。profile 名称不等于实际身份；不得伪造证据凑样本。
+验收后、close 前 `finalize`。身份未知、阻塞、取消、early stop 或 Lead 返工只能 `partial`；精确 model+effort 可验证且验收通过才 `verified_pass`，明确失败且身份已知才 `verified_fail`。profile 名称不等于身份，禁止伪造证据。
 
-同回执重复 finalize 幂等，冲突报错；retry 用新 task ID 和回执。记录失败须披露，不得阻塞 stop/close。任务结束用 `stats` 检查 pending，不猜测补写。Outcome 验收仍无引擎 hook；完全跳过 begin 不会自动获得质量回执。
+finalize 幂等，冲突报错；retry 用新 task ID/回执。记录失败须披露，不阻塞 stop/close。结束用 `stats` 检查 pending，不猜测补写；跳过 begin 不产生质量回执。
 
 只存受控 metadata；不得记录 prompt、正文、源码、完整日志、账号/密钥。summary 也需去敏。详见 `references/outcome-collection.md`。
 
 ## Token 统计
 
-`token_accounting` 缺失按 off。开启后按需读 `references/token-accounting.md`；只用观察到的线程数据，缓存是输入子项，不让 Worker 自报。UserPromptSubmit/Stop 记录主线程本轮；父 transcript 的 Started/Interacted activity 关联真实子线程，不能假定父子 turn_id 相同。
+`token_accounting` 缺失按 off；开启后读 `references/token-accounting.md`。只用观察线程数据、缓存输入子项，不让 Worker 自报；UserPromptSubmit/Stop 记录主轮次，Started/Interacted 绑定子线程，父子 turn_id 不能假定相同。
 
 `main_and_subagents` 回复前用 `turn_usage.py preview --respect-summary`；silent 不展示、不读日志；否则成功时附“截至最终回复前”简报，失败省略。Stop 保存后续快照；不为统计续跑模型。
 

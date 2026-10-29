@@ -11,8 +11,12 @@ VERSION = "2.7-shadow-v1"
 ALLOWED = {
     "checkpoint_id", "scope_id", "task_family", "provider", "provider_model",
     "status", "reason", "latency_ms", "confidence", "lease", "answers",
-    "decision_version", "recorded_at",
+    "decision_version", "recorded_at", "usage",
 }
+USAGE_FIELDS = frozenset((
+    "input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens",
+    "total_tokens",
+))
 
 
 def default_path():
@@ -50,6 +54,12 @@ def validate(row):
                 raise store.StoreError("decision answer too long")
         elif isinstance(value, bool) or not isinstance(value, (int, float)):
             raise store.StoreError("decision answers must be choices or numbers")
+    usage = row.get("usage")
+    if usage is not None:
+        if not isinstance(usage, dict) or set(usage) - USAGE_FIELDS:
+            raise store.StoreError("decision usage must be bounded numeric metadata")
+        if any(type(v) is not int or v < 0 for v in usage.values()):
+            raise store.StoreError("invalid decision usage metadata")
     if row.get("recorded_at") is not None:
         store.parse_time(row["recorded_at"])
     return row
