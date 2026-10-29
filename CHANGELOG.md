@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.9.2: Stable（2026-10-29）
+
+- 从已通过四平台 Source CI 与 Portable Runtime 的 `v2.9.2-rc.1` 晋升；安装引导新增显式 **Q7 决策供应商选择**，默认关闭，可在安装后重复运行配置引导。现有六项的次序与已明确选择保持不变。
+- 正式接入官方 `gpt-6-luna` Decisions API 的 **Shadow-only provider**，严格校验官方 `choice/predicate/score` 请求／返回、身份、拒绝与错误。绝不让 Shadow 输出直接提升 Worker 模型、执行权限、并发或主线程预算。
+- API Key 支持交互式本机 Keychain / Windows Credential Manager，或安全注入运行进程的环境变量。配置、日志、命令参数和历史账本不保存密钥；旧的 `openai_decisions` 占位状态需新一轮明确确认，避免升级时突然发起付费请求。
+- 一并纳入 2.9.1 RC.1–RC.4 的 hook／账本时序、Windows 文件句柄、当前模型白名单一致性、项目 AGENTS 来源审计修复。历史型号仍保留只读兼容，不把旧 Luna/Terra 作为新自动候选。
+- 四平台完整包与默认四事件插件均由 Stable workflow 在精确 main 提交上重新构建，验收后生成独立校验与 `SHA256SUMS`。可选六事件插件仍为受控验收变体，不自动开启。
+- **声明边界**：平台打包、安装、回退和 Mock GA 契约经自动化验收；真实 Desktop 的 Keychain 授权、实际 API Shadow 端到端触发、Host trust、用量归属及路由成本收益不在自动化 PASS 范围内。Stable 发布不附带任何相对 Host default 的节约或质量提升承诺。详见 `docs/v2.9.2-stable-acceptance.md`。
+
 ## 2.9.2-rc.1: Decisions API + guided provider onboarding（2026-10-29）
 
 - 从 v2.9.1-rc.4 的三层 GPT-6 自动路由与严格模型来源审计继续；**不调整 Luna/Sol/Astra 自动路由表**。

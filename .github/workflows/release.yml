@@ -124,6 +124,8 @@ jobs:
             echo 'Tag already exists; refusing to move it.' >&2
             exit 1
           fi
-          gh release create "$TAG" --target "$TARGET" --title "$TAG" --draft --notes "Agent Router $TAG Stable. Reliability and evidence layers are Stable without promoting unknown Host capabilities. PTC remains capability-gated with native/direct fallback; this release makes no comparative quality/Token/latency/cost claim versus Host default. Four-platform complete/plugin packages, staged upgrade preflight, migration/rollback and SHA256 are release-gated. Real Desktop plugin marketplace load/trust and unobserved structured Host capabilities remain unclaimed. See CHANGELOG.md and docs/v2.9.0-stable-acceptance.md."
+          NOTES_FILE="docs/v$VERSION-release-notes.md"
+          [[ -f "$NOTES_FILE" ]] || { echo "Missing checked-in stable release notes: $NOTES_FILE" >&2; exit 1; }
+          gh release create "$TAG" --target "$TARGET" --title "$TAG" --draft --notes-file "$NOTES_FILE"
           gh release upload "$TAG" packages/*
           gh release edit "$TAG" --draft=false
