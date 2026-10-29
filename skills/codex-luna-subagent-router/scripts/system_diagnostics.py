@@ -19,6 +19,8 @@ import plugin_support
 import runtime_support
 import token_usage
 import turn_usage
+import hook_observability as hook_state
+import model_bindings
 
 
 def _error(code):
@@ -88,6 +90,8 @@ def _config(scope_root):
             "token_accounting": routing.get("token_accounting"),
             "token_accounting_scope": routing.get("token_accounting_scope"),
             "token_accounting_collection": routing.get("token_accounting_collection"),
+            "token_accounting_summary": hook_state.summary_mode(routing),
+            "token_accounting_lifecycle_hooks": "on" if hook_state.lifecycle_enabled(routing) else "off",
             "max_subagents": min(safe) if safe else None,
             "max_subagent_layers": layers,
             "decision_engine": {
@@ -100,25 +104,35 @@ def _config(scope_root):
         return _error("configuration_invalid")
 
 
-def _hooks(scope_root, config):
+def _hooks(scope_root, config, scope_id="global"):
     try:
         home = store.codex_home().expanduser().resolve()
         project = Path(scope_root).resolve() if scope_root else None
-        routing_base = (
-            project / ".codex" if config.get("source") == "project" and project else home
-        )
-        hooks = tokens.read_json(routing_base / "hooks.json").get("hooks", {})
-        configured_events = []
-        for event in tokens.EVENTS:
-            owned = [
-                handler
-                for group in hooks.get(event, [])
-                if isinstance(group, dict)
-                for handler in group.get("hooks", [])
-                if isinstance(handler, dict) and handler.get("statusMessage") == tokens.OWNER
-            ]
-            if len(owned) == 1:
-                configured_events.append(event)
+        # Both active config layers and both supported storage forms can contain
+        # definitions. Inventory is not proof of trust or execution.
+        import re
+        counts = Counter()
+        locally_disabled = False
+        managed_only = False
+        for base in dict.fromkeys([home, *([project / ".codex"] if project else [])]):
+            layers = [tokens.read_json(base / "hooks.json").get("hooks", {})]
+            toml_path = base / "config.toml"
+            store.safe_path(toml_path)
+            toml = tomllib.loads(toml_path.read_text(encoding="utf-8")) if toml_path.exists() else {}
+            layers.append(toml.get("hooks", {}))
+            features = toml.get("features", {})
+            locally_disabled |= features.get("hooks") is False or features.get("codex_hooks") is False
+            managed_only |= toml.get("allow_managed_hooks_only") is True
+            for layer in layers:
+                for event in tokens.ALL_EVENTS:
+                    snake = re.sub(r"(?<!^)(?=[A-Z])", "_", event).lower()
+                    for key in (event, snake):
+                        counts[event] += sum(
+                            1 for group in layer.get(key, []) if isinstance(group, dict)
+                            for handler in group.get("hooks", []) if isinstance(handler, dict)
+                            and handler.get("statusMessage", handler.get("status_message")) == tokens.OWNER
+                        )
+        configured_events = [event for event in tokens.ALL_EVENTS if counts[event] == 1]
 
         owner, owner_project = plugin_support.effective_owner(project)
         plugin_owner = bool(owner and owner.get("active_source") == "plugin")
@@ -135,15 +149,22 @@ def _hooks(scope_root, config):
                     Path(owner["plugin_root"]) / "hooks/hooks.json"
                 ).get("hooks", {})
                 configured_events = [
-                    event for event in tokens.EVENTS if event in definitions
+                    event for event in tokens.ALL_EVENTS if event in definitions
                 ]
 
         conflicts = plugin_support.hook_sources(project)
+        required = hook_state.required_events(config)
+        health = hook_state.health(token_usage.default_usage_path(), scope_id)
         return {
             "status": "ok",
             "collection_mode": config.get("token_accounting_collection"),
             "configured_events": configured_events,
-            "all_four_configured": set(configured_events) == set(tokens.EVENTS),
+            "all_four_configured": set(tokens.EVENTS) <= set(configured_events),
+            "required_events": list(required),
+            "all_selected_configured": set(required) <= set(configured_events),
+            "handler_receipts": health,
+            "duplicate_events": [event for event in tokens.ALL_EVENTS if counts[event] > 1],
+            "local_policy": "disabled" if locally_disabled else "managed_only" if managed_only else "not_proven_by_local_config",
             "managed_source_count": len(conflicts) + (1 if plugin_owner_matches else 0),
             "managed_source_kinds": sorted({row["kind"] for row in conflicts} | (
                 {"native_plugin"} if plugin_owner_matches else set()
@@ -154,7 +175,7 @@ def _hooks(scope_root, config):
             "host_event_execution": "unverified",
             "note": "Configured definitions are not proof that the Host trusted or executed them.",
         }
-    except (OSError, ValueError, TypeError, KeyError):
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return _error("hook_inventory_invalid")
 
 
@@ -196,6 +217,7 @@ def _turns(scope_id):
             "registered_turns": len(rows),
             "phases": dict(phases),
             "main_snapshot_statuses": dict(main_statuses),
+            "execution_states": dict(Counter(row["execution"]["state"] for row in rows)),
             "child_snapshot_statuses": dict(child_statuses),
             "registered_children": sum(row.get("registered_children", 0) for row in rows),
             "source": "saved_ledger_only",
@@ -325,6 +347,18 @@ def _report_output():
         return _error("report_output_path_invalid")
 
 
+def _model_bindings(scope_id, root):
+    try:
+        workers = token_usage.statistics(scope=scope_id)['workers']
+    except (OSError, ValueError, TypeError, KeyError):
+        workers = None
+    result = model_bindings.inventory(root, workers)
+    if workers is None:
+        result['issues'].append('observed_usage_unavailable')
+        result['status'] = 'partial'
+    return result
+
+
 def collect(*, project_root=None, global_scope=False, verify_package=False,
             host_backend=None, host_version=None):
     scope_id, root = store.resolve_scope(project_root, global_scope)
@@ -332,7 +366,7 @@ def collect(*, project_root=None, global_scope=False, verify_package=False,
     sections = {
         "runtime": _runtime(verify_package),
         "config": config,
-        "hooks": _hooks(root, config),
+        "hooks": _hooks(root, config, scope_id),
         "usage": _usage(scope_id),
         "turns": _turns(scope_id),
         "plugin": _plugin(root),
@@ -340,12 +374,19 @@ def collect(*, project_root=None, global_scope=False, verify_package=False,
         "host_capabilities": _host_capabilities(host_backend, host_version),
         "benchmark": _benchmark(),
         "report_output": _report_output(),
+        "model_bindings": _model_bindings(scope_id, root),
     }
     unavailable = sorted(
         name for name, value in sections.items()
         if value.get("status") == "unavailable"
     )
     warnings = []
+    if sections["model_bindings"].get("instruction_model_mentions"):
+        warnings.append("legacy_model_mentions_require_semantic_review")
+    if sections["model_bindings"].get("warnings"):
+        warnings.append("model_binding_candidates_require_review")
+    if sections["model_bindings"].get("issues"):
+        warnings.append("model_binding_inventory_incomplete")
     if sections["usage"].get("invalid_usage_rows", 0):
         warnings.append("invalid_usage_rows")
     if sections["usage"].get("invalid_binding_rows", 0):
@@ -356,12 +397,22 @@ def collect(*, project_root=None, global_scope=False, verify_package=False,
         warnings.append("invalid_benchmark_rows")
     if sections["hooks"].get("managed_source_count", 0) > 1:
         warnings.append("multiple_managed_hook_sources")
+    if (config.get("token_accounting_collection") == "hooks" and config.get("token_accounting") == "on"
+            and sections["hooks"].get("local_policy") in ("disabled", "managed_only")):
+        warnings.append("hook_execution_restricted_by_local_config")
     if (
         config.get("token_accounting") == "on"
         and config.get("token_accounting_collection") == "hooks"
-        and not sections["hooks"].get("all_four_configured", False)
+        and not sections["hooks"].get("all_selected_configured", False)
     ):
         warnings.append("configured_hook_collection_incomplete")
+    receipts = sections["hooks"].get("handler_receipts", {}).get("events", {})
+    if any(row.get("phase") == "failed" for row in receipts.values()):
+        warnings.append("hook_handler_failure_observed")
+    if any(row.get("phase") == "received" for row in receipts.values()):
+        warnings.append("hook_handler_completion_unobserved")
+    if any(row.get("phase") == "unavailable" for row in receipts.values()):
+        warnings.append("hook_handler_receipts_unavailable")
     if sections["plugin"].get("registered") and sections["plugin"].get("active_source") == "plugin":
         if sections["plugin"].get("integrity") != "verified":
             warnings.append("active_plugin_integrity_not_verified")
@@ -403,7 +454,7 @@ def main(argv=None):
         print(f"Router diagnostics: {result['status']} · scope={result['scope_id']}")
         print(f"Runtime: {result['runtime'].get('status')} · version={result['runtime'].get('version', '-')}")
         print(f"Routing: {result['config'].get('routing_mode') or '-'} · token={result['config'].get('token_accounting') or '-'}")
-        print(f"Hooks configured: {len(result['hooks'].get('configured_events', []))}/4 · trust={result['hooks'].get('host_hook_trust', 'unverified')}")
+        print(f"Hooks configured: {len(result['hooks'].get('configured_events', []))}/{len(result['hooks'].get('required_events', tokens.EVENTS))} · trust={result['hooks'].get('host_hook_trust', 'unverified')}")
         print(f"Usage workers: {result['usage'].get('observed_subagents', 0)} · turns={result['turns'].get('registered_turns', 0)}")
         print(f"Plugin: {result['plugin'].get('active_source') or 'none'} · host_loaded={result['plugin'].get('host_loaded', 'unverified')}")
         caps = result["host_capabilities"]

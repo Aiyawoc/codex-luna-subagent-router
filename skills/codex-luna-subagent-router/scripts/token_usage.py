@@ -18,6 +18,7 @@ SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import outcome_store as store
+import hook_observability as hook_state
 from usage_reader import FIELDS, MAX_BYTES, empty, read_usage
 from usage_cache import VERSION as READER_VERSION
 import usage_diagnostics as diagnostics
@@ -53,7 +54,7 @@ def compact(value: int | None) -> str:
 
 
 WAIT_REASONS = {"terminal_not_observed", "unflushed_tail"}
-INFO_REASONS = {"non_usage_counter", "repeated_session_header"}
+INFO_REASONS = {"non_usage_counter", "repeated_session_header", "oversized_tool_record_validated"}
 REASON_LABELS = {
     "source_advanced_during_read": "读取期间日志继续增长，下次复核继续",
     "unassociated_children": "存在尚未关联的子线程",
@@ -99,6 +100,9 @@ REASON_LABELS.update({
     "receipt_baseline_missing": "缺少前一任务的 Worker 用量基线",
     "receipt_baseline_partial": "前一任务基线不完整，本次区间按已知计数计算",
     "receipt_scope_attribution": "按 outcome receipt 归属项目范围",
+    "oversized_tool_record_validated": "已流式验证超长工具记录，仅投影元数据",
+    "oversized_record_invalid": "超长记录结构无效，未跳过",
+    "exact_terminal_identity_required": "缺少精确结束轮次身份",
 })
 
 MODEL_NAMES = {
@@ -381,6 +385,16 @@ def collect(path, agent_id, parent_id, sid, *, transcript=None, root=None, sourc
             row["locator"] = locator
         if old and old["snapshot"]["status"] != "unavailable":
             prev = old["snapshot"]
+            if (prev["status"] == "complete" and snap["status"] == "partial"
+                    and snap["counts"] == prev["counts"]
+                    and snap["bytes_read"] <= prev["bytes_read"]
+                    and snap["source"] == prev["source"]
+                    and (snap["model"], snap["effort"]) == (prev["model"], prev["effort"])
+                    and old.get("locator") == locator
+                    and set(snap["reasons"]) <= WAIT_REASONS | INFO_REASONS):
+                # An older in-flight read must not erase a newer observed terminal.
+                # A later reuse has a larger byte boundary and remains independent.
+                snap = prev
             if snap["status"] == "unavailable" or (snap["counts"]["total_tokens"] < prev["counts"]["total_tokens"]):
                 snap = dict(prev, status="partial", terminal_observed=False,
                             reasons=sorted(set(prev["reasons"]) | set(snap["reasons"]) | {"stale_previous_snapshot"}))
@@ -618,11 +632,45 @@ def refresh(path, parent_id, sid, root, *, agent_id=None, limit=20, max_seconds=
                 bounded=True, discovery=False, outcome_unchanged=True)
 
 
+def _dispatch_hook(payload, path, sid, root, config):
+    event = payload["hook_event_name"]
+    if event in hook_state.TERMINAL_EVENTS:
+        hook_state.record_terminal(payload, path, sid)
+        # Advisory events do not accept the ordinary Stop control fields.
+        return {}
+    if event in ("UserPromptSubmit", "Stop"):
+        if config.get("token_accounting_scope") != "main_and_subagents":
+            return {}
+        import turn_usage
+        return turn_usage.handle_hook(payload, path, sid, root)
+    agent, parent = _id(payload.get("agent_id")), _id(payload.get("session_id"))
+    if event == "SubagentStart":
+        register(path, agent, parent, sid, payload.get("agent_type"))
+        if config.get("token_accounting_scope") == "main_and_subagents":
+            import turn_usage
+            turn_usage.register_child(payload, path, sid, root)
+        return {}
+    # transcript_path belongs to the PARENT: never use it as a fallback.
+    row = collect(path, agent, parent, sid, transcript=payload.get("agent_transcript_path"), root=root,
+                  source="rollout", agent_type=payload.get("agent_type"))
+    if config.get("token_accounting_scope") == "main_and_subagents":
+        try:
+            import turn_usage
+            turn_usage.sync_child_stop(payload, path, sid, root, row)
+        except (OSError, ValueError, TypeError, KeyError):
+            pass  # Turn-accounting recovery must never block SubagentStop.
+    mode = hook_state.summary_mode(config)
+    if mode == "silent":
+        return {"continue": True}
+    render = summary if mode == "detailed" else hook_summary
+    return {"systemMessage": render(row["snapshot"], model_label(row["snapshot"], row["agent_type"])), "continue": True}
+
+
 def hook(payload, path=None, project_root=None):
     if not isinstance(payload, dict):
         raise store.StoreError("invalid hook input")
     event = payload.get("hook_event_name")
-    if event not in ("SubagentStart", "SubagentStop", "UserPromptSubmit", "Stop"):
+    if event not in hook_state.ALL_EVENTS:
         return {}
     cwd = Path(payload.get("cwd", "")).expanduser()
     if not cwd.is_absolute() or not cwd.is_dir():
@@ -636,29 +684,19 @@ def hook(payload, path=None, project_root=None):
         if not enabled(root):
             return {}
         path = path or default_usage_path()
-        if event in ("UserPromptSubmit", "Stop"):
-            # The expanded scope requires explicit upgrade consent under question 5.
-            if store.effective_config(root).get("token_accounting_scope") != "main_and_subagents":
-                return {}
-            import turn_usage
-            return turn_usage.handle_hook(payload, path, sid, root)
-        agent, parent = _id(payload.get("agent_id")), _id(payload.get("session_id"))
-        if event == "SubagentStart":
-            register(path, agent, parent, sid, payload.get("agent_type"))
-            if store.effective_config(root).get("token_accounting_scope") == "main_and_subagents":
-                import turn_usage
-                turn_usage.register_child(payload, path, sid, root)
-            return {}  # No extra developer context or model call.
-        # transcript_path belongs to the PARENT: never use it as a fallback.
-        row = collect(path, agent, parent, sid, transcript=payload.get("agent_transcript_path"), root=root, source="rollout",
-                      agent_type=payload.get("agent_type"))
-        if store.effective_config(root).get("token_accounting_scope") == "main_and_subagents":
-            try:
-                import turn_usage
-                turn_usage.sync_child_stop(payload, path, sid, root, row)
-            except (OSError, ValueError, TypeError, KeyError):
-                pass  # Turn accounting recovery must never block the SubagentStop lifecycle.
-        return {"systemMessage": hook_summary(row["snapshot"], model_label(row["snapshot"], row["agent_type"])), "continue": True}
+        config = store.effective_config(root)
+        if event in hook_state.TERMINAL_EVENTS and (
+                not hook_state.lifecycle_enabled(config)
+                or config.get("token_accounting_scope") != "main_and_subagents"):
+            return {}
+        receipt = hook_state.received(path, sid, payload)
+        try:
+            result = _dispatch_hook(payload, path, sid, root, config)
+        except (OSError, ValueError, TypeError, KeyError):
+            hook_state.handled(receipt, failed=True)
+            raise
+        hook_state.handled(receipt)
+        return result
     finally:
         os.chdir(old_cwd)
 
@@ -696,7 +734,7 @@ def main(argv=None):
         args = p.parse_args(argv)
     except SystemExit as exc:
         if exc.code and "hook" in (argv if argv is not None else sys.argv[1:]):
-            print(json.dumps({"continue": True, "systemMessage": "Token hook 配置需要更新；未阻止子 Agent 停止。"}, ensure_ascii=False))
+            print(json.dumps({"systemMessage": "Token hook 配置需要更新；未阻止停止。"}, ensure_ascii=False))
             return 0
         raise
     try:
@@ -738,7 +776,7 @@ def main(argv=None):
     except (OSError, ValueError, TypeError, KeyError):
         if args.command == "hook":
             # Never request another turn, block stop/close, or spill payload/paths.
-            print(json.dumps({"continue": True, "systemMessage": "子 Agent token 统计暂不可用；可用 token_usage.py stats 检查。"}, ensure_ascii=False))
+            print(json.dumps({"systemMessage": "Agent token 统计暂不可用；可用 diagnostics 检查。"}, ensure_ascii=False))
             return 0
         print("ERROR: token accounting unavailable; check configuration, identity, receipt and allowed paths.", file=sys.stderr)
         return 2

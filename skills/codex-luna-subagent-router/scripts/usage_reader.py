@@ -116,7 +116,7 @@ class Accumulator:
             self.reasons.add("cache_breakdown_missing")
 
 
-INFO_REASONS = {'non_usage_counter', 'repeated_session_header'}
+INFO_REASONS = {'non_usage_counter', 'repeated_session_header', 'oversized_tool_record_validated'}
 START_EVENTS = {'task_started', 'turn_started'}
 END_EVENTS = {'task_complete', 'turn_complete', 'turn_completed', 'turn_aborted'}
 
@@ -164,6 +164,7 @@ class _Scan:
         self.stamp_previous = None
         self.closed = False
         self.activities = set()
+        self.exact_terminal_offset = None  # Ephemeral evidence; not an accounting/cache field.
 
     def export(self):
         return dict(activities=sorted(self.activities), identity=self.identity, active_turn=self.active_turn, active_route=list(self.active_route),
@@ -341,6 +342,8 @@ class _Scan:
             event_turn = payload.get('turn_id')
             if self.turn is None or event_turn in (None, self.turn):
                 self.terminal = True
+                if self.turn is not None and event_turn == self.turn:
+                    self.exact_terminal_offset = offset
         if payload.get('type') != 'token_count' or payload.get('info') is None:
             return
         info = payload['info']
@@ -379,7 +382,8 @@ class _Scan:
 def read_usage(path: Path, agent_id: str, parent_id: str | None, *, codex_home: Path,
                project_root: Path | None = None, source='rollout', max_bytes=MAX_BYTES,
                max_seconds=MAX_SECONDS, thread_kind='subagent', turn_id=None,
-               cursor=None, end_cursor=None, cache_ledger=None, activity_out=None) -> dict[str, Any]:
+               cursor=None, end_cursor=None, cache_ledger=None, activity_out=None,
+               terminal_out=None) -> dict[str, Any]:
     """Read one explicit transcript with bounded, resumable numeric parsing.
 
     Start/end cursor anchors are immutable accounting boundaries. The optional
@@ -398,10 +402,22 @@ def read_usage(path: Path, agent_id: str, parent_id: str | None, *, codex_home: 
         return empty('parent_is_not_child', source_name)
     if type(max_bytes) is not int or max_bytes < 1 or not isinstance(max_seconds, (float,int)) or not 0 < max_seconds <= 60:
         return empty('invalid_read_budget', source_name)
+    # Reject invalid lookahead before acquiring a transcript descriptor.
+    # Exact-terminal queries must observe their own event, not cached state.
+    if terminal_out is not None:
+        terminal_out.clear()
+        if not turn_id or source != 'rollout':
+            return empty('exact_terminal_identity_required', source_name)
     path = Path(path).expanduser().absolute()
     allowed = [Path(codex_home).expanduser().resolve()]
     if project_root:
         allowed.append(Path(project_root).resolve() / '.codex')
+    query = [agent_id, parent_id, thread_kind, turn_id, cursor, source]
+    cache_path = (usage_cache.path_for(cache_ledger, path, query)
+                  if cache_ledger and terminal_out is None else None)
+    scan = _Scan(agent_id, parent_id, thread_kind, turn_id, cursor, source)
+    transient, offset, spent = set(), 0, 0
+    deadline = time.monotonic() + max_seconds
     try:
         store.safe_path(path)
         if path.suffix != '.jsonl' or not any(path.resolve().is_relative_to(root) for root in allowed):
@@ -409,13 +425,10 @@ def read_usage(path: Path, agent_id: str, parent_id: str | None, *, codex_home: 
         fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
     except (OSError, ValueError):
         return empty('transcript_unavailable', source_name)
-    query = [agent_id, parent_id, thread_kind, turn_id, cursor, source]
-    cache_path = usage_cache.path_for(cache_ledger, path, query) if cache_ledger else None
-    scan = _Scan(agent_id, parent_id, thread_kind, turn_id, cursor, source)
-    transient, offset, spent = set(), 0, 0
-    deadline = time.monotonic() + max_seconds
     try:
-        with os.fdopen(fd, 'rb') as handle:
+        handle = os.fdopen(fd, 'rb')
+        fd = None  # Ownership transferred; the context closes every exit path.
+        with handle:
             st = os.fstat(handle.fileno())
             if not stat.S_ISREG(st.st_mode):
                 return empty('not_regular_file', source_name)
@@ -448,7 +461,27 @@ def read_usage(path: Path, agent_id: str, parent_id: str | None, *, codex_home: 
                     break
                 spent += len(line)
                 if len(line) > MAX_LINE:
-                    transient.add('record_too_large'); break
+                    if source != 'rollout' or scan.identity is None:
+                        transient.add('record_too_large'); break
+                    import usage_stream
+                    handle.seek(offset)
+                    try:
+                        row = usage_stream.read_tool_record(handle, upper=upper,
+                            budget=max(0, max_bytes-spent), deadline=deadline)
+                    except usage_stream.StreamError as exc:
+                        transient.add(str(exc)); break
+                    length = handle.tell()-offset
+                    spent += length  # Includes the initial attempted read, not only parsing.
+                    thread = row['payload'].get('thread_id')
+                    if thread is not None and thread != agent_id:
+                        transient.add('thread_identity_mismatch'); break
+                    try:
+                        scan.consume(row, offset)
+                    except ValueError as exc:
+                        return empty(str(exc), source_name)
+                    scan.acc.reasons.add('oversized_tool_record_validated')
+                    offset += length
+                    continue
                 if spent > max_bytes or (not line.endswith(b'\n') and offset + len(line) < upper):
                     transient.add('read_budget_exceeded'); break
                 if not line.endswith(b'\n'):
@@ -469,12 +502,18 @@ def read_usage(path: Path, agent_id: str, parent_id: str | None, *, codex_home: 
                     return bad
                 if not scan.closed:
                     offset += len(line)
+                if terminal_out is not None and scan.exact_terminal_offset == offset-len(line):
+                    terminal_out.update(turn_id=turn_id, end_cursor=usage_cache.boundary(handle, offset))
+                    break
             if end_cursor is None and not scan.closed and os.fstat(handle.fileno()).st_size > upper:
                 transient.add('source_advanced_during_read')
             if scan.identity is not None or source == 'app-server':
                 usage_cache.save(cache_path, handle, query, header_digest, offset, scan.export())
     except OSError:
         transient.add('transcript_read_failed')
+    finally:
+        if fd is not None:
+            os.close(fd)  # fdopen failed before it could take ownership.
     if activity_out is not None:
         activity_out.update(scan.activities)
     return scan.snapshot(source_name, offset, transient)

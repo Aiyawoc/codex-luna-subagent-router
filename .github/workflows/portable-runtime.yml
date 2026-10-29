@@ -65,6 +65,14 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: python tools/smoke_plugin.py --target ${{ matrix.target }}
+      - name: Build optional lifecycle candidate for isolated verification only
+        env:
+          PYTHONUTF8: '1'
+        run: python tools/build_plugin.py --target ${{ matrix.target }} --lifecycle-hooks --output build/lifecycle-plugin
+      - name: Verify six-event plugin gates, idempotence, diagnostics and rollback
+        env:
+          PYTHONUTF8: '1'
+        run: python tools/smoke_plugin.py --target ${{ matrix.target }} --lifecycle-hooks --dist build/lifecycle-plugin
       - uses: actions/upload-artifact@v4
         with:
           name: native-plugin-${{ matrix.target }}

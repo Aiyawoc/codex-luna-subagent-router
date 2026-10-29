@@ -115,8 +115,14 @@ def verify_plugin(root):
         raise ValueError("plugin integrity mismatch; do not index the installed plugin directory")
     files = runtime.verify_package(core)
     definitions = tokens.read_json(root / "hooks/hooks.json").get("hooks")
-    if not isinstance(definitions, dict) or set(definitions) != set(tokens.EVENTS):
-        raise ValueError("plugin must declare exactly the four Router lifecycle events")
+    if not isinstance(definitions, dict) or set(definitions) not in (set(tokens.EVENTS), set(tokens.ALL_EVENTS)):
+        raise ValueError("plugin must declare four base events or six reviewed lifecycle events")
+    for event in tokens.TERMINAL_EVENTS:
+        for group in definitions.get(event, []):
+            for handler in group.get("hooks", []):
+                if (handler.get("type") != "command" or type(handler.get("timeout")) is not int
+                        or not 1 <= handler["timeout"] <= 3 or handler.get("async", False)):
+                    raise ValueError("advisory lifecycle hooks must be synchronous commands with timeout 1..3")
     return {"status": "ok", "version": meta["version"], "plugin": PLUGIN_NAME,
             "plugin_files": len(manifest["files"]), "core_files": files,
             "package_sha256": runtime.file_digest(root / PLUGIN_MANIFEST),

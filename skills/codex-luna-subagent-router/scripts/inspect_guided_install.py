@@ -59,7 +59,7 @@ def _installed_locations(home, root=None, skills_dir=None):
     return result
 
 
-def _expected_hook_handlers(installed, *, project_root=None):
+def _expected_hook_handlers(installed, *, project_root=None, event=None):
     """Build current managed-hook identities from detected complete installs.
 
     Upgrade preflight may run from a freshly extracted release package. In
@@ -89,6 +89,8 @@ def _expected_hook_handlers(installed, *, project_root=None):
                 project_root=project_root,
             )
         )
+    if event in tokens.TERMINAL_EVENTS:
+        handlers = [{**handler, "timeout": 3} for handler in handlers]
     return handlers
 
 
@@ -172,24 +174,27 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
     token_mode = routing.get("token_accounting")
     accounting_scope = routing.get("token_accounting_scope")
     collection = routing.get("token_accounting_collection")
+    required_events = tokens.hook_state.required_events(routing)
     needs = token_mode not in ("on", "off") or (token_mode == "on" and (accounting_scope != "main_and_subagents" or collection not in ("hooks", "manual")))
     hook_events = []
     if token_mode == "on" and collection == "hooks":
         hooks = tokens.read_json(rpath.parent.parent / "hooks.json").get("hooks", {})
-        expected_handlers = _expected_hook_handlers(
-            installed,
-            project_root=root if rpath == project_routing else None,
-        )
-        for event in tokens.EVENTS:
+        for event in required_events:
+            expected_handlers = _expected_hook_handlers(
+                installed, project_root=root if rpath == project_routing else None, event=event,
+            )
             managed = [h for g in hooks.get(event, []) for h in g.get("hooks", []) if h.get("statusMessage") == tokens.OWNER]
             if len(managed) == 1 and managed[0] in expected_handlers:
                 hook_events.append(event)
         native_root = plugin_support.plugin_root()
         if native_root and plugin_support.owner_matches(native_root, root)[0] and not plugin_support.hook_sources(root):
             definitions = tokens.read_json(native_root / "hooks/hooks.json").get("hooks", {})
-            hook_events = [event for event in tokens.EVENTS if event in definitions]
-        needs = needs or set(hook_events) != set(tokens.EVENTS)
-    add(5, "token_accounting", {"mode": token_mode, "scope": accounting_scope, "collection": collection, "current_hook_events": hook_events}, fresh or needs,
+            hook_events = [event for event in required_events if event in definitions]
+        needs = needs or set(hook_events) != set(required_events)
+    add(5, "token_accounting", {"mode": token_mode, "scope": accounting_scope, "collection": collection,
+        "summary": tokens.hook_state.summary_mode(routing), "required_hook_events": list(required_events),
+        "lifecycle_hooks": "on" if tokens.hook_state.lifecycle_enabled(routing) else "off",
+        "current_hook_events": hook_events}, fresh or needs,
         "是否统计主 Agent / SubAgent 的实际 Token 用量和完成状态？可选择自动 hooks、手动采集或关闭；统计不改变路由结果。")
     feature = config.get("features", {}).get("default_mode_request_user_input")
     add(6, "default_mode_request_user_input", feature, fresh or feature is None,

@@ -21,6 +21,7 @@ import token_usage as usage
 from usage_reader import MAX_BYTES, checkpoint, empty, read_usage
 from usage_cache import VERSION as READER_VERSION
 import usage_diagnostics as diagnostics
+import hook_observability as hook_state
 
 ROW_KEYS = {"schema_version", "session_id", "turn_id", "scope_id", "started_at", "updated_at",
             "phase", "locator", "cursor", "members", "main_snapshot", "child_snapshots", "excluded_children"}
@@ -173,6 +174,11 @@ def begin(payload, upath, sid, root):
                 continue
             sealed = copy.deepcopy(old)
             sealed["phase"] = "sealed"
+            if hook_state.interrupted(upath, old):
+                # An interrupt receipt has no final usage or child end cursors.
+                # Preserve the known snapshot; do not charge post-interrupt work.
+                save(path, sealed, old)
+                continue
             # Freeze per-child end boundaries BEFORE any new-turn work can be charged.
             if old["scope_id"] == sid:
                 if cursor and old["locator"] == locator:
@@ -187,7 +193,8 @@ def begin(payload, upath, sid, root):
                     # when the parent turn is sealed without a normal Stop hook.
                     if member["locator"] is None and newer["locator"] is not None:
                         member["locator"] = newer["locator"]
-                    if newer["locator"] == member["locator"]:
+                    confirmed = old["child_snapshots"].get(agent, {}).get("terminal_observed") is True
+                    if newer["locator"] == member["locator"] and not (confirmed and member.get("end_cursor")):
                         member["end_cursor"] = newer["cursor"]
                 to_recheck = old["turn_id"]
             save(path, sealed, old)
@@ -217,7 +224,8 @@ def register_child(payload, upath, sid, root):
     path = ledger_path(upath)
     with store.locked(path, timeout=0.4):
         latest = load(path)
-        candidates = [r for r in latest.values() if r["session_id"] == session and r["scope_id"] == sid and r["phase"] == "started"]
+        candidates = [r for r in latest.values() if r["session_id"] == session and r["scope_id"] == sid
+                      and r["phase"] == "started" and not hook_state.interrupted(upath, r)]
         if len(candidates) != 1:
             return
         old = candidates[0]
@@ -318,6 +326,8 @@ def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
         if (candidate["session_id"] != session or candidate["scope_id"] != sid
                 or member is None or member.get("end_cursor") is not None):
             continue
+        if hook_state.interrupted(upath, candidate):
+            continue
         member_turn = member.get("child_turn_id")
         exact_turn = member_turn is not None and stop_turn is not None and member_turn == stop_turn
         current_registered = candidate["phase"] == "started" and member_turn is None and member["active"]
@@ -342,6 +352,8 @@ def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
         latest = load(path)
         old = latest.get(identity)
         if old is None:
+            return None
+        if hook_state.interrupted(upath, old):
             return None
         current = old["members"].get(agent)
         if current is None or current.get("end_cursor") is not None:
@@ -387,6 +399,7 @@ def sync_child_stop(payload, upath, sid, root, child=None, *, max_seconds=1.0):
     try:
         snapshot = read_usage(Path(target), agent, session, codex_home=store.codex_home(),
             project_root=root, cursor=sealed_member["cursor"], end_cursor=sealed_member["end_cursor"],
+            turn_id=sealed_member.get("child_turn_id"),
             cache_ledger=upath, max_seconds=max(0.01, max_seconds))
     except (OSError, ValueError, TypeError, KeyError):
         return saved
@@ -452,6 +465,8 @@ def _refresh_row(old, latest, payload, upath, sid, root, *, deadline,
     """Refresh one registered turn in memory. The caller decides whether to persist it."""
     if old["scope_id"] != sid:
         raise TurnUsageError("scope_mismatch")
+    if hook_state.interrupted(upath, old):
+        return old  # No new counts without a trustworthy terminal accounting boundary.
     if old["phase"] == "sealed" and not refresh_sealed:
         return old
     row = copy.deepcopy(old)
@@ -500,8 +515,28 @@ def _refresh_row(old, latest, payload, upath, sid, root, *, deadline,
         elif child_target:
             snap = read_usage(child_target, agent, row["session_id"], codex_home=store.codex_home(),
                 project_root=root, cursor=member["cursor"], end_cursor=child_end,
+                turn_id=member.get("child_turn_id"),
                 cache_ledger=upath, max_bytes=max_bytes,
                 max_seconds=max(0.01, deadline-time.monotonic()))
+            # SubagentStop can arrive before the terminal record is appended.
+            # That checkpoint is only a provisional read ceiling. Observe one
+            # exact child-turn terminal; never extend a sealed historical turn,
+            # an already complete interval, an interrupted turn or an unknown ID.
+            if (row["phase"] != "sealed" and member.get("child_turn_id")
+                    and "terminal_not_observed" in snap["reasons"]
+                    and time.monotonic() < deadline):
+                boundary = {}
+                repaired = read_usage(child_target, agent, row["session_id"],
+                    codex_home=store.codex_home(), project_root=root,
+                    cursor=member["cursor"], turn_id=member["child_turn_id"],
+                    terminal_out=boundary, max_bytes=max_bytes,
+                    max_seconds=max(0.01, min(0.75, deadline-time.monotonic())))
+                if (boundary and repaired["terminal_observed"] and repaired["status"] != "unavailable"
+                        and (child_end is None or boundary["end_cursor"]["offset"] >= child_end["offset"])
+                        and (snap["counts"]["total_tokens"] is None or
+                             repaired["counts"]["total_tokens"] >= snap["counts"]["total_tokens"])):
+                    member["end_cursor"] = boundary["end_cursor"]
+                    snap = repaired
         else:
             snap = empty("transcript_unavailable")
         row["child_snapshots"][agent] = snap
@@ -515,20 +550,59 @@ def _refresh_row(old, latest, payload, upath, sid, root, *, deadline,
     return row
 
 
+def _reconcile_lifetimes(row, upath, sid, root, deadline):
+    """Bounded natural-event followup, never promote an interval to lifetime.
+
+    Independently re-read at most two registered Workers outside the turn lock.
+    preview/stats never enter this path. Missing budget/evidence stays partial.
+    """
+    if time.monotonic() >= deadline or hook_state.interrupted(upath, row):
+        return
+    children, _ = usage.load_latest(upath)
+    checked = 0
+    for agent, snap in row["child_snapshots"].items():
+        if checked >= 2 or time.monotonic() >= deadline:
+            break
+        child = children.get(usage.usage_id(agent, row["session_id"]))
+        member = row["members"][agent]
+        if (snap["status"] != "complete" or not snap["terminal_observed"]
+                or child is None or child["scope_id"] != sid or not member.get("child_turn_id")
+                or child["locator"] is None or child["locator"] != member["locator"]
+                or child["snapshot"]["status"] == "complete"
+                or "terminal_not_observed" not in child["snapshot"]["reasons"]):
+            continue
+        checked += 1
+        try:
+            if hook_state.interrupted(upath, row):
+                return
+            usage.collect(upath, agent, row["session_id"], sid,
+                transcript=_path(child["locator"], sid, root), root=root,
+                max_seconds=max(0.01, min(0.5, deadline-time.monotonic())))
+        except (OSError, ValueError, TypeError, KeyError):
+            pass  # Accounting failure cannot affect Host execution or quality receipts.
+
+
 def finish(payload, upath, sid, root, *, mark_stopped=True, refresh_sealed=False,
            max_seconds=3.0, max_bytes=MAX_BYTES):
     session, turn = usage._id(payload.get("session_id")), usage._id(payload.get("turn_id"))
     path = ledger_path(upath)
     deadline = time.monotonic() + max_seconds
+    latest = load(path)
+    old = latest.get((session, turn))
+    if old is None:
+        return None
+    row = _refresh_row(old, latest, payload, upath, sid, root, deadline=deadline,
+                       mark_stopped=mark_stopped, refresh_sealed=refresh_sealed,
+                       max_bytes=max_bytes)
+    # Transcript I/O stays outside the short write lock. A concurrent stop,
+    # seal or child update wins; never overwrite it with this stale computation.
     with store.locked(path, timeout=0.4):
-        latest = load(path)
-        old = latest.get((session, turn))
-        if old is None:
-            return None
-        row = _refresh_row(old, latest, payload, upath, sid, root, deadline=deadline,
-                           mark_stopped=mark_stopped, refresh_sealed=refresh_sealed,
-                           max_bytes=max_bytes)
-        return save(path, row, old)
+        current = load(path).get((session, turn))
+        if current != old or hook_state.interrupted(upath, old):
+            return current
+        saved = save(path, row, old)
+    _reconcile_lifetimes(saved, upath, sid, root, deadline)
+    return saved
 
 def report(row, heading="本轮 Token 用量", *, include_context=False):
     snapshots = [row["main_snapshot"], *row["child_snapshots"].values()]
@@ -558,6 +632,13 @@ def report(row, heading="本轮 Token 用量", *, include_context=False):
     return "\n".join(lines)
 
 
+def brief_report(row, heading="本轮已知用量"):
+    aggregate = usage.aggregate_snapshots([row["main_snapshot"], *row["child_snapshots"].values()])
+    if row["excluded_children"]:
+        aggregate = _note(aggregate, "unassociated_children")
+    return usage.summary(aggregate, heading)
+
+
 def preview(upath, sid, root, *, session=None, turn=None):
     latest = load(ledger_path(upath))
     if turn is not None and session is None:
@@ -570,8 +651,10 @@ def preview(upath, sid, root, *, session=None, turn=None):
         selected = latest.get((session, turn))
         if selected is None: raise TurnUsageError("turn_not_registered")
         if selected["scope_id"] != sid: raise TurnUsageError("scope_mismatch")
+        if hook_state.interrupted(upath, selected): raise TurnUsageError("turn_interrupted")
         if selected["phase"] != "started": raise TurnUsageError("turn_not_active")
     candidates = [r for r in latest.values() if r["scope_id"] == sid and r["phase"] == "started"
+                  and not hook_state.interrupted(upath, r)
                   and (session is None or r["session_id"] == session) and (turn is None or r["turn_id"] == turn)]
     if not candidates:
         raise TurnUsageError("no_active_turn")
@@ -610,6 +693,7 @@ def _stop_recovery_row(payload, upath, sid, root):
             key=lambda row: store.parse_time(row["updated_at"]),
         )
         prior = previous[-1] if previous else None
+        prior_interrupted = prior is not None and hook_state.interrupted(upath, prior)
         start_cursor = None
         members = {}
 
@@ -619,7 +703,7 @@ def _stop_recovery_row(payload, upath, sid, root):
                 sealed["phase"] = "sealed"
                 save(path, sealed, prior)
                 prior = sealed
-            if prior.get("locator") == locator and prior.get("end_cursor") is not None:
+            if not prior_interrupted and prior.get("locator") == locator and prior.get("end_cursor") is not None:
                 start_cursor = prior["end_cursor"]
                 can_measure = True
 
@@ -634,9 +718,9 @@ def _stop_recovery_row(payload, upath, sid, root):
             prior_member = prior["members"].get(agent) if prior is not None else None
             child_start = None
             fresh = False
-            if prior_member is not None and prior_member.get("locator") == child_locator:
+            if not prior_interrupted and prior_member is not None and prior_member.get("locator") == child_locator:
                 child_start = prior_member.get("end_cursor")
-            elif prior is not None:
+            elif prior is not None and not prior_interrupted:
                 fresh = store.parse_time(child["started_at"]) >= store.parse_time(prior["updated_at"])
             member = dict(cursor=child_start, locator=child_locator, fresh=fresh, active=False)
             if child_end is not None:
@@ -661,17 +745,31 @@ def handle_hook(payload, upath, sid, root):
     if payload["hook_event_name"] == "UserPromptSubmit":
         begin(payload, upath, sid, root)
         return {}
+    # A delayed Stop for a previously interrupted turn is not a new completion.
+    if hook_state.terminal_evidence(upath, sid, usage._id(payload.get("session_id")), usage._id(payload.get("turn_id"))):
+        return {"continue": True}
     row = finish(payload, upath, sid, root)
     if row is None:
         recovered, can_measure = _stop_recovery_row(payload, upath, sid, root)
         row = finish(payload, upath, sid, root) if can_measure else recovered
     if row and "child_is_not_main" in row["main_snapshot"]["reasons"]:
         return {}
+    mode = hook_state.summary_mode(store.effective_config(root))
+    if mode == "silent":
+        return {"continue": True}
+    if row and mode == "brief":
+        return {"continue": True, "systemMessage": brief_report(row)}
     return {"continue": True, "systemMessage": report(row) if row else
             "本轮 token 统计不可用：未登记本轮开始；未使用会话累计冒充本轮用量。"}
 
 
-def public_row(row):
+def public_row(row, *, usage_path=None):
+    execution = hook_state.execution(usage_path or usage.default_usage_path(), row)
+    rendered = report(row, include_context=True)
+    if execution["state"] == "interrupted":
+        rendered += "\n执行观察：已中断；用量仅为此前已知快照，未推定完整或质量通过。"
+    elif execution["source"] == "terminal_receipt_unavailable":
+        rendered += "\n执行观察：结束事件记录不可读；保留已有统计，未推定执行状态。"
     child_boundaries = {
         agent: {
             "child_turn_id": member.get("child_turn_id"),
@@ -682,8 +780,9 @@ def public_row(row):
         for agent, member in row["members"].items()
     }
     return {k: v for k, v in row.items() if k not in ("locator", "cursor", "end_cursor", "members")} | {
-        "summary": report(row, include_context=True), "registered_children": len(row["members"]),
-        "child_boundaries": child_boundaries, "diagnostics": diagnostics.describe(row)}
+        "summary": rendered, "registered_children": len(row["members"]),
+        "child_boundaries": child_boundaries, "diagnostics": diagnostics.describe(row),
+        "execution": execution}
 
 
 def statistics(upath, session=None, turn=None, *, scope=None, phase=None, limit=None):
@@ -692,7 +791,7 @@ def statistics(upath, session=None, turn=None, *, scope=None, phase=None, limit=
             and (scope is None or r["scope_id"] == scope) and (phase is None or r["phase"] == phase)]
     rows.sort(key=lambda r: (r["started_at"], r["session_id"], r["turn_id"]))
     if limit is not None: rows = rows[-limit:]
-    return [public_row(r) for r in rows]
+    return [public_row(r, usage_path=upath) for r in rows]
 
 
 def refresh(upath, session, sid, root, *, turn=None, limit=20, max_seconds=8.0, max_bytes=MAX_BYTES):
@@ -712,7 +811,7 @@ def refresh(upath, session, sid, root, *, turn=None, limit=20, max_seconds=8.0, 
         row = finish(dict(session_id=session, turn_id=old["turn_id"]), upath, sid, root,
                      mark_stopped=False, refresh_sealed=True, max_bytes=max_bytes,
                      max_seconds=max(0.01, min(3.0, deadline-time.monotonic())))
-        checked.append(public_row(row))
+        checked.append(public_row(row, usage_path=upath))
     return dict(scope_id=sid, session_id=session, processed=len(checked), remaining=len(rows)-len(checked),
                 records=checked, bounded=True, discovery=False, outcome_unchanged=True)
 
@@ -737,6 +836,8 @@ def main(argv=None):
         s.add_argument("--project-root")
         s.add_argument("--global-scope", action="store_true")
         s.add_argument("--json", action="store_true")
+        if command == "preview":
+            s.add_argument("--respect-summary", action="store_true", help="Skip preview work when automatic summaries are silent.")
         if command == "collect":
             s.add_argument("--transcript", type=Path)
             s.add_argument("--refresh-sealed", action="store_true")
@@ -769,8 +870,16 @@ def main(argv=None):
         if config.get("token_accounting_scope") != "main_and_subagents":
             raise TurnUsageError("main_accounting_not_enabled")
         if args.command == "preview":
+            mode = hook_state.summary_mode(config)
+            if args.respect_summary and mode == "silent":
+                if args.json:
+                    print(json.dumps({"display": False, "reason": "summary_silent", "collection_unchanged": True}))
+                return 0
             row = preview(args.usage_file, sid, root, session=args.session_id, turn=args.turn_id)
-            print(json.dumps(public_row(row), ensure_ascii=False, indent=2) if args.json else
+            if args.respect_summary and mode == "brief" and not args.json:
+                print(brief_report(row, "Token 用量（截至最终回复前）"))
+                return 0
+            print(json.dumps(public_row(row, usage_path=args.usage_file), ensure_ascii=False, indent=2) if args.json else
                   report(row, "Token 用量（截至最终回复前；最终正文会产生少量额外输出）", include_context=True))
         elif args.command == "refresh":
             result = refresh(args.usage_file, args.session_id, sid, root, turn=args.turn_id,
@@ -785,7 +894,7 @@ def main(argv=None):
                               transcript_path=str(args.transcript) if args.transcript else None), args.usage_file, sid, root,
                          refresh_sealed=args.refresh_sealed)
             if row is None: raise TurnUsageError("turn_not_registered")
-            print(json.dumps(public_row(row), ensure_ascii=False, indent=2) if args.json else report(row, include_context=True))
+            print(json.dumps(public_row(row, usage_path=args.usage_file), ensure_ascii=False, indent=2) if args.json else report(row, include_context=True))
         return 0
     except (OSError, ValueError, TypeError, KeyError) as exc:
         code = exc.code if isinstance(exc, TurnUsageError) else "ledger_unavailable"

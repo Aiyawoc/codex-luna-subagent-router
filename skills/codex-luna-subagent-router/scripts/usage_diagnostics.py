@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from usage_cache import VERSION
 
 ERRORS = {
+    'turn_interrupted': '已观察到本轮 Interrupt；保留已知快照，未用后续日志补齐缺失用量。',
     'no_active_turn': '当前 scope 没有进行中的轮次；历史记录请使用 stats 或显式 refresh。',
     'ambiguous_active_turn': '当前 scope 有多个进行中的轮次；请明确 --session-id 和 --turn-id。',
     'turn_not_registered': '未登记指定轮次；不会用会话累计代替本轮。',

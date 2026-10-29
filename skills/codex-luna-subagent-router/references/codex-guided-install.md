@@ -214,7 +214,7 @@ cat VERSION
 - spawn 失败必须保留原始分类：`agent thread limit reached` 与 `server overloaded` 不得都写成“模型满载”。
 - 同工作流、模型/强度已知且满足最低能力、无需独立复核时，可复用 Completed Worker；否则 fresh。复用不改变模型/effort，并只统计本轮新增 token。
 - 主/子 token 关联不再假设父子 turn_id 相同；父 transcript 的 Started/Interacted activity 用于绑定本轮真实 child。
-- 开启 main_and_subagents 时，Lead 在最终回复前运行 `turn_usage.py preview`；成功则正文末尾附“截至最终回复前”摘要，Stop 仍保存更晚快照。
+- 开启 main_and_subagents 时，Lead 在最终回复前运行 `turn_usage.py preview --respect-summary`；silent 不输出摘要且不扫描日志，其余成功则正文末尾附“截至最终回复前”摘要，Stop 仍保存更晚快照。v2.9.1 的显示选择和可选结束事件见 `hook-compatibility.md`；旧四事件安装仍有效，不默认扩充权限或事件。
 
 ## v2.5.5 Host-first 并发兼容
 
@@ -237,3 +237,8 @@ cat VERSION
 
 For an explicitly requested native plugin install/migration, first follow `plugin-install.md`.
 The six questions and existing choices stay unchanged. Plugin ownership is separate from Host enablement and hook trust. Do not invoke the standalone installer from an active plugin or maintain a duplicate Skill/hook source. The native plugin uses the same Core helpers and external canonical ledgers.
+
+
+## RC.2 只读来源核对
+
+升级预检后可运行 `bin/router model_bindings --project-root /实际项目 --json`，只盘点配置候选、已保存观察和旧型号提及，不改配置或项目指令。不能把当前配置当历史请求，也不能把禁止旧型号的指令误判为主动指定。见 `references/accounting-closure.md`；这个诊断不是每次普通任务必须执行的新门槛。

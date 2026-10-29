@@ -1,4 +1,8 @@
+> RC.2 的收尾、超长记录和模型诊断规则见 [统计收尾与证据诊断](accounting-closure.md)。
+
 # 主／子 Agent token 统计（v2.6.1）
+
+> v2.9.1-rc.1 增量：统计与摘要独立设置、可选 Interrupt / SessionEnd、内容无关的 handler receipts。见 [Hook 兼容性与诊断](hook-compatibility.md)。本页的 v2.6.1 是既有 reader/hook 协议版本，不是当前产品版本。原四事件安装和 usage/turn 账本格式保持兼容。
 
 仅 `token_accounting=on` 采集；缺失/off 保持关闭。此选项独立于 luna_only/adaptive 和 evidence_calibration，关闭历史校准也能查看用量。不会切换模型、修改路由成本表、估算账单或绕过 hooks 信任。
 
@@ -129,7 +133,7 @@ SubagentStart 注册真实 agent_id 与父 session_id、scope。SubagentStop 只
 
 若真实 Host 未留下 UserPromptSubmit begin，但 Stop hook 仍到达，v2.7 的恢复路径只使用已持久化的精确 end boundary：首个无基线 turn 只登记 `main_turn_baseline_missing` 与当前 end boundary，不拿 session lifetime 冒充本轮；下一 turn 若与上一 turn 共享同一已验证 transcript locator，则可把上一 end boundary 作为本轮 cursor。reused child 同样只允许复用上一 turn 已冻结的 child end cursor。这个 fallback 是观测恢复，不代表 UserPromptSubmit hook 本身已正常触发。
 
-`reader_version` / diagnostics 中的 `2.6.1` 是 usage reader/cache 协议版本，用于判断已保存 snapshot 是否由当前兼容 reader 解析；它不是 Router 产品版本。产品版本继续只读取 `VERSION`。
+`reader_version` / diagnostics 是 usage reader/cache 协议版本，不是产品或 hook 定义版本。RC.2 reader/cache 使用 `2.9.1-rc.2`；旧 `2.6.1` 账本继续可读，旧缓存不再复用，hook 定义仍为 `2.6.1`。产品版本继续只读取 `VERSION`。
 
 读不到游标时，只允许以已登记的精确 turn_id 和可验证累计边界读取；从未登记 UserPromptSubmit 的 Stop 不使用生命周期累计冒充本轮。读日志上限仍为 64 MiB/短时预算；大日志、不支持格式、重写/计数重置显示不可用或缺口，不无限扫描。
 

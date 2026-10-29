@@ -107,6 +107,28 @@ class PluginDistributionTests(unittest.TestCase):
         self.assertEqual(result["host_loaded"], "unverified")
         self.assertEqual(result["hook_trust"], "review_required")
 
+    def test_optional_lifecycle_package_enforces_short_synchronous_handlers(self):
+        definitions = tokens.read_json(self.root / "hooks/hooks.json")
+        for event in tokens.TERMINAL_EVENTS:
+            definitions["hooks"][event] = [{"hooks": [{"type": "command", "command": "fixture-only", "timeout": 3}]}]
+        write_json(self.root / "hooks/hooks.json", definitions)
+        seal_plugin(self.root)
+        self.assertEqual(ps.verify_plugin(self.root)["status"], "ok")
+        definitions["hooks"]["Interrupt"][0]["hooks"][0]["timeout"] = 5
+        write_json(self.root / "hooks/hooks.json", definitions)
+        seal_plugin(self.root)
+        with self.assertRaisesRegex(ValueError, "timeout 1..3"):
+            ps.verify_plugin(self.root)
+
+    def test_four_event_plugin_cannot_silently_enable_undeclared_lifecycle_events(self):
+        self.activate()
+        before = self.routing.read_bytes()
+        with patch.object(ps, "plugin_root", return_value=self.root):
+            with self.assertRaisesRegex(ValueError, "does not declare lifecycle hooks"):
+                tokens.configure(self.routing, "on", install_hooks=True, hooks_supported=True,
+                                 lifecycle_hooks="on", lifecycle_hooks_supported=True)
+        self.assertEqual(before, self.routing.read_bytes())
+
     def test_extra_index_files_fail_integrity(self):
         (self.root / ".serena").mkdir()
         (self.root / ".serena/project.yml").write_text("unwanted")

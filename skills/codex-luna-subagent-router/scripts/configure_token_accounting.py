@@ -14,11 +14,14 @@ import tempfile
 from pathlib import Path
 
 import outcome_store as store
+import hook_observability as hook_state
 from configure_evidence_calibration import _routing_path, ConfigurationError
 
 OWNER = "codex-luna-subagent-router:token-accounting"
 VERSION = "2.6.1"
-EVENTS = ("UserPromptSubmit", "Stop", "SubagentStart", "SubagentStop")
+EVENTS = hook_state.BASE_EVENTS  # Existing four-event installs stay valid.
+TERMINAL_EVENTS = hook_state.TERMINAL_EVENTS
+ALL_EVENTS = hook_state.ALL_EVENTS
 
 
 def read_json(path):
@@ -69,12 +72,12 @@ def hook_handler(script, python=None, project_root=None, *, validate_bundled_run
     return dict(type="command", command=shlex.join(args), timeout=5, statusMessage=OWNER)
 
 
-def merge_hooks(existing, handler=None):
+def merge_hooks(existing, handler=None, *, lifecycle_hooks=False):
     merged = copy.deepcopy(existing)
     hooks = merged.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise ConfigurationError("hooks must be an object")
-    for event in EVENTS:
+    for event in ALL_EVENTS:
         groups = hooks.get(event, [])
         if not isinstance(groups, list):
             raise ConfigurationError("hook event must contain an array")
@@ -87,8 +90,12 @@ def merge_hooks(existing, handler=None):
             kept = [h for h in group["hooks"] if h.get("statusMessage") != OWNER]
             if kept or not group["hooks"]:
                 cleaned.append({**group, "hooks": kept})
-        if handler:
-            cleaned.append({**({"matcher": ".*"} if event.startswith("Subagent") else {}), "hooks": [copy.deepcopy(handler)]})
+        if handler and (event in EVENTS or lifecycle_hooks):
+            selected = copy.deepcopy(handler)
+            if event in TERMINAL_EVENTS:
+                selected["timeout"] = 3
+                selected.pop("async", None)
+            cleaned.append({**({"matcher": ".*"} if event.startswith("Subagent") else {}), "hooks": [selected]})
         if cleaned:
             hooks[event] = cleaned
         else:
@@ -115,15 +122,27 @@ def atomic_bytes(path, payload):
         temp.unlink(missing_ok=True)
 
 
-def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False, script=None, dry_run=False, project_root=None):
+def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False, script=None, dry_run=False,
+              project_root=None, summary=None, lifecycle_hooks=None, lifecycle_hooks_supported=False):
     if mode not in ("on", "off"):
         raise ConfigurationError("token_accounting must be on or off")
     if install_hooks and (mode != "on" or not hooks_supported):
         raise ConfigurationError("confirm UserPromptSubmit/Stop/SubagentStart/SubagentStop support before --install-hooks")
+    if summary is not None and summary not in hook_state.SUMMARY_MODES:
+        raise ConfigurationError("invalid token summary mode")
+    if lifecycle_hooks not in (None, "on", "off"):
+        raise ConfigurationError("invalid lifecycle hook mode")
+    if lifecycle_hooks == "on" and not (install_hooks and lifecycle_hooks_supported):
+        raise ConfigurationError("confirm Interrupt/SessionEnd support before enabling lifecycle hooks")
     routing_path = Path(routing_path)
     hooks_path = routing_path.parent.parent / "hooks.json"
     import plugin_support
     native_plugin = plugin_support.plugin_root(Path(script).parent.parent if script else Path(__file__).resolve().parents[1])
+    if install_hooks and native_plugin is None:
+        other_sources = [source for source in plugin_support.hook_sources(project_root)
+                         if source["kind"] != "json" or Path(source["path"]).absolute() != hooks_path.absolute()]
+        if other_sources:
+            raise ConfigurationError("another Router hook source is active; review scope/inline migration before installing duplicate handlers")
     if native_plugin and not dry_run:
         if not plugin_support.owner_matches(native_plugin, project_root)[0] or plugin_support.hook_sources(project_root):
             raise ConfigurationError("activate the reviewed plugin migration before applying native token settings; legacy hooks must be backed up first")
@@ -139,6 +158,24 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
         proposed = {**data, "token_accounting": mode,
                     "token_accounting_scope": "main_and_subagents",
                     "token_accounting_collection": "hooks" if install_hooks else "manual"}
+        # Existing on-without-summary retains legacy display. Newly enabled
+        # accounting defaults to silent; explicit existing choices always survive.
+        if summary is not None:
+            proposed["token_accounting_summary"] = summary
+        elif "token_accounting_summary" not in data and data.get("token_accounting") != "on":
+            proposed["token_accounting_summary"] = "silent"
+        hook_state.summary_mode(proposed)
+        if lifecycle_hooks is not None:
+            proposed["token_accounting_lifecycle_hooks"] = lifecycle_hooks
+        if not install_hooks:
+            proposed["token_accounting_lifecycle_hooks"] = "off"
+        terminal_on = hook_state.lifecycle_enabled(proposed)
+        if terminal_on and not lifecycle_hooks_supported:
+            raise ConfigurationError("reconfirm current Host Interrupt/SessionEnd support when configuring lifecycle hooks")
+        if native_plugin and terminal_on:
+            definitions = read_json(native_plugin / "hooks/hooks.json").get("hooks", {})
+            if not set(TERMINAL_EVENTS) <= set(definitions):
+                raise ConfigurationError("this plugin package does not declare lifecycle hooks; use a reviewed lifecycle-capable package")
         writes = []
         if proposed != data:
             writes.append((routing_path, proposed))
@@ -149,7 +186,8 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
                 if config_path.is_file():
                     config = tomllib.loads(config_path.read_text(encoding="utf-8"))
                     features = config.get("features", {})
-                    if not isinstance(features, dict) or features.get("hooks", features.get("codex_hooks", True)) is False or config.get("allow_managed_hooks_only") is True:
+                    if (not isinstance(features, dict) or features.get("hooks") is False
+                            or features.get("codex_hooks") is False or config.get("allow_managed_hooks_only") is True):
                         raise ConfigurationError("platform hooks are disabled or restricted")
         # Explicit manual/off also removes obsolete owned handlers, never user hooks.
         existing = read_json(hooks_path)
@@ -162,7 +200,7 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
                 handler = hook_handler(target, project_root=project_root)
             # Native plugin definitions are packaged and reviewed by the Host.
             # Do not also install a second user/project handler for the same events.
-        merged = existing if native_plugin else merge_hooks(existing, handler)
+        merged = existing if native_plugin else merge_hooks(existing, handler, lifecycle_hooks=terminal_on)
         if merged != existing:
             writes.append((hooks_path, merged))
         originals = {p: p.read_bytes() if p.exists() else None for p, _ in writes}
@@ -186,7 +224,9 @@ def configure(routing_path, mode, *, install_hooks=False, hooks_supported=False,
                         atomic_bytes(path, originals[path])
                 raise
         return dict(action="would_update" if dry_run and writes else "updated" if writes else "unchanged",
-                    mode=mode, accounting_scope="main_and_subagents", events=list(EVENTS) if install_hooks else [], routing_config=str(routing_path), hooks_file=str(hooks_path),
+                    mode=mode, accounting_scope="main_and_subagents",
+                    summary=hook_state.summary_mode(proposed), lifecycle_hooks="on" if terminal_on else "off",
+                    events=list(hook_state.required_events(proposed)) if install_hooks else [], routing_config=str(routing_path), hooks_file=str(hooks_path),
                     hook_support="operator_confirmed" if hooks_supported else "not_checked",
                     trust="review_required" if install_hooks else "unchanged",
                     message="Review hook definitions in Codex; this helper never grants trust or enables disabled platform hooks.")
@@ -203,12 +243,18 @@ def main(argv=None):
     p.add_argument("--codex-home", type=Path, default=store.codex_home())
     p.add_argument("--install-hooks", action="store_true")
     p.add_argument("--hooks-supported", action="store_true", help="Operator confirms the active Codex build lists all four main/SubAgent hook events; not a trust bypass.")
+    p.add_argument("--summary", choices=hook_state.SUMMARY_MODES, help="Display only; does not disable collection. Omit to preserve an existing choice.")
+    p.add_argument("--lifecycle-hooks", choices=("on", "off"), help="Optional advisory Interrupt/SessionEnd receipts; default off.")
+    p.add_argument("--lifecycle-hooks-supported", action="store_true", help="Operator confirms both advisory events on the active local Host; not automatic detection or trust.")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
     try:
         path = _routing_path(args.scope, args.codex_home.expanduser().resolve(), args.project_root)
-        result = configure(path, args.mode, install_hooks=args.install_hooks, hooks_supported=args.hooks_supported, dry_run=args.dry_run, project_root=args.project_root if args.scope == "project" else None)
+        result = configure(path, args.mode, install_hooks=args.install_hooks, hooks_supported=args.hooks_supported,
+                           dry_run=args.dry_run, project_root=args.project_root if args.scope == "project" else None,
+                           summary=args.summary, lifecycle_hooks=args.lifecycle_hooks,
+                           lifecycle_hooks_supported=args.lifecycle_hooks_supported)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except (ValueError, OSError, TypeError, KeyError):

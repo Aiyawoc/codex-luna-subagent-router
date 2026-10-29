@@ -13,7 +13,7 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 安装/升级按 `references/codex-guided-install.md` 运行只读配置盘点；缺失选项必须询问，不创建 Worker。普通任务读有效 `routing.json`：项目级覆盖用户级，缺失按 `luna_only`；`evidence_calibration` 缺失或 `off` 不读写历史。
 
-- `luna_only`：自动 Worker 只用 Luna；能力不足由 Lead 接管。
+- `luna_only`：只用 `gpt-6-luna`；能力不足由 Lead 接管。
 - `adaptive`：`gpt-6-luna` → `gpt-6.1-sol` → `gpt-6-astra`；Terra 不参与新自动路由，`gpt-6-sol` 仅历史兼容。
 - Sol 不得用旧 `gpt-5.6` alias 做自动 spawn；精确绑定不可证明时 `lead_only`，不静默替换。
 
@@ -49,7 +49,7 @@ Astra/Sol Lead 不重复已适合廉价 Worker 的工作；关键路径、不可
 
 `token_accounting` 缺失按 off。开启后按需读 `references/token-accounting.md`；只用观察到的线程数据，缓存是输入子项，不让 Worker 自报。UserPromptSubmit/Stop 记录主线程本轮；父 transcript 的 Started/Interacted activity 关联真实子线程，不能假定父子 turn_id 相同。
 
-`main_and_subagents` 下准备最终回复前运行 `turn_usage.py preview`；成功时把“截至最终回复前”的简报附到正文末尾，失败/歧义则省略。Stop 仍保存更晚快照；不要为补 token 再触发模型轮次。
+`main_and_subagents` 回复前用 `turn_usage.py preview --respect-summary`；silent 不展示、不读日志；否则成功时附“截至最终回复前”简报，失败省略。Stop 保存后续快照；不为统计续跑模型。
 
 用户要求汇总时运行 `bin/router report`：只读 stats、不 refresh；正文展示固定面板，并保留 JSON/CSV。
 

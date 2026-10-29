@@ -80,7 +80,7 @@ class Sandbox(unittest.TestCase):
         return usage.collect(self.upath, AGENT, PARENT, "global", transcript=self.path, **kwargs)
 
     def hook_payload(self, event="SubagentStop"):
-        return dict(hook_event_name=event, agent_id=AGENT, session_id=PARENT, turn_id="child-turn-001",
+        return dict(hook_event_name=event, agent_id=AGENT, session_id=PARENT, turn_id="turn-001",
                     agent_type="sol_high", cwd=str(self.project), agent_transcript_path=str(self.path),
                     transcript_path=str(self.home / "parent.jsonl"), last_assistant_message="SECRET DO NOT PERSIST")
 
@@ -379,7 +379,7 @@ class LedgerAndHooksTests(Sandbox):
         for args,body in [(["hook"],"invalid"),(["--hook-version","old","hook"],"{}"),(["--bad-option","hook"],"{}")]:
             proc=subprocess.run([sys.executable,str(SCRIPTS/'token_usage.py'),*args],input=body,text=True,capture_output=True)
             self.assertEqual(proc.returncode,0,proc.stderr)
-            out=json.loads(proc.stdout);self.assertTrue(out["continue"]);self.assertNotEqual(out.get("decision"),"block")
+            out=json.loads(proc.stdout);self.assertTrue(out.get("continue", True));self.assertNotEqual(out.get("decision"),"block")
 
     def test_cli_hook_and_stats_json_preserve_raw_integers(self):
         self.transcript()

@@ -13,7 +13,7 @@ COMMANDS = {
     'configure_token_accounting', 'configure_decision_engine', 'validate_route_plan', 'decision_shadow',
     'host_adapter', 'host_shadow', 'host_transport', 'route_economics', 'cost_review',
     'plugin_control', 'plugin_hook', 'system_diagnostics', 'host_capabilities',
-    'app_server_events', 'native_execution', 'benchmark_store',
+    'app_server_events', 'native_execution', 'benchmark_store', 'model_bindings',
 }
 ALIASES = {'diagnostics': 'system_diagnostics'}
 
@@ -46,7 +46,7 @@ def main(argv=None):
     except (ValueError, ImportError, OSError) as exc:
         # This layer must not reveal hook payloads or block a Stop on runtime failure.
         if (command == 'token_usage' and 'hook' in args) or command == 'plugin_hook':
-            print(json.dumps({'continue': True, 'systemMessage': 'Router 私有运行时不可用；请检查完整安装包。未阻止停止。'}, ensure_ascii=False))
+            print(json.dumps({'systemMessage': 'Router 私有运行时不可用；请检查完整安装包。未阻止停止。'}, ensure_ascii=False))
             return 0
         print('ERROR: ' + str(exc), file=sys.stderr)
         return 2

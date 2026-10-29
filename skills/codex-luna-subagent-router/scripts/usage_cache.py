@@ -13,7 +13,7 @@ from pathlib import Path
 
 import outcome_store as store
 
-VERSION = '2.6.1'
+VERSION = '2.9.1-rc.2'
 MAX_CACHE_BYTES = 32 * 1024
 
 
