@@ -18,14 +18,14 @@
 
 有项目时加 `--project-root /repo`。这一步只读，先检查目标位置是否已经安装 Agent Router，再读取现有配置；不会写配置、账本、hooks 或 trust。
 
-如果**没有检测到旧安装**，安装方式自动视为 `fresh`，直接进入后续 6 项配置。
+如果**没有检测到旧安装**，安装方式自动视为 `fresh`，直接进入后续 7 项配置。
 
 如果**检测到旧安装**，必须在替换包之前先询问：
 
 > 已检测到 Agent Router。请选择 **升级安装** 还是 **全新安装**？
 
 - **upgrade / 升级安装**：完整替换程序包，但保留并迁移已有明确的路由、授权、并发、校准、统计选择以及历史账本；后续只补问缺失、过期或需要迁移的项。适合正常版本升级。
-- **fresh / 全新安装**：完整替换程序包，并重新走完整 6 项配置引导，不把旧选择自动当作本次答案。**不会自动删除历史账本、备份或其它用户文件**；需要彻底清除历史数据时必须另行明确操作。适合重新配置或怀疑旧安装状态不可靠时。
+- **fresh / 全新安装**：完整替换程序包，并重新走完整 7 项配置引导，不把旧选择自动当作本次答案。**不会自动删除历史账本、备份或其它用户文件**；需要彻底清除历史数据时必须另行明确操作。适合重新配置或怀疑旧安装状态不可靠时。
 
 检测到旧安装但未选择安装方式时，`router install` 必须拒绝覆盖。选择后显式执行：
 
@@ -39,9 +39,9 @@
 
 升级模式下，**运行时缺失默认 off 不等于用户曾选择 off**。明确已有的 off/false 必须保留，不擅自开启；保持 Codex 默认或“不安装长期授权”若没有留下可验证配置，下次仍可继续列为缺失。损坏配置先报告修复，不能当作“没有配置”。
 
-全新安装模式下，6 项配置全部重新说明并重新询问；现有值只作为“检测到的旧状态”展示，不直接替用户作答。
+全新安装模式下，7 项配置全部重新说明并重新询问；现有值只作为“检测到的旧状态”展示，不直接替用户作答。
 
-## 核心 6 项引导顺序
+## 核心 7 项引导顺序
 
 ### 1. 长期自动委派授权
 
@@ -141,13 +141,56 @@ helper 直接安全合并 `config.toml`、重新解析 TOML 并验证有效 SubA
 - **关闭**：通过 `--request-user-input disable` 显式写入 false；普通对话提问仍可回退。
 - **保持当前明确设置**：CLI 使用 `none`，不改变现有值。
 
-把该项放最后，避免用户在还不了解 Router 核心行为前先处理纯交互体验配置。
+该项位于第六项；最后的第七项处理可选 API 决策供应商。
+
+### 7. 可选决策模型与供应商（本版新增）
+
+**作用：独立决定是否允许额外 API 调用辅助评估当前任务。默认关闭；即使启用也仅处于 Shadow 模式，不能改变主 Agent、实际 Worker 模型、推理档位、权限、任务计划或预算。**
+
+首次安装必须明确询问**是否开启**。升级时，如果没有可证明的既有用户选择，仍需询问，而不是把缺失/off 误当成已经拒绝；既有明确开启的 JEV/HTTP 配置保留。用户明确选择“关闭”后记下 `setup_completed=true`，下次升级不重复追问。
+
+选项：
+
+- **关闭（默认）**：无 API 请求、不索要 API Key，仍使用原确定性 Advisor；以后可随时重新引导。
+- **OpenAI Decisions API**：固定官方 `https://api.openai.com/v1/decisions` + `gpt-6-luna`；只能用于 Shadow，适合低成本语义判断。与订阅 Codex Worker 用量分开，必须使用所属 API Project 的有效密钥。
+- **TypeSafe System One**：保留已有 `jev` provider。
+- **本地 JEV /ask**：`jev_ask`，需提供安全 loopback URL（或 HTTPS）。
+- **自定义兼容 HTTP**：`http`，必须使用已有的 `state+questions -> answers` 兼容协议；不假定任意 LLM API 都兼容。
+
+安全密钥流程：
+
+1. 优先让用户在**本机交互终端**执行以下向导，自动隐藏输入、二次核对。macOS 存入 Keychain，Windows 存入 Credential Manager，`routing.json` 仅保存凭据来源的无密钥引用。禁止在对话、AGENTS、Git、shell 参数或安装日志中粘贴 Secret。
+2. 也可选择 `env` 模式，将 `OPENAI_API_KEY`、`TYPESAFE_API_KEY` 等**变量名称**写入配置，密钥由用户自行安全注入真正运行 Router 的进程；当前终端的 `export` 不保证传到 Desktop。
+3. 无 TTY 的 Agent/MCP 不能假装完成隐藏输入；应输出准确的本机操作命令或显式使用环境变量模式。不自动试图读取终端历史、浏览器、钥匙串里的其它密钥。
+4. 先让用户在 API Platform 设置项目预算。安装默认不联网、不发实际请求，不自动购买 API credits，也不修改订阅身份。
+
+随时可重复开启／更换供应商／关闭：
+
+```bash
+# macOS / Linux（Linux 无原生 OS vault 时只能选 env）
+/path/to/installed/bin/router configure_decision_engine --scope user --guided
+
+# 项目级
+/path/to/installed/bin/router configure_decision_engine --scope project \
+  --project-root /path/to/repo --guided
+
+# Agent 非交互模式：只配置外部环境变量的名称（不会保存密钥）
+/path/to/installed/bin/router configure_decision_engine --scope user \
+  --provider openai_decisions --credential-source env \
+  --api-key-env OPENAI_API_KEY --json
+
+# 显式关闭（保留历史与其它配置）
+/path/to/installed/bin/router configure_decision_engine \
+  --scope user --provider off --disable --json
+```
+
+Windows 使用 `bin/router.cmd`。向导仅需用户交互一次；没有开启就不产生决策 API 成本，启用后需 Host 真实触发 Decision Shadow checkpoint 才会发出调用。API 网络或凭据异常均失败保守处理，不放宽权限。详情见 `references/decision-layer.md`。
 
 ## v2.7 Core Optimization 与可选 Decision Shadow
 
 v2.7 的 `Execution Shape / Materialization Gate / Runtime Health Lease` 属于核心路由行为，新建 routing.json 时默认启用。已有 schema 2.0 配置通过 guided configure 升级为 2.1 时采用**字段级保留迁移**：保留 evidence calibration、token accounting、用户扩展字段和已明确的 Decision 设置，只补 v2.7 缺失默认值；未知/非托管 schema 仍需明确确认后才能替换。
 
-Decision Engine 不新增强制安装问题，缺失始终等价于 off。Agents API Shadow、Native authority readiness、Route Economics 与 Cost Review 同样属于 Advanced / Observability，不进入首次安装 6 问。用户明确要启用 Shadow 时再运行：
+Decision Engine 现为第七项**显式选择**（但仍默认关闭）；Agents API Shadow、Native authority readiness、Route Economics 与 Cost Review 仍为高级选项。用户也可非交互配置已有 JEV 服务：
 
 ```bash
 ./bin/router configure_decision_engine --scope user \
@@ -236,7 +279,7 @@ cat VERSION
 ## Native plugin distribution since 2.8.3
 
 For an explicitly requested native plugin install/migration, first follow `plugin-install.md`.
-The six questions and existing choices stay unchanged. Plugin ownership is separate from Host enablement and hook trust. Do not invoke the standalone installer from an active plugin or maintain a duplicate Skill/hook source. The native plugin uses the same Core helpers and external canonical ledgers.
+The seven guided questions and existing user choices remain scoped independently. The optional Decision provider is a new seventh choice, disabled unless explicitly enabled. Plugin ownership is separate from Host enablement and hook trust. Do not invoke the standalone installer from an active plugin or maintain a duplicate Skill/hook source. The native plugin uses the same Core helpers and external canonical ledgers.
 
 
 ## RC.2 只读来源核对

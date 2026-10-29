@@ -156,7 +156,7 @@ def main(argv=None):
         install_mode = args.install_mode or 'fresh'
         result = install(ROOT, dest, agents, install_mode=install_mode)
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        print('Read references/codex-guided-install.md and answer pending choices; hooks still need review.')
+        print('Read references/codex-guided-install.md and answer all seven pending guided choices, including optional decision provider; hooks still need review.')
         extra = ['--project-root', str(Path(args.project).resolve())] if args.project else []
         extra += ['--install-mode', install_mode]
         try:

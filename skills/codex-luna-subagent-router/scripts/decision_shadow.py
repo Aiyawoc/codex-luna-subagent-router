@@ -69,6 +69,7 @@ def run(request, *, root=None, global_scope=False, ledger=None, provider_evaluat
         "confidence": confidence,
         "lease": lease,
         "answers": answers,
+        "usage": result.get("usage") if status == "available" else None,
     })
     return {
         "status": status,
@@ -80,6 +81,7 @@ def run(request, *, root=None, global_scope=False, ledger=None, provider_evaluat
         "confidence": row["confidence"],
         "lease": row["lease"],
         "answers": answers,
+        "usage": row.get("usage"),
         "production_effect": "none",
     }
 

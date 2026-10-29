@@ -126,15 +126,15 @@ class DecisionProviderTests(unittest.TestCase):
                 "enabled": True, "provider": "http", "endpoint": "http://example.com/ask"
             }, state(), decision_policy.QUESTIONS)
 
-    def test_openai_decisions_placeholder_never_guesses_network_contract(self):
+    def test_openai_decisions_without_key_fails_before_network(self):
         called = []
         result = decision_provider.evaluate(
-            {"enabled": True, "provider": "openai_decisions"},
+            {"enabled": True, "provider": "openai_decisions", "setup_completed": True},
             state(), decision_policy.QUESTIONS,
             opener=lambda *args, **kwargs: called.append((args, kwargs)),
         )
         self.assertFalse(result["available"])
-        self.assertEqual(result["reason"], "official_contract_unavailable")
+        self.assertEqual(result["reason"], "missing_credential")
         self.assertEqual(called, [])
 
 

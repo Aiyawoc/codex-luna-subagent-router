@@ -51,6 +51,9 @@ def main():
         env=dict(os.environ,PATH='',PYTHONHOME='/does-not-exist',PYTHONPATH='/untrusted',
                  CODEX_HOME=str(home),CODEX_SKILLS_DIR=str(base/'installed skills'),CODEX_AGENTS_DIR=str(home/'agents'))
         env.pop('CODEX_ROUTER_PYTHON',None)
+        # Never use an operator/CI secret or make a paid call from offline smoke.
+        env.pop('OPENAI_API_KEY',None)
+        env.pop('TYPESAFE_API_KEY',None)
         if os.name=='nt':
             powershell=str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe')
             def launcher(r):
@@ -80,6 +83,34 @@ def main():
         assert rpath.read_bytes()==saved and ledger.read_text()=='historical-data-must-not-change\n'
         assert (home/'hooks.json').read_text()=='{"hooks":{}}'
         execute([*launcher(installed),'doctor','--verify'],project,env)
+        # v2.9.2 Q7: missing explicit decision choice requires a prompt, while
+        # an explicit no is remembered. Reconfiguration never calls the API.
+        before_q7=json.loads(execute([
+            *launcher(installed),'inspect_guided_install','--install-mode','upgrade','--json'
+        ],project,env))
+        q7=next(row for row in before_q7['questions'] if row['number']==7)
+        assert q7['needs_question'] and 7 in before_q7['pending_questions']
+        execute([*launcher(installed),'configure_decision_engine','--scope','user',
+                 '--provider','off','--disable','--json'],project,env)
+        disabled_q7=json.loads(execute([
+            *launcher(installed),'inspect_guided_install','--install-mode','upgrade','--json'
+        ],project,env))
+        assert 7 not in disabled_q7['pending_questions']
+        execute([*launcher(installed),'configure_decision_engine','--scope','user',
+                 '--provider','openai_decisions','--credential-source','env',
+                 '--api-key-env','OPENAI_API_KEY','--json'],project,env)
+        decision_request=base/'decision-smoke.json'
+        decision_request.write_text(json.dumps({"state":{
+            "task_family":"offline-compatibility-check",
+            "active_task":"Verify shadow unavailable with no API credential.",
+            "stage":"grounded",
+        }}),encoding='utf-8')
+        shadow=json.loads(execute([*launcher(installed),'decision_shadow',
+                                   str(decision_request),'--global-scope'],project,env))
+        assert shadow['status']=='unavailable' and shadow['production_effect']=='none'
+        shadow_rows=(home/'state/codex-luna-subagent-router/decisions.jsonl').read_text()
+        assert '"missing_credential"' in shadow_rows
+        assert 'sk-proj-' not in shadow_rows
         diagnostics=json.loads(execute([*launcher(installed),'diagnostics','--project-root',str(project),'--json'],project,env))
         assert diagnostics['read_only'] is True and diagnostics['refresh_performed'] is False
         assert diagnostics['trust_changed'] is False and diagnostics['runtime']['status']=='ok'

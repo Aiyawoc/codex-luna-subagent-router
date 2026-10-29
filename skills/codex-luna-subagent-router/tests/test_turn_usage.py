@@ -565,7 +565,7 @@ class UpgradeTests(Sandbox):
         self.rpath.write_text(json.dumps(dict(schema_version='2.0',routing_mode='adaptive')))
         result=self.inventory()
         self.assertIn(4,result['pending_questions']);self.assertIn(5,result['pending_questions'])
-        self.assertEqual(len(result['questions']),6)
+        self.assertEqual(len(result['questions']),7)
 
     def test_explicit_off_preserved(self):
         self.rpath.write_text(json.dumps(dict(schema_version='2.0',routing_mode='adaptive',token_accounting='off',evidence_calibration='off')))
@@ -603,7 +603,7 @@ class UpgradeTests(Sandbox):
 
     def test_inventory_does_not_write(self):
         empty_home=self.home/'other';result=setup.inspect(empty_home)
-        self.assertFalse(empty_home.exists());self.assertEqual(result['pending_questions'],[1,2,3,4,5,6])
+        self.assertFalse(empty_home.exists());self.assertEqual(result['pending_questions'],[1,2,3,4,5,6,7])
 
     def test_disabling_removes_all_four_owned_handlers_only(self):
         config.configure(self.rpath,'on',install_hooks=True,hooks_supported=True)

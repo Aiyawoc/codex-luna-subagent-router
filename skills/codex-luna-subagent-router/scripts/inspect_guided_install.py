@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only install preflight and six-question setup inventory."""
+"""Read-only install preflight and seven-question setup inventory."""
 from __future__ import annotations
 
 import argparse
@@ -199,11 +199,34 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
     feature = config.get("features", {}).get("default_mode_request_user_input")
     add(6, "default_mode_request_user_input", feature, fresh or feature is None,
         "是否允许 Agent 在确实需要你选择配置或范围时使用结构化交互界面提问？可开启、关闭或保持现状；这只影响交互体验，不改变路由、模型或并发。")
+    decision = routing.get("decision_engine")
+    decision = decision if isinstance(decision, dict) else {}
+    provider = decision.get("provider", "off")
+    activated = decision.get("enabled") is True
+    known = provider in ("off", "jev", "http", "jev_ask", "openai_decisions")
+    recognized = (decision.get("setup_completed") is True or
+                  (activated and known and provider in ("jev", "jev_ask", "http")))
+    requires_decision_question = fresh or not recognized or not known or (
+        activated and provider == "off"
+    )
+    add(7, "decision_model", {
+        "enabled": activated,
+        "provider": provider,
+        "mode": decision.get("mode", "shadow"),
+        "credential_source": decision.get("credential_source", "env" if activated else None),
+        "api_key_env": decision.get("api_key_env"),
+        "setup_completed": decision.get("setup_completed") is True,
+        "onboarding_command": "bin/router configure_decision_engine --scope user --guided"
+                               if not root else
+                               "bin/router configure_decision_engine --scope project --project-root <repo> --guided",
+    }, requires_decision_question,
+        "是否开启可选的 API 决策模型？默认关闭。若开启，请选择 OpenAI Decisions、TypeSafe System One、"
+        "本地 JEV /ask 或自定义兼容服务，并选择系统凭据库或环境变量提供 API Key。"
+        "只在 Shadow 模式观察，不改变实际 Worker 路由；以后也可单独运行配置向导。")
     execution = routing.get("execution_policy")
     if not isinstance(execution, dict):
         execution = {"prefer_local_parallel_tools": True, "materialization_gate": True, "runtime_health_lease": True, "source": "v2.7_runtime_defaults"}
-    decision = routing.get("decision_engine")
-    if not isinstance(decision, dict):
+    if not decision:
         decision = {"enabled": False, "mode": "shadow", "provider": "off", "source": "absent_default_off"}
     pending = [] if requires_install_mode else [i["number"] for i in items if i["needs_question"]]
     installation = {
@@ -214,7 +237,7 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
         "requires_choice": requires_install_mode,
         "choices": {
             "upgrade": "升级安装：替换完整程序包，保留并迁移已有明确配置、历史账本与非 Router 用户内容；只补问缺失/过期项。",
-            "fresh": "全新安装：替换完整程序包并重新走完整 6 项引导；不会自动删除历史账本或其它用户文件，避免隐式数据清除。",
+            "fresh": "全新安装：替换完整程序包并重新走完整 7 项引导；不会自动删除历史账本或其它用户文件，避免隐式数据清除。",
         },
         "question": (
             "检测到已安装 Agent Router：请选择升级安装（保留并迁移现有选择）或全新安装（重新走完整配置引导）。"
@@ -224,7 +247,7 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
     return dict(installation=installation, questions=items, pending_questions=pending,
                 routing_source=str(rpath), read_only=True,
                 optional_features={"execution_policy": execution, "decision_engine": decision},
-                rule="Check installation first. If an existing installation is detected, resolve upgrade versus fresh before asking Q1-Q6. Upgrade preserves explicit choices and asks only missing/stale items; fresh re-runs the complete guided choices without silently deleting ledgers. Decision Engine stays optional and adds no mandatory seventh question. No changes or hook trust are applied.")
+                rule="Check installation first. If an existing installation is detected, resolve upgrade versus fresh before asking Q1-Q7. Upgrade preserves explicit choices and asks only missing/stale items; fresh re-runs seven guided choices. Q7 must explicitly ask whether to enable Decision Engine when no user choice is recorded, but Decision Engine defaults off until consent. The reusable wizard configures providers and secure credentials. No trust or routing changes are applied by inspection.")
 
 
 def main(argv=None):

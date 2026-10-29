@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.9.2-rc.1: Decisions API + guided provider onboarding（2026-10-29）
+
+- 从 v2.9.1-rc.4 的三层 GPT-6 自动路由与严格模型来源审计继续；**不调整 Luna/Sol/Astra 自动路由表**。
+- 将安装/升级由六项扩展为七项：第七项明确询问是否启用可选决策模型，允许选择 OpenAI Decisions、TypeSafe System One、JEV 本地 /ask 或自定义兼容 HTTP。缺少明确用户选择的升级继续询问；已明确关闭或存在既有有效开启配置时不重复提问。默认关闭。
+- 新增可随时重新运行的 `configure_decision_engine --scope user --guided`，支持项目级作用域、关闭、重配置及无 TTY 的只配置环境变量模式；密钥隐藏输入，只写入 macOS Keychain／Windows Credential Manager，或由真实运行时提供环境变量，永不存入 routing.json、CLI 参数或历史账本。
+- `openai_decisions` 不再是无网络占位符：依据 2026-10 的 GA 契约调用固定 `POST https://api.openai.com/v1/decisions`，仅 `gpt-6-luna`。将既有 `choice/noul/score` 映射为官方 `choice/predicate/score`，严格校验身份、概率、拒绝、模型、用量和错误；不接受重定向，不把凭据发送到自定义地址。
+- 决策仍是可选、Checkpoint 触发的 **Shadow 观察**：未启用／密钥不足／401、429、超时、schema 错误等均失败保守处理；不授权更昂贵 Worker、不改变执行权限、任务计划或并发。保留原 JEV/HTTP 兼容。
+- 本版本为独立 RC 候选，实际 API 连接由用户先前独立验证过，不把本项目 Mock 测试冒充新版本的真实 Host 端到端验收；保留所有现有账本、旧模型兼容记录与受限凭据边界。
+
 ## 2.9.1-rc.3: Transcript descriptor ownership（2026-10-23）
 
 - 修复四平台 CI 暴露的真实文件描述符泄漏：精确终止查询缺少 turn_id 或使用非 rollout 来源时，在打开日志之前拒绝，继续返回 exact_terminal_identity_required，不放宽身份要求。
