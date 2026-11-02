@@ -8,7 +8,10 @@
 
 Current stable release: [**v2.9.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.3) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-Development candidate: **v2.9.4-rc.1** attaches explicitly opted-in, budgeted Decision Shadow checkpoints to the normal planner CLI, with correlated trigger/skip evidence. Existing configurations do not silently start automatic paid calls; Worker routing stays unchanged. See [integration and acceptance](docs/v2.9.4-shadow-checkpoints.md).
+Development candidate: **v2.9.4-rc.2** attaches explicitly opted-in, budgeted Decision Shadow checkpoints to the normal planner CLI, with correlated trigger/skip evidence. Existing configurations do not silently start automatic paid calls; Worker routing stays unchanged. See [integration and acceptance](docs/v2.9.4-shadow-checkpoints.md).
+
+RC.2 separates offline configuration/context checks, visible credential setup, safe provider phase diagnostics and up-to-30-second budgets. Configuration, credential readability and API success are separate gates. See [diagnostics and setup](docs/v2.9.4-rc.2-diagnostics.md).
+
 
 **v2.9.3 Stable hotfix** corrects a macOS Keychain SIGSEGV on reading/updating an existing API credential. It retains the v2.9.2 Decisions API Shadow, seven-question onboarding and v2.9.1 reliability improvements without changing actual Worker routing. See [hotfix notes](docs/v2.9.3-release-notes.md) and [acceptance boundary](docs/v2.9.3-stable-acceptance.md).
 

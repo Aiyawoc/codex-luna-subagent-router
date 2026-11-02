@@ -20,7 +20,12 @@ MAX_SECRET_BYTES = 2048
 
 
 class CredentialError(ValueError):
-    pass
+    def __init__(self, message, *, code="credential_unavailable"):
+        super().__init__(message)
+        self.code = code if code in (
+            "credential_unavailable", "credential_interaction_required",
+            "credential_denied", "credential_missing",
+        ) else "credential_unavailable"
 
 
 def supported():
@@ -119,11 +124,18 @@ def _mac_save(acct, secret):
         _mac_release_find_result(lib, status, data, item)
 
 
-def _mac_load(acct):
+def _mac_load(acct, *, strict=False):
     lib = _mac_library()
     status, size, data, item = _mac_find(lib, acct)
     try:
         if status != 0:
+            if strict and status in (-25308, -25315):
+                raise CredentialError("macOS Keychain needs visible user authorization",
+                                      code="credential_interaction_required")
+            if strict and status in (-25293, -128):
+                raise CredentialError("macOS Keychain access denied", code="credential_denied")
+            if strict and status != -25300:
+                raise CredentialError("macOS Keychain unavailable")
             return None
         if not data.value or size.value == 0 or size.value > MAX_SECRET_BYTES:
             return None
@@ -207,6 +219,32 @@ def read(provider, scope):
     return None
 
 
+def read_noninteractive(provider, scope):
+    """Read only this provider/scope. Never wait for an invisible Keychain UI.
+
+    Security.framework interaction flags are process-global. This entry is used
+    only inside the dedicated single-request child, never in a threaded Host.
+    It changes no Keychain ACL or persisted user permission.
+    """
+    acct = account(provider, scope)
+    if sys.platform != "darwin":
+        return read(provider, scope)
+    lib = _mac_library()
+    previous = ctypes.c_ubyte()
+    get = lib.SecKeychainGetUserInteractionAllowed
+    get.argtypes = [ctypes.POINTER(ctypes.c_ubyte)]
+    get.restype = ctypes.c_int32
+    set_ = lib.SecKeychainSetUserInteractionAllowed
+    set_.argtypes = [ctypes.c_ubyte]
+    set_.restype = ctypes.c_int32
+    if get(ctypes.byref(previous)) != 0 or set_(False) != 0:
+        raise CredentialError("cannot safely disable Keychain interaction")
+    try:
+        return _mac_load(acct, strict=True)
+    finally:
+        set_(previous.value)
+
+
 def resolve(config, provider):
     source = config.get("credential_source", "env")
     if source == "none":
@@ -215,6 +253,8 @@ def resolve(config, provider):
         scope = config.get("credential_scope")
         if not isinstance(scope, str) or not scope:
             return None
+        if config.get("credential_interaction_allowed") is False:
+            return read_noninteractive(provider, scope)
         return read(provider, scope)
     if source == "env":
         name = config.get("api_key_env")

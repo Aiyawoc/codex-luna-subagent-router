@@ -10,11 +10,13 @@ import os
 import stat
 import sys
 import tempfile
+import warnings
 import urllib.parse
 from pathlib import Path
 
 import decision_credentials
 import decision_events
+import decision_diagnostics
 
 PROVIDERS = ("off", "jev", "http", "jev_ask", "openai_decisions")
 OPENAI_ENDPOINT = "https://api.openai.com/v1/decisions"
@@ -106,7 +108,8 @@ def write_atomic(path, text):
 
 def configure(path, *, provider, endpoint=None, api_key_env=None, timeout_ms=None,
               enabled=True, dry_run=False, credential_source=None,
-              credential_account=None, automatic_checkpoints=None, checkpoint_limits=None):
+              credential_account=None, automatic_checkpoints=None, checkpoint_limits=None,
+              total_timeout_ms=None, credential_timeout_ms=None):
     """Safe typed config update; no key bytes accepted or persisted here."""
     if provider not in PROVIDERS:
         raise ConfigurationError("unsupported decision provider")
@@ -118,8 +121,19 @@ def configure(path, *, provider, endpoint=None, api_key_env=None, timeout_ms=Non
         prior = {}
     if timeout_ms is None:
         timeout_ms = prior.get("timeout_ms", 5000 if provider == "openai_decisions" else 800)
-    if type(timeout_ms) is not int or not 50 <= timeout_ms <= 15000:
-        raise ConfigurationError("timeout-ms must be 50..15000")
+    if type(timeout_ms) is not int or not 50 <= timeout_ms <= 30000:
+        raise ConfigurationError("timeout-ms must be 50..30000")
+    if total_timeout_ms is None:
+        total_timeout_ms = prior.get("total_timeout_ms", min(timeout_ms + 1000, 30000))
+    if type(total_timeout_ms) is not int:
+        raise ConfigurationError("invalid total timeout")
+    if credential_timeout_ms is None:
+        credential_timeout_ms = prior.get("credential_timeout_ms", min(5000, total_timeout_ms))
+    try:
+        decision_diagnostics.budgets({"timeout_ms": timeout_ms,
+            "total_timeout_ms": total_timeout_ms, "credential_timeout_ms": credential_timeout_ms})
+    except (ValueError, TypeError):
+        raise ConfigurationError("invalid transport/credential/total timeout budget") from None
     if automatic_checkpoints is None:
         automatic_checkpoints = prior.get("automatic_checkpoints", False)
     if type(automatic_checkpoints) is not bool:
@@ -189,6 +203,7 @@ def configure(path, *, provider, endpoint=None, api_key_env=None, timeout_ms=Non
         "enabled": enabled, "mode": "shadow",
         "provider": provider, "endpoint": endpoint,
         "api_key_env": api_key_env, "timeout_ms": timeout_ms,
+        "total_timeout_ms": total_timeout_ms, "credential_timeout_ms": credential_timeout_ms,
         "confidence_high": 0.85, "confidence_medium": 0.65,
         "lease_enabled": True, "setup_completed": True,
         "automatic_checkpoints": automatic_checkpoints,
@@ -218,11 +233,17 @@ def _ask(message, default=None):
 
 
 def _save_credential_from_tty(provider, scope):
-    if not sys.stdin.isatty():
-        raise ConfigurationError("secure key entry requires an interactive terminal")
+    if not sys.stdin.isatty() or (sys.platform == "darwin" and
+            os.environ.get("TERM_PROGRAM") not in ("Apple_Terminal", "iTerm.app")):
+        raise ConfigurationError("secret entry requires a user-visible terminal; use --open-terminal")
     print("使用隐藏输入；密钥仅保存到系统凭据库，不进入终端历史或 Router 配置。")
-    first = getpass.getpass("输入 API Key（不回显）: ")
-    second = getpass.getpass("再次输入确认: ")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        try:
+            first = getpass.getpass("输入 API Key（不回显）: ")
+            second = getpass.getpass("再次输入确认: ")
+        except getpass.GetPassWarning:
+            raise ConfigurationError("secure no-echo input unavailable; no credential read") from None
     if not first or first != second:
         raise ConfigurationError("key is empty or repeated entry does not match")
     if provider == "openai_decisions" and not first.startswith("sk-"):
@@ -233,10 +254,11 @@ def _save_credential_from_tty(provider, scope):
 
 def guided(*, scope, codex_home, project_root, dry_run=False):
     """Interactive setup, also callable any time after installation."""
-    if not sys.stdin.isatty():
+    if not sys.stdin.isatty() or (sys.platform == "darwin" and
+            os.environ.get("TERM_PROGRAM") not in ("Apple_Terminal", "iTerm.app")):
         raise ConfigurationError(
-            "guided setup requires an interactive terminal; "
-            "agents can use noninteractive --provider ... --credential-source env"
+            "guided setup requires a user-visible terminal; use --open-terminal on macOS "
+            "or a noninteractive configuration command to preserve an existing credential reference"
         )
     path = routing_path(scope, codex_home, project_root)
     previous = read_routing(path).get("decision_engine") or {}
@@ -282,7 +304,13 @@ def guided(*, scope, codex_home, project_root, dry_run=False):
                         api_key_env=env_name, credential_source=credential_source,
                         credential_account=scope_key, enabled=True, dry_run=True,
                         automatic_checkpoints=automatic)
-    if credential_source == "keychain" and not dry_run:
+    reuse = False
+    if credential_source == "keychain" and previous.get("provider") == provider and previous.get("credential_source") == "keychain" and previous.get("credential_scope") == scope_key:
+        reply = _ask("保留已有系统凭据？不会读取或再次输入密钥。[Y/n]: ", "y").lower()
+        if reply not in ("y", "yes", "n", "no"):
+            raise ConfigurationError("invalid credential reuse choice")
+        reuse = reply in ("y", "yes")
+    if credential_source == "keychain" and not dry_run and not reuse:
         _save_credential_from_tty(provider, scope_key)
     result = planned if dry_run else configure(
         path, provider=provider, endpoint=endpoint, api_key_env=env_name,
@@ -292,7 +320,7 @@ def guided(*, scope, codex_home, project_root, dry_run=False):
     result["credential_status"] = (
         "not_required" if credential_source == "none" else
         "requires_host_environment" if credential_source == "env" else
-        "planned_not_saved" if dry_run else "saved_in_os_vault"
+        "planned_not_saved" if dry_run else "reference_preserved_unverified" if reuse else "saved_in_os_vault"
     )
     return result
 
@@ -306,6 +334,8 @@ def main(argv=None):
     parser.add_argument("--endpoint")
     parser.add_argument("--api-key-env", help="Environment variable NAME, never the key content")
     parser.add_argument("--timeout-ms", type=int, help="Preserve existing timeout; new OpenAI setup defaults to 5000ms")
+    parser.add_argument("--total-timeout-ms", type=int, help="Whole provider-process deadline, up to 30000ms")
+    parser.add_argument("--credential-timeout-ms", type=int, help="Noninteractive credential wait cap, default 5000ms")
     parser.add_argument("--automatic-checkpoints", choices=("on", "off"),
                         help="Explicit opt-in/out for bounded planner Shadow API calls")
     for name in decision_events.LIMITS:
@@ -313,6 +343,7 @@ def main(argv=None):
     parser.add_argument("--credential-source", choices=("env", "keychain", "none"))
     parser.add_argument("--store-key", action="store_true",
                         help="Securely prompt for API key and store it in the OS vault")
+    parser.add_argument("--open-terminal", action="store_true", help="Open the setup wizard in visible macOS Terminal; never prompt in a hidden agent PTY")
     parser.add_argument("--guided", action="store_true",
                         help="Interactive provider/credential setup (repeatable later)")
     parser.add_argument("--disable", action="store_true")
@@ -321,8 +352,15 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         home = args.codex_home.expanduser().resolve()
+        if args.open_terminal:
+            if args.guided or args.store_key or args.disable or args.dry_run or args.provider != "off" or any(getattr(args, k) is not None for k in ("endpoint", "api_key_env", "credential_source", "timeout_ms", "total_timeout_ms", "credential_timeout_ms", "automatic_checkpoints", *decision_events.LIMITS)):
+                raise ConfigurationError("--open-terminal accepts only scope/codex-home/project-root/json")
+            import decision_setup_terminal
+            result = decision_setup_terminal.launch(home, args.scope, args.project_root)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
         if args.guided:
-            if args.disable or args.store_key or args.json or args.automatic_checkpoints is not None or any(getattr(args, k) is not None for k in decision_events.LIMITS):
+            if args.disable or args.store_key or args.json or args.timeout_ms is not None or args.total_timeout_ms is not None or args.credential_timeout_ms is not None or args.automatic_checkpoints is not None or any(getattr(args, k) is not None for k in decision_events.LIMITS):
                 raise ConfigurationError("--guided cannot combine with --disable/--store-key/--json")
             result = guided(scope=args.scope, codex_home=home,
                             project_root=args.project_root, dry_run=args.dry_run)
@@ -333,6 +371,7 @@ def main(argv=None):
             options = dict(
                 provider=args.provider, endpoint=args.endpoint,
                 api_key_env=args.api_key_env, timeout_ms=args.timeout_ms,
+                total_timeout_ms=args.total_timeout_ms, credential_timeout_ms=args.credential_timeout_ms,
                 credential_source=args.credential_source, credential_account=account,
                 enabled=not args.disable,
                 automatic_checkpoints=None if args.automatic_checkpoints is None else args.automatic_checkpoints == "on",
@@ -349,7 +388,10 @@ def main(argv=None):
             elif args.credential_source == "env":
                 result["credential_status"] = "requires_host_environment"
         result["production_effect"] = "none; shadow observations only"
-    except (ConfigurationError, decision_credentials.CredentialError,
+    except ConfigurationError as exc:
+        print("ERROR: " + str(exc), file=sys.stderr)
+        return 2
+    except (decision_credentials.CredentialError,
             OSError, UnicodeError, EOFError, KeyboardInterrupt):
         print("ERROR: decision setup unavailable or cancelled; no API key disclosed",
               file=sys.stderr)

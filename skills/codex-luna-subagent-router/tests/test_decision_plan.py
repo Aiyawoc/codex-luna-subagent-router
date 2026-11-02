@@ -277,7 +277,8 @@ class IsolatedProviderTests(unittest.TestCase):
         process = Mock()
         process.poll.return_value = None
         process.communicate.side_effect = [subprocess.TimeoutExpired("fixture", 2), (b"", None)]
-        with patch.object(decision_plan.subprocess, "Popen", return_value=process) as popen:
+        with patch.object(decision_plan.subprocess, "Popen", return_value=process) as popen, \
+             patch.object(decision_plan.time, "monotonic", side_effect=[0, 0, 2.1, 2.1]):
             result = decision_plan._isolated_provider({"provider": "http", "timeout_ms": 1000}, {}, decision_policy.QUESTIONS)
         self.assertEqual(result["reason"], "provider_deadline")
         self.assertEqual(popen.call_count, 1)

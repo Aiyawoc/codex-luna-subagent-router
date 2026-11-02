@@ -126,6 +126,7 @@ def collect(scope_id, project_root=None):
     decisions["provider_reasons"] = dict(Counter(row.get("reason") or "available" for row in decision_rows))
     usage_rows = [row["usage"] for row in decision_rows if isinstance(row.get("usage"), dict)
                   and any(type(row["usage"].get(key)) is int for key in decision_store.USAGE_FIELDS)]
+    decisions["diagnostic_last_phases"] = dict(Counter((row.get("diagnostics") or {}).get("last_phase") or "unknown" for row in decision_rows))
     decisions["usage_known_rows"] = len(usage_rows)
     decisions["usage_unknown_rows"] = len(decision_rows) - len(usage_rows)
     decisions["known_api_usage"] = {

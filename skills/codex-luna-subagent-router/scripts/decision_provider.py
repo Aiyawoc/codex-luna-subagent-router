@@ -5,6 +5,7 @@ import json
 import math
 import os
 import socket
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -13,6 +14,7 @@ import urllib.request
 import outcome_store as store
 import decision_credentials
 import decision_state
+import decision_diagnostics
 
 PROVIDERS = ("off", "jev", "http", "jev_ask", "openai_decisions")
 QUESTION_TYPES = ("choice", "score", "noul")
@@ -240,60 +242,86 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _official_evaluate(config, state, questions, *, opener=None):
+def _progress(callback, phase, **metadata):
+    if callback is not None:
+        callback(phase, **metadata)
+
+
+def _network_reason(exc):
+    reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return "transport_timeout"
+    if isinstance(reason, socket.gaierror):
+        return "dns_error"
+    if isinstance(reason, ssl.SSLError):
+        return "tls_error"
+    return "connection_error"
+
+
+def _official_evaluate(config, state, questions, *, opener=None, progress=None):
     started = time.monotonic()
     if config.get("setup_completed") is not True:
-        # Older Router builds advertised this name as a network-inert
-        # placeholder. Never silently convert such a config into paid calls.
         return dict(available=False, provider="openai_decisions",
                     reason="explicit_setup_required", latency_ms=0)
     if config.get("model", OPENAI_DECISIONS_MODEL) != OPENAI_DECISIONS_MODEL:
         return dict(available=False, provider="openai_decisions", reason="unsupported_model", latency_ms=0)
     if config.get("endpoint") not in (None, OPENAI_DECISIONS_ENDPOINT):
         return dict(available=False, provider="openai_decisions", reason="invalid_endpoint", latency_ms=0)
-    timeout_ms = config.get("timeout_ms", 1200)
-    if type(timeout_ms) is not int or not 50 <= timeout_ms <= 15000:
-        raise store.StoreError("timeout_ms must be 50..15000")
+    timeout_ms = decision_diagnostics.budgets(config)["transport_timeout_ms"]
+    phase = "input_validated"
     try:
         state = decision_state.build(state)
         questions = validate_questions(questions)
         wire = _official_questions(questions)
+        _progress(progress, "input_validated")
+        phase = "credential_lookup_started"
+        _progress(progress, phase)
         key = decision_credentials.resolve(config, "openai_decisions")
         if not key:
             return dict(available=False, provider="openai_decisions",
-                        reason="missing_credential", latency_ms=0)
+                        reason="missing_credential", latency_ms=max(0, int((time.monotonic()-started)*1000)))
+        _progress(progress, "credential_ready")
         body = dict(model=OPENAI_DECISIONS_MODEL,
                     input=json.dumps(state, ensure_ascii=False, separators=(",", ":")),
                     questions=wire)
         req = urllib.request.Request(
             OPENAI_DECISIONS_ENDPOINT,
             data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-            headers={"Authorization": "Bearer " + key,
-                     "Content-Type": "application/json"},
+            headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
             method="POST",
         )
-        # The real path rejects redirects; tests may inject their own transport.
+        del key
         open_fn = opener or urllib.request.build_opener(_NoRedirect).open
+        phase = "transport_started"
+        _progress(progress, phase)
         with open_fn(req, timeout=timeout_ms/1000) as response:
+            phase = "response_headers_received"
+            _progress(progress, phase, http_status=getattr(response, "status", None))
             raw = response.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
                 raise store.StoreError("official decision response too large")
+            phase = "response_body_received"
+            _progress(progress, phase)
             payload = json.loads(raw.decode("utf-8"))
         normalized = _official_answers(payload, questions)
-        return _normalize(normalized, questions, "openai_decisions",
-                          max(0, int((time.monotonic()-started)*1000)))
+        result = _normalize(normalized, questions, "openai_decisions",
+                            max(0, int((time.monotonic()-started)*1000)))
+        _progress(progress, "response_parsed")
+        return result
     except urllib.error.HTTPError as exc:
+        _progress(progress, "response_headers_received", http_status=exc.code)
         reason = f"http_{exc.code}" if exc.code in (401, 402, 403, 408, 429, 500, 502, 503, 504) else "http_error"
-    except (urllib.error.URLError, TimeoutError, socket.timeout):
-        reason = "unavailable"
-    except (OSError, UnicodeError, json.JSONDecodeError, store.StoreError,
-            decision_credentials.CredentialError, TypeError, ValueError):
-        reason = "invalid_or_unavailable"
+    except decision_credentials.CredentialError as exc:
+        reason = exc.code
+    except (urllib.error.URLError, TimeoutError, socket.timeout, ssl.SSLError, socket.gaierror) as exc:
+        reason = _network_reason(exc)
+    except (OSError, UnicodeError, json.JSONDecodeError, store.StoreError, TypeError, ValueError):
+        reason = "response_invalid" if phase in ("response_headers_received", "response_body_received") else "invalid_or_unavailable"
     return dict(available=False, provider="openai_decisions", reason=reason,
                 latency_ms=max(0, int((time.monotonic()-started)*1000)))
 
 
-def evaluate(config, state, questions, *, opener=None):
+def evaluate(config, state, questions, *, opener=None, progress=None):
     if not isinstance(config, dict):
         raise store.StoreError("decision provider config must be an object")
     provider = config.get("provider", "off")
@@ -303,15 +331,15 @@ def evaluate(config, state, questions, *, opener=None):
     if not enabled or provider == "off":
         return {"available": False, "provider": provider, "reason": "disabled", "latency_ms": 0}
     if provider == "openai_decisions":
-        return _official_evaluate(config, state, questions, opener=opener)
+        return _official_evaluate(config, state, questions, opener=opener, progress=progress)
     state = decision_state.build(state)
     questions = validate_questions(questions)
     endpoint = _endpoint(config.get("endpoint"), provider)
     if endpoint is None:
         return {"available": False, "provider": provider, "reason": "missing_endpoint", "latency_ms": 0}
     timeout_ms = config.get("timeout_ms", 800)
-    if type(timeout_ms) is not int or not 50 <= timeout_ms <= 15000:
-        raise store.StoreError("timeout_ms must be 50..15000")
+    if type(timeout_ms) is not int or not 50 <= timeout_ms <= 30000:
+        raise store.StoreError("timeout_ms must be 50..30000")
     env_name = config.get("api_key_env")
     if env_name is None and provider == "jev":
         env_name = "TYPESAFE_API_KEY"
@@ -319,6 +347,8 @@ def evaluate(config, state, questions, *, opener=None):
             not isinstance(env_name, str) or
             not decision_credentials.ENV_NAME.fullmatch(env_name)):
         raise store.StoreError("invalid api_key_env")
+    _progress(progress, "input_validated")
+    _progress(progress, "credential_lookup_started")
     key = decision_credentials.resolve(config, provider)
     requires_credential = (
         config.get("credential_source") == "keychain" or
@@ -326,6 +356,7 @@ def evaluate(config, state, questions, *, opener=None):
     )
     if requires_credential and not key:
         return {"available": False, "provider": provider, "reason": "missing_credential", "latency_ms": 0}
+    _progress(progress, "credential_ready")
     body = {"state": state, "questions": questions}
     if provider == "jev":
         body["model"] = config.get("model", "jev-latest")
@@ -336,13 +367,18 @@ def evaluate(config, state, questions, *, opener=None):
     open_fn = opener or urllib.request.build_opener(_NoRedirect).open
     started = time.monotonic()
     try:
+        _progress(progress, "transport_started")
         with open_fn(req, timeout=timeout_ms / 1000.0) as response:
+            _progress(progress, "response_headers_received", http_status=getattr(response, "status", None))
             raw = response.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
                 raise store.StoreError("decision provider response too large")
+            _progress(progress, "response_body_received")
             payload = json.loads(raw.decode("utf-8"))
         latency_ms = max(0, int((time.monotonic() - started) * 1000))
-        return _normalize(payload, questions, provider, latency_ms)
+        result = _normalize(payload, questions, provider, latency_ms)
+        _progress(progress, "response_parsed")
+        return result
     except urllib.error.HTTPError as exc:
         reason = f"http_{exc.code}" if exc.code in (401, 402, 403, 408, 429, 500, 502, 503, 504) else "http_error"
     except (urllib.error.URLError, TimeoutError, socket.timeout):

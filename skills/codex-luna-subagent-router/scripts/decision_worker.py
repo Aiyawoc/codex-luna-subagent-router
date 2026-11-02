@@ -7,13 +7,18 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import decision_provider
+import decision_diagnostics
 
 
 def main():
+    started = time.monotonic()
+    def progress(phase, **metadata):
+        decision_diagnostics.emit(sys.stderr, phase, started, **metadata)
+    progress("worker_started")
     # Prevent core dumps of process memory containing a resolved credential.
     try:
         import resource
@@ -25,11 +30,30 @@ def main():
         if len(raw) > 65536:
             raise ValueError("input budget")
         request = json.loads(raw)
-        if not isinstance(request, dict) or set(request) != {"engine", "state", "questions"}:
+        if not isinstance(request, dict) or set(request) - {"engine", "state", "questions", "credential_only"} or not {"engine", "state", "questions"} <= set(request):
             raise ValueError("invalid request")
-        result = decision_provider.evaluate(request["engine"], request["state"], request["questions"])
-    except Exception:
-        result = {"available": False, "reason": "invalid_or_unavailable", "latency_ms": 0}
+        import decision_provider
+        import decision_credentials
+        engine = dict(request["engine"], credential_interaction_allowed=False)
+        if request.get("credential_only") is True:
+            progress("input_validated")
+            progress("credential_lookup_started")
+            key = decision_credentials.resolve(engine, engine["provider"])
+            readable = bool(key)
+            del key
+            if readable:
+                progress("credential_ready")
+            result = {"available": readable, "credential_status": "readable" if readable else "missing",
+                      "reason": None if readable else "missing_credential", "api_called": False}
+        else:
+            result = decision_provider.evaluate(engine, request["state"], request["questions"], progress=progress)
+        if result.get("available"):
+            progress("completed")
+    except Exception as exc:
+        code = getattr(exc, "code", None)
+        if code not in ("credential_unavailable", "credential_interaction_required", "credential_denied", "credential_missing"):
+            code = "invalid_or_unavailable"
+        result = {"available": False, "reason": code, "latency_ms": 0}
     sys.stdout.write(json.dumps(result, ensure_ascii=True))
     return 0
 

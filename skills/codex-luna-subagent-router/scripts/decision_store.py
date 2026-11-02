@@ -6,13 +6,14 @@ import re
 from pathlib import Path
 
 import outcome_store as store
+import decision_diagnostics
 
 VERSION = "2.9-shadow-v2"
 ALLOWED = {
     "checkpoint_id", "scope_id", "task_family", "provider", "provider_model",
     "status", "reason", "latency_ms", "confidence", "lease", "answers",
     "decision_version", "recorded_at", "usage", "origin", "plan_id",
-    "task_key", "baseline_axes",
+    "task_key", "baseline_axes", "diagnostics",
 }
 USAGE_FIELDS = frozenset((
     "input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens",
@@ -70,6 +71,8 @@ def validate(row):
                 raise store.StoreError("decision answer too long")
         elif isinstance(value, bool) or not isinstance(value, (int, float)):
             raise store.StoreError("decision answers must be choices or numbers")
+    if row.get("diagnostics") is not None:
+        decision_diagnostics.validate(row["diagnostics"])
     usage = row.get("usage")
     if usage is not None:
         if not isinstance(usage, dict) or set(usage) - USAGE_FIELDS:
