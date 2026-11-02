@@ -114,7 +114,13 @@ def main():
         # v2.9.4: exercise the actual installed planner -> isolated provider ->
         # correlated journals path with no key, hence no external API request.
         execute([*launcher(installed),'configure_decision_engine','--scope','user',
-                 '--provider','openai_decisions','--automatic-checkpoints','on','--json'],project,env)
+                 '--provider','openai_decisions','--automatic-checkpoints','on','--timeout-ms','30000',
+                 '--total-timeout-ms','30000','--credential-timeout-ms','5000','--json'],project,env)
+        preflight=json.loads(execute([*launcher(installed),'decision_check',
+                        str(installed/'examples/work-plan-shadow.json'),'--global-scope'],project,env))
+        assert preflight['status']=='valid' and preflight['context_status']=='valid'
+        assert preflight['credential_status']=='not_checked' and preflight['api_called'] is False
+        assert preflight['timeout_budgets']['total_timeout_ms']==30000
         automatic=json.loads(execute([
             *launcher(installed),'route_advisor','--global-scope','plan',
             str(installed/'examples/work-plan-shadow.json'),
@@ -124,6 +130,8 @@ def main():
         observation=automatic['decision_observation']
         assert observation['status']=='unavailable' and observation['reason']=='missing_credential'
         assert observation['production_effect']=='none' and 'answers' not in observation
+        assert observation['diagnostics']['last_phase']=='credential_lookup_started'
+        assert 'transport_started' not in observation['diagnostics']['phase_elapsed_ms']
         journal=home/'state/codex-luna-subagent-router'
         plans=[json.loads(line) for line in (journal/'planning.jsonl').read_text().splitlines()]
         events=[json.loads(line) for line in (journal/'decision-events.jsonl').read_text().splitlines()]

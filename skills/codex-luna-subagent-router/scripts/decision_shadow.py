@@ -63,6 +63,7 @@ def execute(state, engine, scope, checkpoint_result, *, ledger=None,
         "lease": lease,
         "answers": answers,
         "usage": result.get("usage") if status == "available" else None,
+        **({"diagnostics": result["diagnostics"]} if "diagnostics" in result else {}),
         **metadata,
     })
     return {
@@ -77,6 +78,7 @@ def execute(state, engine, scope, checkpoint_result, *, ledger=None,
         "answers": answers,
         "usage": row.get("usage"),
         "reason": row.get("reason"),
+        **({"diagnostics": row["diagnostics"]} if "diagnostics" in row else {}),
         "origin": row["origin"],
         "production_effect": "none",
     }

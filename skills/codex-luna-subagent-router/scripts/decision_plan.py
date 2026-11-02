@@ -14,11 +14,13 @@ import uuid
 from pathlib import Path
 
 import decision_checkpoint
+import decision_diagnostics
 import decision_events as events
 import decision_policy
 import decision_provider
 import decision_shadow
 import decision_state
+import decision_validation
 import outcome_store as store
 
 
@@ -69,44 +71,80 @@ def _request_size(engine, state):
     return len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
 
 
-def _isolated_provider(engine, state, questions):
-    """Bound native credential/API failures without risking the Lead's plan."""
+def _isolated_provider(engine, state, questions, *, credential_only=False):
+    """One bounded process, safe phase telemetry, no automatic retry or hidden UI."""
     start = time.monotonic()
     result = {"available": False, "provider": engine.get("provider"),
               "reason": "provider_process_failed", "latency_ms": 0}
+    try:
+        policy = decision_diagnostics.budgets(engine)
+    except (ValueError, TypeError):
+        return dict(result, reason="invalid_or_unavailable")
     provider_config = {key: engine[key] for key in (
         "enabled", "mode", "provider", "model", "endpoint", "timeout_ms",
-        "credential_source", "credential_scope", "api_key_env", "setup_completed",
+        "total_timeout_ms", "credential_timeout_ms", "credential_source",
+        "credential_scope", "api_key_env", "setup_completed",
     ) if key in engine}
-    raw = json.dumps({"engine": provider_config, "state": state, "questions": questions},
-                     ensure_ascii=False).encode("utf-8")
+    raw = json.dumps({"engine": provider_config, "state": state, "questions": questions,
+                      "credential_only": credential_only}, ensure_ascii=False).encode("utf-8")
     if len(raw) > 65536:
-        return dict(result, reason="invalid_or_unavailable")
-    timeout = engine.get("timeout_ms", 1200 if engine.get("provider") == "openai_decisions" else 800)
-    if type(timeout) is not int or not 50 <= timeout <= 15000:
         return dict(result, reason="invalid_or_unavailable")
     command = [sys.executable, "-I", "-S", "-B", "-X", "utf8",
                str(Path(__file__).with_name("decision_worker.py"))]
     process = None
+    stderr, stdout = b"", b""
+    finished = False
+    first = True
+    deadline = start + policy["total_timeout_ms"] / 1000
     try:
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                   stderr=subprocess.DEVNULL,
+                                   stderr=subprocess.PIPE,
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        # The extra second covers startup/credential lookup. It is a whole
-        # child-process deadline, unlike the transport's socket timeout.
-        stdout, _ = process.communicate(raw, timeout=timeout / 1000 + 1)
-        if process.returncode == 0 and len(stdout) <= decision_provider.MAX_RESPONSE_BYTES:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                result["reason"] = "provider_deadline"
+                break
+            try:
+                stdout, stderr = process.communicate(raw if first else None,
+                                                     timeout=min(0.25, remaining))
+                finished = True
+                break
+            except subprocess.TimeoutExpired as exc:
+                first = False
+                stderr = exc.stderr if isinstance(exc.stderr, bytes) else b""
+                if isinstance(exc.output, bytes) and len(exc.output) > decision_provider.MAX_RESPONSE_BYTES:
+                    result["reason"] = "provider_output_budget"
+                    break
+                if len(stderr) > decision_diagnostics.MAX_WIRE_BYTES:
+                    result["reason"] = "provider_diagnostics_budget"
+                    break
+                partial = decision_diagnostics.from_wire(stderr, policy)
+                stages = partial["phase_elapsed_ms"]
+                credential_start = stages.get("credential_lookup_started")
+                if credential_start is not None and "credential_ready" not in stages and (
+                        (time.monotonic()-start)*1000 - credential_start >= policy["credential_timeout_ms"]):
+                    result["reason"] = "credential_deadline"
+                    break
+        if finished and process.returncode == 0 and len(stdout) <= decision_provider.MAX_RESPONSE_BYTES:
             candidate = json.loads(stdout)
             if isinstance(candidate, dict) and type(candidate.get("available")) is bool:
                 result = candidate
-    except subprocess.TimeoutExpired:
-        result["reason"] = "provider_deadline"
     except (OSError, ValueError, TypeError):
         pass
     finally:
         if process is not None and process.poll() is None:
             process.kill()
-            process.communicate()
+            try:
+                _, final_stderr = process.communicate(timeout=1)
+                if isinstance(final_stderr, bytes):
+                    stderr = final_stderr
+            except subprocess.TimeoutExpired:
+                # Preserve only bounded progress; never wait indefinitely for pipes.
+                for stream in (process.stdout, process.stderr, process.stdin):
+                    if stream is not None:
+                        stream.close()
+        result["diagnostics"] = decision_diagnostics.from_wire(stderr, policy)
     result.setdefault("provider", engine.get("provider"))
     result["latency_ms"] = max(0, int((time.monotonic() - start) * 1000))
     return result
@@ -152,6 +190,9 @@ def observe(payload, context, output, config, scope, *, event_path=None,
             return skipped("invalid_config")
         if context is None:
             return skipped("missing_context")
+        details = decision_validation.validate_context(payload, context)
+        if details:
+            return dict(skipped("invalid_context"), context_errors=details)
         try:
             task, state, checkpoint = _context(payload, context)
         except (ValueError, TypeError, KeyError):
@@ -198,6 +239,7 @@ def observe(payload, context, output, config, scope, *, event_path=None,
         # Deliberately do not expose semantic answers to the Lead's execution
         # plan. They remain in the correlated, metadata-only decision ledger.
         return dict(response, status=status, reason=result.get("reason"),
-                    latency_ms=result["latency_ms"])
+                    latency_ms=result["latency_ms"],
+                    diagnostics=result.get("diagnostics"))
     except Exception:
         return dict(response, status="unavailable", reason="decision_storage_unavailable")

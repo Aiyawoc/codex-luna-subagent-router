@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.9.4-rc.2: 分阶段诊断、离线预检与30秒上限（2026-11-02）
+
+- 新增 `decision_check [request.json]`：不调用 API、不写账本，独立核对生效配置和上下文字段，明确报告 `state.task_scope` 层级错误和六轴枚举错误。配置有效不等于凭据可用；显式 `--check-credential` 才在受控子进程中读取当前凭据，不发送 HTTP 请求。
+- Provider 子进程增加白名单阶段和耗时，父进程在超时/崩溃后保留最后阶段；仅保存阶段枚举、时长和 HTTP 状态码，不保留 stderr 原文、密钥或请求正文。
+- 分开 `timeout_ms`（传输）、`credential_timeout_ms`（凭据）和 `total_timeout_ms`（整体等待）；支持显式设置30,000ms。30秒整体上限不再自动变成31秒；旧配置不自动提高等待/消费上限。启动、轮询和清理仍可能产生少量观测耗时偏差。
+- 自动调用及凭据检查禁用子进程内的 macOS Keychain 交互，需授权时明确返回 `credential_interaction_required`，不等待隐藏提示，不修改 ACL；凭据读取另有有界时限。
+- 向导可保留已有同供应商凭据；新增 `--open-terminal` 打开可见 macOS Terminal 并返回待操作回执。保存配置/密钥不冒充 API 验证成功；禁止 getpass 回退为明文输入。
+- DNS、TLS、传输超时、HTTP拒绝、响应无效与本地整体截止分别报告。无重试、预算/去重、Shadow无执行权限和原规划隔离保持不变。见 `docs/v2.9.4-rc.2-diagnostics.md`。
+
 ## 2.9.4-rc.1: Planner-integrated Decision Shadow（2026-11-02）
 
 - 在正常 `route_advisor plan` CLI 入口自动衔接可选 Shadow checkpoint，不再要求 Lead 另执行 `decision_shadow`。确定性计划先完成，观察结果不参与实际模型、权限、Worker 数或执行形状选择；纯 `plan_work()` 仍无网络。

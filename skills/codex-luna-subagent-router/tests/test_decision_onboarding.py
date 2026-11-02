@@ -235,7 +235,7 @@ class OfficialProviderTests(unittest.TestCase):
                 {"enabled": True, "provider": "openai_decisions",
                  "setup_completed": True},
                 STATE, QUESTIONS, opener=timeout)
-        self.assertEqual(result["reason"], "unavailable")
+        self.assertEqual(result["reason"], "transport_timeout")
 
     def test_malformed_json_fails_closed(self):
         result, _ = self.call(b"{garbage")
@@ -402,6 +402,7 @@ class GuidedAndInventoryTests(unittest.TestCase):
         config.configure(self.path, provider="off", enabled=False)
         self.assertIn(7, self.inspect("fresh")["pending_questions"])
 
+    @patch.dict(os.environ, {"TERM_PROGRAM": "Apple_Terminal"})
     def test_guided_off_does_not_prompt_for_a_key(self):
         terminal = io.StringIO()
         terminal.isatty = lambda: True
@@ -411,6 +412,7 @@ class GuidedAndInventoryTests(unittest.TestCase):
         self.assertFalse(result["decision_engine"]["enabled"])
         self.assertNotIn(7, self.inspect()["pending_questions"])
 
+    @patch.dict(os.environ, {"TERM_PROGRAM": "Apple_Terminal"})
     def test_guided_secret_saved_only_to_vault_not_json(self):
         terminal = io.StringIO()
         terminal.isatty = lambda: True
