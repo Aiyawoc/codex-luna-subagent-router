@@ -11,13 +11,13 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 
 辅助脚本用 `bin/router <脚本名>`（Windows `bin/router.cmd`），不用系统 Python。
 
-安装／升级按 `references/codex-guided-install.md` 先盘点并逐项询问；第七项明确选择决策供应商及安全密钥，默认关闭。已安装者可随时运行 `bin/router configure_decision_engine --scope user --guided`；密钥只在本机交互终端输入，不进聊天／配置。普通任务按项目优先的 `routing.json`，缺失按 `luna_only`；校准缺失或 `off` 不读历史。
+安装／升级按 `references/codex-guided-install.md` 盘点并询问；第七项选供应商、密钥与自动调用，默认关闭。配置用 `bin/router configure_decision_engine --scope user --guided`；密钥只在本机终端输入，不进聊天／配置。项目 `routing.json` 优先，缺失按 `luna_only`；校准缺失或 `off` 不读历史。
 
 - `luna_only`：只用 `gpt-6-luna`；能力不足由 Lead 接管。
 - `adaptive`：`gpt-6-luna` → `gpt-6.1-sol` → `gpt-6-astra`；Terra 不参与新自动路由，`gpt-6-sol` 仅历史兼容。
 - Sol 不得用旧 `gpt-5.6` alias 做自动 spawn；精确绑定不可证明时 `lead_only`，不静默替换。
 
-仅显式启用 `mode=shadow` 且证据、checkpoint 必要时调用 `decision_shadow`，详见 `references/decision-layer.md`；失败继续确定性 Advisor，不改变路由、权限或并发，不每轮调用。
+自动 Shadow 须明确开启；证据收集后，`route_advisor plan` 请求携带 `decision_context`（task_id/state），按 `references/decision-layer.md` 构建，不再另调 `decision_shadow`。缺证据留痕，不伪造事实；观察结果不改变路由或权限。
 
 ## Adaptive Capability Gap Gate + Advisor
 

@@ -32,7 +32,7 @@ def from_plan(plan, scope_id):
         raise store.StoreError("plan contains an unknown runtime health action")
     return {
         "schema_version": VERSION,
-        "plan_id": uuid.uuid4().hex,
+        "plan_id": plan.get("plan_id") or uuid.uuid4().hex,
         "scope_id": scope_id,
         "router_version": runtime_support.skill_version(),
         "routing_mode": plan.get("routing_mode"),

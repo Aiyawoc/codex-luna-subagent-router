@@ -111,6 +111,28 @@ def main():
         shadow_rows=(home/'state/codex-luna-subagent-router/decisions.jsonl').read_text()
         assert '"missing_credential"' in shadow_rows
         assert 'sk-proj-' not in shadow_rows
+        # v2.9.4: exercise the actual installed planner -> isolated provider ->
+        # correlated journals path with no key, hence no external API request.
+        execute([*launcher(installed),'configure_decision_engine','--scope','user',
+                 '--provider','openai_decisions','--automatic-checkpoints','on','--json'],project,env)
+        automatic=json.loads(execute([
+            *launcher(installed),'route_advisor','--global-scope','plan',
+            str(installed/'examples/work-plan-shadow.json'),
+            '--lead-model','gpt-6-astra','--lead-effort','high',
+            '--open-workers','0','--runtime-health','healthy',
+        ],project,env))
+        observation=automatic['decision_observation']
+        assert observation['status']=='unavailable' and observation['reason']=='missing_credential'
+        assert observation['production_effect']=='none' and 'answers' not in observation
+        journal=home/'state/codex-luna-subagent-router'
+        plans=[json.loads(line) for line in (journal/'planning.jsonl').read_text().splitlines()]
+        events=[json.loads(line) for line in (journal/'decision-events.jsonl').read_text().splitlines()]
+        results=[json.loads(line) for line in (journal/'decisions.jsonl').read_text().splitlines()]
+        assert any(row['plan_id']==automatic['plan_id'] for row in plans)
+        assert [row['state'] for row in events if row['plan_id']==automatic['plan_id']]==['considered','attempted','unavailable']
+        linked=[row for row in results if row.get('plan_id')==automatic['plan_id']]
+        assert len(linked)==1 and linked[0]['checkpoint_id']==observation['checkpoint_id']
+        assert linked[0]['origin']=='planner' and linked[0]['reason']=='missing_credential'
         diagnostics=json.loads(execute([*launcher(installed),'diagnostics','--project-root',str(project),'--json'],project,env))
         assert diagnostics['read_only'] is True and diagnostics['refresh_performed'] is False
         assert diagnostics['trust_changed'] is False and diagnostics['runtime']['status']=='ok'

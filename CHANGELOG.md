@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.9.4-rc.1: Planner-integrated Decision Shadow（2026-11-02）
+
+- 在正常 `route_advisor plan` CLI 入口自动衔接可选 Shadow checkpoint，不再要求 Lead 另执行 `decision_shadow`。确定性计划先完成，观察结果不参与实际模型、权限、Worker 数或执行形状选择；纯 `plan_work()` 仍无网络。
+- 每份计划输出与 `planning.jsonl` 使用同一 `plan_id`；新 `decision-events.jsonl` 记录 considered / skipped / attempted / available / unavailable，结果账本通过 plan_id、checkpoint_id 和任务 hash 精确关联，保留基线六轴用于只读差异分析。
+- 新增明确的 `automatic_checkpoints` 选择，旧 `enabled=true` 不会静默启用额外自动 API 调用。引导第七项补问该选择；单独开启时保留现有供应商的 Keychain/env 来源与超时，不重新读取或保存密钥。
+- 正常计划可附 `decision_context`（一个活动 task_id 对应的 state 和可选 checkpoint）；无事实、微任务、已完成工作、不必要 checkpoint 或旧调用缺少 context 均记录跳过原因，不凭已有分类伪造证据。
+- 默认跨同一 CODEX_HOME 的自动调度尝试预算为每24小时20次、冷却30秒、同任务同证据10分钟去重、请求体16KiB。原子预留在网络前完成；网络期间不持账本锁，不自动重试，失败仍占用尝试次数。预算是请求次数/体积约束，不是美元计费硬上限。
+- 自动 Provider 在有总时限的本地 OS 子进程运行（非 Codex SubAgent）；Keychain 原生崩溃或阻塞不会使原规划进程退出，超时终止也不自动重试。仅传递白名单配置，密钥不进入参数或 IPC。
+- `report` 增加调用来源、触发/跳过原因、无终态尝试、精确关联结果与六轴差异；保留旧账本为 legacy_unknown。Planner 关联不冒充 Desktop 自然触发证据，差异率不冒充准确率。
+- 增加纯离线与本地 loopback CLI 集成测试；不访问用户 Keychain、OpenAI API 或生产账本。真实 Host 接入仍须安装候选、明确开启并加载新 Skill 后验收。详见 `docs/v2.9.4-shadow-checkpoints.md`。
+
 ## 2.9.3: macOS Keychain cleanup hotfix（2026-10-29）
 
 - 修复 v2.9.2 首次真实 Decisions Shadow CLI 验收发现的 macOS Keychain `SIGSEGV`：`SecKeychainItemFreeContent` 的 C 参数应为 `(attrList, data)`，旧版错误地传入 `(data, NULL)`，在成功取回条目后的释放路径发生原生崩溃。

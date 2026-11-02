@@ -145,6 +145,15 @@ helper 直接安全合并 `config.toml`、重新解析 TOML 并验证有效 SubA
 
 ### 7. 可选决策模型与供应商（本版新增）
 
+**2.9.4 补充：** 是否允许规划入口自动调用是独立的明确选择 `automatic_checkpoints`。旧 enabled=true 不会自动开启；升级盘点会在已开启供应商但缺少该选择时补问，保留供应商、密钥引用和已有超时。向导会说明默认每24小时20次、30秒间隔、同任务同证据10分钟去重和16KiB请求上限。若用户已配置 OpenAI Keychain，可使用以下命令仅开启自动调用，不重新输入或读取密钥：
+
+```bash
+bin/router configure_decision_engine --scope user --provider openai_decisions \
+  --automatic-checkpoints on --json
+```
+
+这不是自动安装步骤：必须得到用户对自动调用及 API 消耗的明确许可。项目级配置优先时，应配置实际有效的项目作用域；不将用户配置强制覆盖到所有项目。`--automatic-checkpoints off` 仅关闭自动检查，手动诊断和凭据仍可保留；`--disable` 关闭整个供应商。
+
 **作用：独立决定是否允许额外 API 调用辅助评估当前任务。默认关闭；即使启用也仅处于 Shadow 模式，不能改变主 Agent、实际 Worker 模型、推理档位、权限、任务计划或预算。**
 
 首次安装必须明确询问**是否开启**。升级时，如果没有可证明的既有用户选择，仍需询问，而不是把缺失/off 误当成已经拒绝；既有明确开启的 JEV/HTTP 配置保留。用户明确选择“关闭”后记下 `setup_completed=true`，下次升级不重复追问。

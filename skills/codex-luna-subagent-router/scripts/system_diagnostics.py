@@ -98,6 +98,9 @@ def _config(scope_root):
                 "enabled": bool(decision.get("enabled")),
                 "provider": decision.get("provider", "off"),
                 "source": decision.get("source"),
+                "automatic_checkpoints": decision.get("automatic_checkpoints") is True,
+                "automatic_choice_recorded": type(decision.get("automatic_checkpoints")) is bool,
+                "mode": decision.get("mode", "shadow"),
             },
         }
     except (OSError, ValueError, TypeError, KeyError, tomllib.TOMLDecodeError):

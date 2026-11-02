@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import statistics
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,7 @@ import route_advisor
 import token_usage
 import turn_usage
 import decision_store
+import decision_events
 import planning_store
 import host_shadow_store
 import route_economics
@@ -114,10 +116,32 @@ def collect(scope_id, project_root=None):
         "available": decision_status.get("available", 0),
         "unavailable": decision_status.get("unavailable", 0),
         "with_confidence": sum(1 for row in decision_rows if row.get("confidence") is not None),
-        "median_latency_ms": latencies[len(latencies) // 2] if latencies else None,
+        "median_latency_ms": statistics.median(latencies) if latencies else None,
         "invalid_decision_rows": invalid_decisions,
         "latest_recorded_at": max((row.get("recorded_at") for row in decision_rows), default=None),
     }
+    decisions["origins"] = dict(Counter(row.get("origin", "legacy_unknown") for row in decision_rows))
+    decisions["checkpoint_events"] = decision_events.statistics(scope=scope_id)
+    decisions["plan_linked_records"] = sum(row.get("origin") == "planner" for row in decision_rows)
+    decisions["provider_reasons"] = dict(Counter(row.get("reason") or "available" for row in decision_rows))
+    usage_rows = [row["usage"] for row in decision_rows if isinstance(row.get("usage"), dict)
+                  and any(type(row["usage"].get(key)) is int for key in decision_store.USAGE_FIELDS)]
+    decisions["usage_known_rows"] = len(usage_rows)
+    decisions["usage_unknown_rows"] = len(decision_rows) - len(usage_rows)
+    decisions["known_api_usage"] = {
+        key: sum(u[key] for u in usage_rows if type(u.get(key)) is int)
+        if any(type(u.get(key)) is int for u in usage_rows) else None
+        for key in sorted(decision_store.USAGE_FIELDS)
+    }
+    comparisons = {}
+    for axis in store.AXES:
+        pairs = [(row["baseline_axes"][axis], row.get("answers", {}).get(axis))
+                 for row in decision_rows if row.get("origin") == "planner"
+                 and row["status"] == "available" and row.get("answers", {}).get(axis) in store.AXES[axis]]
+        comparisons[axis] = {"compared": len(pairs), "agreed": sum(a == b for a, b in pairs),
+                             "disagreed": sum(a != b for a, b in pairs)}
+    decisions["baseline_comparison"] = comparisons
+    decisions["interpretation"] = "Planner linkage proves the CLI entrypoint, not Desktop natural execution or decision accuracy."
     host_shadow = host_shadow_store.statistics(scope=scope_id)
     host_shadow_readiness = host_shadow_store.review_readiness(scope=scope_id)
     economics = route_economics.collect(registry, usage_path, scope=scope_id)
@@ -186,6 +210,13 @@ def csv_rows(data):
         rows.append(_row("host_shadow_usage", status=status, count=count))
     for status, count in sorted(data.get("host_shadow", {}).get("latest_interruption_statuses", {}).items()):
         rows.append(_row("host_shadow_interrupt", status=status, count=count))
+    for status, count in sorted(data.get("decisions", {}).get("checkpoint_events", {}).get("states", {}).items()):
+        rows.append(_row("decision_checkpoint", status=status, count=count))
+    for reason, count in sorted(data.get("decisions", {}).get("checkpoint_events", {}).get("skip_reasons", {}).items()):
+        rows.append(_row("decision_checkpoint_skip", reasons=reason, count=count))
+    for axis, item in sorted(data.get("decisions", {}).get("baseline_comparison", {}).items()):
+        rows.append(_row("decision_axis_disagreement", reasons=axis, count=item["disagreed"],
+                         note="compared=" + str(item["compared"]) + "; not accuracy"))
     return rows
 
 
@@ -298,6 +329,15 @@ def markdown(payload):
         f"| Unavailable | {decisions.get('unavailable', 0)} |",
         f"| 有 confidence | {decisions.get('with_confidence', 0)} |",
         f"| 中位延迟 | {decisions.get('median_latency_ms') if decisions.get('median_latency_ms') is not None else '-'} ms |",
+        f"| 与规划关联的结果 | {decisions.get('plan_linked_records', 0)} |",
+        f"| 已检查 checkpoint | {decisions.get('checkpoint_events', {}).get('states', {}).get('considered', '-')} |",
+        f"| 已跳过 checkpoint | {decisions.get('checkpoint_events', {}).get('states', {}).get('skipped', '-')} |",
+        f"| Provider 调度尝试 | {decisions.get('checkpoint_events', {}).get('states', {}).get('attempted', '-')} |",
+        f"| 已尝试但无终态 | {decisions.get('checkpoint_events', {}).get('attempts_without_terminal', '-')} |",
+        "",
+        "跳过原因：" + json.dumps(decisions.get('checkpoint_events', {}).get('skip_reasons', {}), ensure_ascii=False, sort_keys=True),
+        "",
+        "仅统计被观察到的规划入口；attempted 不等于计费请求。规划关联不证明 Desktop 自然触发，分类差异不等于判断质量。",
         "",
         "## Native Host Shadow",
         "",
