@@ -32,26 +32,19 @@ def _answer_summary(answers):
     return result, min(confidences) if confidences else None
 
 
-def run(request, *, root=None, global_scope=False, ledger=None, provider_evaluate=None):
-    if not isinstance(request, dict) or set(request) - {"state", "checkpoint"}:
-        raise store.StoreError("shadow request must contain only state and optional checkpoint")
-    state = decision_state.build(request.get("state"))
-    checkpoint = request.get("checkpoint")
-    checkpoint_result = decision_checkpoint.evaluate(checkpoint) if checkpoint is not None else {
-        "decision": "checkpoint_required", "reason_codes": ["explicit_shadow_request"]
-    }
-    if checkpoint_result["decision"] != "checkpoint_required":
-        return {"status": "skipped", "checkpoint": checkpoint_result, "production_effect": "none"}
-    scope, resolved_root = store.resolve_scope(root, global_scope)
-    config = store.effective_config(resolved_root)
-    engine = config.get("decision_engine", {})
-    if not isinstance(engine, dict) or engine.get("enabled") is not True:
-        return {"status": "disabled", "checkpoint": checkpoint_result, "production_effect": "none"}
-    if engine.get("mode", "shadow") != "shadow":
-        raise store.StoreError("v2.7.0 supports decision_engine mode=shadow only")
+def execute(state, engine, scope, checkpoint_result, *, ledger=None,
+            provider_evaluate=None, checkpoint_id=None, correlation=None):
+    """One authorized dispatch. Caller owns trigger/consent/budget checks."""
+    if not isinstance(engine, dict) or engine.get("enabled") is not True or engine.get("mode", "shadow") != "shadow":
+        raise store.StoreError("decision engine must be enabled in shadow mode")
+    metadata = {"origin": "manual"}
+    if correlation is not None:
+        if not isinstance(correlation, dict) or set(correlation) != {"plan_id", "task_key", "baseline_axes"}:
+            raise store.StoreError("invalid planner correlation")
+        metadata = dict(correlation, origin="planner")
     evaluate = provider_evaluate or decision_provider.evaluate
     result = evaluate(engine, state, decision_policy.QUESTIONS)
-    checkpoint_id = uuid.uuid4().hex
+    checkpoint_id = checkpoint_id or uuid.uuid4().hex
     answers, confidence, lease = {}, None, None
     status = "available" if result.get("available") is True else "unavailable"
     if status == "available":
@@ -70,6 +63,7 @@ def run(request, *, root=None, global_scope=False, ledger=None, provider_evaluat
         "lease": lease,
         "answers": answers,
         "usage": result.get("usage") if status == "available" else None,
+        **metadata,
     })
     return {
         "status": status,
@@ -82,8 +76,29 @@ def run(request, *, root=None, global_scope=False, ledger=None, provider_evaluat
         "lease": row["lease"],
         "answers": answers,
         "usage": row.get("usage"),
+        "reason": row.get("reason"),
+        "origin": row["origin"],
         "production_effect": "none",
     }
+
+
+def run(request, *, root=None, global_scope=False, ledger=None, provider_evaluate=None):
+    if not isinstance(request, dict) or set(request) - {"state", "checkpoint"}:
+        raise store.StoreError("shadow request must contain only state and optional checkpoint")
+    state = decision_state.build(request.get("state"))
+    checkpoint = request.get("checkpoint")
+    checkpoint_result = decision_checkpoint.evaluate(checkpoint) if checkpoint is not None else {
+        "decision": "checkpoint_required", "reason_codes": ["explicit_shadow_request"]
+    }
+    if checkpoint_result["decision"] != "checkpoint_required":
+        return {"status": "skipped", "checkpoint": checkpoint_result, "production_effect": "none"}
+    scope, resolved_root = store.resolve_scope(root, global_scope)
+    config = store.effective_config(resolved_root)
+    engine = config.get("decision_engine", {})
+    if not isinstance(engine, dict) or engine.get("enabled") is not True:
+        return {"status": "disabled", "checkpoint": checkpoint_result, "production_effect": "none"}
+    return execute(state, engine, scope, checkpoint_result, ledger=ledger,
+                   provider_evaluate=provider_evaluate)
 
 
 def main(argv=None):

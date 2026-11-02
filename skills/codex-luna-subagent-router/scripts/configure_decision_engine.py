@@ -14,6 +14,7 @@ import urllib.parse
 from pathlib import Path
 
 import decision_credentials
+import decision_events
 
 PROVIDERS = ("off", "jev", "http", "jev_ask", "openai_decisions")
 OPENAI_ENDPOINT = "https://api.openai.com/v1/decisions"
@@ -103,16 +104,37 @@ def write_atomic(path, text):
         temporary.unlink(missing_ok=True)
 
 
-def configure(path, *, provider, endpoint=None, api_key_env=None, timeout_ms=800,
+def configure(path, *, provider, endpoint=None, api_key_env=None, timeout_ms=None,
               enabled=True, dry_run=False, credential_source=None,
-              credential_account=None):
+              credential_account=None, automatic_checkpoints=None, checkpoint_limits=None):
     """Safe typed config update; no key bytes accepted or persisted here."""
     if provider not in PROVIDERS:
         raise ConfigurationError("unsupported decision provider")
     if type(enabled) is not bool:
         raise ConfigurationError("enabled must be boolean")
+    data = read_routing(path)
+    prior = data.get("decision_engine", {})
+    if not isinstance(prior, dict) or prior.get("provider") != provider:
+        prior = {}
+    if timeout_ms is None:
+        timeout_ms = prior.get("timeout_ms", 5000 if provider == "openai_decisions" else 800)
     if type(timeout_ms) is not int or not 50 <= timeout_ms <= 15000:
         raise ConfigurationError("timeout-ms must be 50..15000")
+    if automatic_checkpoints is None:
+        automatic_checkpoints = prior.get("automatic_checkpoints", False)
+    if type(automatic_checkpoints) is not bool:
+        raise ConfigurationError("automatic checkpoints must be boolean")
+    if checkpoint_limits is not None and not isinstance(checkpoint_limits, dict):
+        raise ConfigurationError("checkpoint limits must be an object")
+    previous_limits = prior.get("checkpoint_limits", {})
+    if not isinstance(previous_limits, dict):
+        raise ConfigurationError("existing checkpoint limits invalid")
+    limits = dict(previous_limits)
+    limits.update(checkpoint_limits or {})
+    try:
+        limits = decision_events.limits({"checkpoint_limits": limits})
+    except (ValueError, TypeError):
+        raise ConfigurationError("invalid checkpoint limits") from None
     if api_key_env is not None and (
             not isinstance(api_key_env, str) or
             not decision_credentials.ENV_NAME.fullmatch(api_key_env)):
@@ -122,16 +144,20 @@ def configure(path, *, provider, endpoint=None, api_key_env=None, timeout_ms=800
     if not enabled:
         provider, endpoint, api_key_env = "off", None, None
         credential_source, credential_account = None, None
+        automatic_checkpoints = False
     else:
+        endpoint = endpoint or prior.get("endpoint")
         endpoint = validate_endpoint(provider, endpoint)
         if credential_source is None:
-            credential_source = "env" if (
-                provider in ("jev", "openai_decisions") or api_key_env) else "none"
+            credential_source = ("env" if api_key_env else prior.get("credential_source")) or (
+                "env" if provider in ("jev", "openai_decisions") else "none")
         if credential_source not in ("env", "keychain", "none"):
             raise ConfigurationError("credential source must be env, keychain or none")
         if credential_source == "none" and provider in ("jev", "openai_decisions"):
             raise ConfigurationError("the selected provider requires a credential")
         if credential_source == "keychain":
+            if credential_account is None and prior.get("credential_source") == "keychain":
+                credential_account = prior.get("credential_scope")
             if not decision_credentials.supported():
                 raise ConfigurationError("OS credential vault unavailable; use environment mode")
             if not isinstance(credential_account, str) or not credential_account:
@@ -141,17 +167,18 @@ def configure(path, *, provider, endpoint=None, api_key_env=None, timeout_ms=800
         elif credential_account is not None:
             raise ConfigurationError("credential account only applies to keychain mode")
         if credential_source == "env":
-            api_key_env = api_key_env or (
+            api_key_env = api_key_env or (prior.get("api_key_env") if prior.get("credential_source", "env") == "env" else None) or (
                 "OPENAI_API_KEY" if provider == "openai_decisions" else
                 "TYPESAFE_API_KEY" if provider == "jev" else None
             )
             if api_key_env is None:
                 raise ConfigurationError("env credential source requires --api-key-env")
+            if not isinstance(api_key_env, str) or not decision_credentials.ENV_NAME.fullmatch(api_key_env):
+                raise ConfigurationError("invalid inherited api-key-env")
         if credential_source == "none" and endpoint:
             parsed = urllib.parse.urlparse(endpoint)
             if parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
                 raise ConfigurationError("credential-free mode requires a loopback endpoint")
-    data = read_routing(path)
     data["schema_version"] = "2.1"
     data.setdefault("execution_policy", {
         "prefer_local_parallel_tools": True,
@@ -164,6 +191,8 @@ def configure(path, *, provider, endpoint=None, api_key_env=None, timeout_ms=800
         "api_key_env": api_key_env, "timeout_ms": timeout_ms,
         "confidence_high": 0.85, "confidence_medium": 0.65,
         "lease_enabled": True, "setup_completed": True,
+        "automatic_checkpoints": automatic_checkpoints,
+        "checkpoint_limits": limits,
     }
     if enabled:
         engine["credential_source"] = credential_source
@@ -243,14 +272,22 @@ def guided(*, scope, codex_home, project_root, dry_run=False):
                      "TYPESAFE_API_KEY" if provider == "jev" else
                      "ROUTER_DECISION_API_KEY")
         env_name = _ask(f"环境变量名称（不是密钥内容）[{suggested}]: ", suggested)
+    automatic = _ask("是否允许规划入口自动运行有证据的 Shadow checkpoint？"
+                     "默认每24小时最多20次、间隔30秒、同证据10分钟内去重；"
+                     "可能产生API费用但不改变路由。[y/N]: ", "n").lower()
+    if automatic not in ("y", "yes", "n", "no"):
+        raise ConfigurationError("invalid automatic checkpoint choice")
+    automatic = automatic in ("y", "yes")
     planned = configure(path, provider=provider, endpoint=endpoint,
                         api_key_env=env_name, credential_source=credential_source,
-                        credential_account=scope_key, enabled=True, dry_run=True)
+                        credential_account=scope_key, enabled=True, dry_run=True,
+                        automatic_checkpoints=automatic)
     if credential_source == "keychain" and not dry_run:
         _save_credential_from_tty(provider, scope_key)
     result = planned if dry_run else configure(
         path, provider=provider, endpoint=endpoint, api_key_env=env_name,
         credential_source=credential_source, credential_account=scope_key, enabled=True,
+        automatic_checkpoints=automatic,
     )
     result["credential_status"] = (
         "not_required" if credential_source == "none" else
@@ -268,7 +305,11 @@ def main(argv=None):
     parser.add_argument("--provider", choices=PROVIDERS, default="off")
     parser.add_argument("--endpoint")
     parser.add_argument("--api-key-env", help="Environment variable NAME, never the key content")
-    parser.add_argument("--timeout-ms", type=int, default=800)
+    parser.add_argument("--timeout-ms", type=int, help="Preserve existing timeout; new OpenAI setup defaults to 5000ms")
+    parser.add_argument("--automatic-checkpoints", choices=("on", "off"),
+                        help="Explicit opt-in/out for bounded planner Shadow API calls")
+    for name in decision_events.LIMITS:
+        parser.add_argument("--" + name.replace("_", "-"), dest=name, type=int)
     parser.add_argument("--credential-source", choices=("env", "keychain", "none"))
     parser.add_argument("--store-key", action="store_true",
                         help="Securely prompt for API key and store it in the OS vault")
@@ -281,7 +322,7 @@ def main(argv=None):
     try:
         home = args.codex_home.expanduser().resolve()
         if args.guided:
-            if args.disable or args.store_key or args.json:
+            if args.disable or args.store_key or args.json or args.automatic_checkpoints is not None or any(getattr(args, k) is not None for k in decision_events.LIMITS):
                 raise ConfigurationError("--guided cannot combine with --disable/--store-key/--json")
             result = guided(scope=args.scope, codex_home=home,
                             project_root=args.project_root, dry_run=args.dry_run)
@@ -294,6 +335,8 @@ def main(argv=None):
                 api_key_env=args.api_key_env, timeout_ms=args.timeout_ms,
                 credential_source=args.credential_source, credential_account=account,
                 enabled=not args.disable,
+                automatic_checkpoints=None if args.automatic_checkpoints is None else args.automatic_checkpoints == "on",
+                checkpoint_limits={k: getattr(args, k) for k in decision_events.LIMITS if getattr(args, k) is not None},
             )
             if args.store_key:
                 if args.disable or args.credential_source != "keychain" or args.dry_run:

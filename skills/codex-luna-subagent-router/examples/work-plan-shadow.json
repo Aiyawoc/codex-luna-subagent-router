@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "task_id": "synthetic-ordering-check",
+      "task_family": "cross-module-debug",
+      "axes": {
+        "task_kind": "debug", "task_scope": "bounded", "reasoning_depth": "deep",
+        "verifiability": "yes", "failure_cost": "medium", "context_volume": "medium"
+      },
+      "read_paths": ["src/alpha.py", "src/beta.py"],
+      "write_paths": []
+    }
+  ],
+  "decision_context": {
+    "task_id": "synthetic-ordering-check",
+    "state": {
+      "task_family": "cross-module-debug",
+      "active_task": "Synthetic example only: investigate an ordering defect.",
+      "stage": "grounded",
+      "modules": ["alpha", "beta"],
+      "facts": ["Synthetic fixture observation; replace with evidence actually gathered for the real task."],
+      "uncertainties": ["Two candidate causes remain in this synthetic fixture."],
+      "hypothesis_count": 2,
+      "cross_module": true
+    }
+  }
+}

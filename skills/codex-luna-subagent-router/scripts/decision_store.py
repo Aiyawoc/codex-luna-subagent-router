@@ -7,11 +7,12 @@ from pathlib import Path
 
 import outcome_store as store
 
-VERSION = "2.7-shadow-v1"
+VERSION = "2.9-shadow-v2"
 ALLOWED = {
     "checkpoint_id", "scope_id", "task_family", "provider", "provider_model",
     "status", "reason", "latency_ms", "confidence", "lease", "answers",
-    "decision_version", "recorded_at", "usage",
+    "decision_version", "recorded_at", "usage", "origin", "plan_id",
+    "task_key", "baseline_axes",
 }
 USAGE_FIELDS = frozenset((
     "input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens",
@@ -34,6 +35,21 @@ def validate(row):
         raise store.StoreError("invalid decision task_family")
     if row.get("status") not in ("available", "unavailable"):
         raise store.StoreError("invalid decision status")
+    origin = row.get("origin")
+    if origin is not None and origin not in ("manual", "planner"):
+        raise store.StoreError("invalid decision origin")
+    for key in ("plan_id", "task_key"):
+        if key in row and (not isinstance(row[key], str) or
+                           not re.fullmatch(r"[0-9a-f]{32}", row[key])):
+            raise store.StoreError("invalid decision correlation")
+    axes = row.get("baseline_axes")
+    if axes is not None and (not isinstance(axes, dict) or set(axes) != set(store.AXES)
+                            or any(v not in store.AXES[k] for k, v in axes.items())):
+        raise store.StoreError("invalid decision baseline axes")
+    if origin == "planner" and not {"plan_id", "task_key", "baseline_axes"} <= set(row):
+        raise store.StoreError("planner decision needs exact correlation")
+    if origin != "planner" and {"plan_id", "task_key", "baseline_axes"} & set(row):
+        raise store.StoreError("non-planner decision cannot claim a plan")
     for key in ("provider", "provider_model", "reason", "lease", "decision_version"):
         value = row.get(key)
         if value is not None and (not isinstance(value, str) or len(value) > 128 or any(ord(ch) < 32 for ch in value)):

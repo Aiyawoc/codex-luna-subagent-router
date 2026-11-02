@@ -32,7 +32,7 @@ plan 输出新增 `execution_shape` / `execution_reason`，并列出 `local_para
 
 ## 可选 Grounded Decision Shadow
 
-如果有效 `routing.json` 明确启用 `decision_engine.enabled=true` 且 `mode=shadow`，在 Minimum Evidence Pass 后按 `references/decision-layer.md` 运行 bounded checkpoint/decision。Shadow 结果只做观测证据，**不得覆盖本文件的 Execution Shape、route_advisor 或 plan_work 生产结果**；provider 不可用时直接继续 Core Planner。
+如果有效 `routing.json` 已明确开启 `decision_engine.automatic_checkpoints=true`（且 enabled/setup_completed 为 true、mode=shadow），在 Minimum Evidence Pass 后按 `references/decision-layer.md` 将一个活动子任务的真实 bounded state 放入规划请求的 `decision_context`。正常 `route_advisor plan` 自动完成触发检查，无需另执行 `decision_shadow`。没有事实应保留 missing_context/missing_grounded_evidence 跳过，不制造样本。Shadow 结果只做观测证据，**不得覆盖 Execution Shape、route_advisor 或 plan_work 生产结果**；provider、预算或日志不可用时继续 Core Planner。未经过 planner 的会话仍不在自动接线覆盖范围内。
 
 ## 一次覆盖全部候选
 

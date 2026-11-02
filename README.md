@@ -8,6 +8,8 @@
 
 当前稳定版：[**v2.9.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.3) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
+开发候选：**v2.9.4-rc.1** 将有预算、可去重的 Decision Shadow 接入正常规划入口，并输出可关联的触发/跳过证据。自动调用须明确开启，旧配置不会静默产生费用；仍不改变 Worker 路由。见 [接入与验收](docs/v2.9.4-shadow-checkpoints.md)。
+
 **v2.9.3 Stable 热修复**：修复 macOS Keychain 已有凭据读取及覆盖写入时错误释放指针导致的 SIGSEGV。延续 v2.9.2 的 Decisions API Shadow、第七项安全配置引导和 2.9.1 可靠性修复，不更改实际 Worker 路由。见 [热修复说明](docs/v2.9.3-release-notes.md) 与 [验收边界](docs/v2.9.3-stable-acceptance.md)。
 
 > **普通用户请下载 Release 中与系统和 CPU 匹配的完整包。** GitHub 自动生成的 `Source code.zip/.tar.gz` 不包含私有 Python 运行环境。v2.9.3 完整包内置 CPython 3.13.15，不依赖系统 Python、pip、uv 或 PATH。

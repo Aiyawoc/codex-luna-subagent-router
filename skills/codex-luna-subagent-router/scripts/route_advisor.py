@@ -6,6 +6,7 @@ import argparse
 import errno
 import json
 import sys
+import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -378,6 +379,8 @@ def _parser():
     sub.add_argument("--open-workers", type=int, required=True, help="Current materialized PendingInit/Running Worker count only; spawn acknowledgements and completed historical agents do not count.")
     sub.add_argument("--runtime-health", choices=("unknown", "healthy", "degraded"), default="unknown",
                      help="unknown probes one real Worker first; healthy releases the ready wave; degraded holds new spawns.")
+    sub.add_argument("--no-decision-api", action="store_true",
+                     help="Skip optional Decision API for this plan without changing saved settings.")
     return p
 
 
@@ -443,8 +446,29 @@ def main(argv=None):
             output = query_records(path, scope=scope, task_family=args.task_family, axes=_axes_from_args(args))
         elif args.command == "plan":
             from plan_work import plan_work
-            output = plan_work(json.loads(args.request.read_text(encoding="utf-8")), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root, runtime_health=args.runtime_health, sol_medium_supported=args.sol_medium_supported)
+            with args.request.open("rb") as handle:
+                raw = handle.read(256 * 1024 + 1)
+            if len(raw) > 256 * 1024:
+                raise AdvisorError("plan request exceeds read budget")
+            request = json.loads(raw.decode("utf-8"))
+            if not isinstance(request, dict):
+                raise AdvisorError("plan request must be an object")
+            context = request.get("decision_context")
+            payload = {k: v for k, v in request.items() if k != "decision_context"}
+            output = plan_work(payload, lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root, runtime_health=args.runtime_health, sol_medium_supported=args.sol_medium_supported)
+            output["plan_id"] = uuid.uuid4().hex
             _record_planning_observation(output, path, scope, root)
+            try:
+                import decision_plan
+                output["decision_observation"] = decision_plan.observe(
+                    payload, context, output, config, scope,
+                    caller_disabled=args.no_decision_api,
+                )
+            except Exception:
+                output["decision_observation"] = {
+                    "status": "unavailable", "reason": "decision_observer_unavailable",
+                    "plan_id": output["plan_id"], "production_effect": "none",
+                }
         else:
             output = stats(path, scope)
             import token_usage as usage

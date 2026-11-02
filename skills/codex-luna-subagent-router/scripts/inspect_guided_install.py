@@ -208,6 +208,8 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
                   (activated and known and provider in ("jev", "jev_ask", "http")))
     requires_decision_question = fresh or not recognized or not known or (
         activated and provider == "off"
+    ) or (
+        activated and type(decision.get("automatic_checkpoints")) is not bool
     )
     add(7, "decision_model", {
         "enabled": activated,
@@ -216,13 +218,17 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
         "credential_source": decision.get("credential_source", "env" if activated else None),
         "api_key_env": decision.get("api_key_env"),
         "setup_completed": decision.get("setup_completed") is True,
+        "automatic_checkpoints": decision.get("automatic_checkpoints"),
+        "automatic_choice_required": activated and type(decision.get("automatic_checkpoints")) is not bool,
+        "checkpoint_limits": decision.get("checkpoint_limits"),
         "onboarding_command": "bin/router configure_decision_engine --scope user --guided"
                                if not root else
                                "bin/router configure_decision_engine --scope project --project-root <repo> --guided",
     }, requires_decision_question,
         "是否开启可选的 API 决策模型？默认关闭。若开启，请选择 OpenAI Decisions、TypeSafe System One、"
         "本地 JEV /ask 或自定义兼容服务，并选择系统凭据库或环境变量提供 API Key。"
-        "只在 Shadow 模式观察，不改变实际 Worker 路由；以后也可单独运行配置向导。")
+        "只在 Shadow 模式观察，不改变实际 Worker 路由。新版还需明确是否允许有预算和去重的规划自动checkpoint；"
+        "旧配置不静默开始自动调用，已有供应商、凭据和超时可保留。")
     execution = routing.get("execution_policy")
     if not isinstance(execution, dict):
         execution = {"prefer_local_parallel_tools": True, "materialization_gate": True, "runtime_health_lease": True, "source": "v2.7_runtime_defaults"}

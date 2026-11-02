@@ -380,13 +380,13 @@ class GuidedAndInventoryTests(unittest.TestCase):
         self.assertNotIn(7, q["pending_questions"])
         self.assertEqual(q["questions"][6]["current"]["provider"], "off")
 
-    def test_upgrade_preserves_explicit_existing_jev_provider(self):
+    def test_upgrade_preserves_jev_but_asks_new_automatic_choice(self):
         current = json.loads(self.path.read_text())
         current["decision_engine"] = {"enabled": True, "mode": "shadow", "provider": "jev_ask",
                                       "endpoint": "http://127.0.0.1:4319/ask"}
         self.path.write_text(json.dumps(current))
         result = self.inspect()
-        self.assertNotIn(7, result["pending_questions"])
+        self.assertIn(7, result["pending_questions"])
         self.assertEqual(result["questions"][6]["current"]["provider"], "jev_ask")
 
     def test_legacy_openai_provider_requires_new_explicit_consent(self):
@@ -414,7 +414,7 @@ class GuidedAndInventoryTests(unittest.TestCase):
     def test_guided_secret_saved_only_to_vault_not_json(self):
         terminal = io.StringIO()
         terminal.isatty = lambda: True
-        with patch("sys.stdin", terminal), patch("builtins.input", side_effect=["y","1","1"]):
+        with patch("sys.stdin", terminal), patch("builtins.input", side_effect=["y","1","1","n"]):
             with patch.object(secrets, "supported", return_value=True):
                 with patch("getpass.getpass", side_effect=["sk-test-secret","sk-test-secret"]):
                     with patch.object(secrets, "save") as save:
