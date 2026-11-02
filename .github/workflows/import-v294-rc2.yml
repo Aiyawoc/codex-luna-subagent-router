@@ -1,0 +1,53 @@
+name: Import verified RC2 source (temporary)
+on:
+  push:
+    branches: ['import/v294-rc2']
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify transport, apply exact tested source, publish candidate branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=67ab03ce07a3a3a93e73857362bed431bbef4ef7
+          TREE=848c27bc2f4c701d8dca53b40b8b62c7cb0d0a03
+          TARGET=fix/v2.9.4-rc.2-diagnostics
+          test "$(git rev-parse HEAD^)" = "$BASE"
+          test "$GITHUB_REF_NAME" = import/v294-rc2
+          if git ls-remote --exit-code --heads origin "$TARGET" >/dev/null 2>&1; then
+            echo 'Candidate branch already exists; refusing overwrite.' >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import base64, hashlib, lzma, os
+          from pathlib import Path
+          parts = sorted(Path('.ci/rc2-patch').glob('*.b64'))
+          assert [p.name for p in parts] == [f'{i:02}.b64' for i in range(5)]
+          text = b''.join(p.read_bytes() for p in parts)
+          assert len(text) == 27276
+          assert hashlib.sha256(text).hexdigest() == '1479ee98def05d15e3737edbfa6f93c5f50d67bdbfc18912d3cc9aa5b545ab51'
+          packed = base64.b64decode(text, validate=True)
+          assert hashlib.sha256(packed).hexdigest() == '3c172e0656961c3ea750215bf68b7f43e445e47f8cb7029d47b1c61ae27a96bd'
+          patch = lzma.decompress(packed)
+          assert len(patch) == 82629
+          assert hashlib.sha256(patch).hexdigest() == '636061f267328beae785ac6b9c8033ae976f759181bc177a1bc80d187b04fba4'
+          (Path(os.environ['RUNNER_TEMP']) / 'rc2.patch').write_bytes(patch)
+          PY
+          git checkout --detach "$BASE"
+          git apply --check --unidiff-zero "$RUNNER_TEMP/rc2.patch"
+          git apply --index --unidiff-zero "$RUNNER_TEMP/rc2.patch"
+          test "$(git write-tree)" = "$TREE"
+          python tools/verify_manifest.py
+          git diff --cached --check
+          test ! -e .github/workflows/import-v294-rc2.yml
+          test ! -e .ci/rc2-patch
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix: diagnose Decision setup and phases with explicit 30s budgets (v2.9.4-rc.2)'
+          test "$(git rev-parse HEAD^{tree})" = "$TREE"
+          git push origin "HEAD:refs/heads/$TARGET"
+          printf 'Verified source tree: %s\n' "$TREE"
