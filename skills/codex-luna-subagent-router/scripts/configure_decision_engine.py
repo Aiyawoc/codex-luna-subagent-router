@@ -2,6 +2,8 @@
 """Configure optional Shadow decisions, including a reusable secure wizard."""
 from __future__ import annotations
 
+import delegation_policy
+
 import argparse
 import getpass
 import hashlib
@@ -63,7 +65,7 @@ def read_routing(path):
         raise ConfigurationError("routing config is not valid JSON") from exc
     if not isinstance(data, dict) or data.get("schema_version") not in ("2.0", "2.1"):
         raise ConfigurationError("decision helper supports routing schema 2.0/2.1")
-    if data.get("routing_mode") not in ("adaptive", "luna_only"):
+    if data.get("routing_mode") not in delegation_policy.MODES:
         raise ConfigurationError("routing config has an unsupported routing_mode")
     return data
 

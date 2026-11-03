@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.9.5-rc.1: Ownership-aware Adaptive + Radar candidate (2026-11-03)
+
+- 晋升本机开发提交 `ddad15a`：已有 `adaptive` 增强完整工作包委派，观察目标约30%；新增 `adaptive_aggressive` 进一步委派浅层但可完整交付的工作包，观察目标约50%。百分比不进入生产配额控制，也不代表实测达标。
+- 保留 `luna_only`，且两种 adaptive 均支持原本的最低能力、Host精确身份、并发与读写隔离、Conservative校准和Outcome回执。机械查询、micro与显式Lead保留职责不为提高份额而委派。
+- 在已确定 `ready_worker_ids` 后加入可选的 IQ 批次读取/择模；默认关闭，必须取得站方相应集成许可后才能启用，`observe`与`select`均有严格能力、档位、成本和历史失败边界，失败回退原计划。
+- 当前RC不替换用户主Agent、不自动重录Keychain、不开启新的付费 API、也不改变 Decision Shadow 执行权限；完整行为和回退见 `docs/v2.9.5-rc.1-test-guide.md`。
+- 开发阶段通过866项源码测试与macOS ARM64完整包冒烟；四平台RC发行包必须在精确Tag上重新通过发布门禁。自然工作流的30%/50%净用量与质量收益需另外实测。
+
+## 2.9.5-dev.2: Adaptive ownership goals（2026-11-02）
+
+- 主动移交独立分析/实现直接进入adaptive；新增adaptive_aggressive，进一步移交简单但完整的工作包。30%/50%为观察目标，不是用量达标声明或运行时配额。
+- 只读工作区分机械工具与独立分析；同层同档不再单独否决bounded推理所有权。retain、micro、Host、权限、冲突、并发、模型与成本边界不放宽。
+- 配置及所有读取/验证路径共同支持三种模式；切换不重录Key、不动Decision/Radar授权。规划记录策略版本/所有权转换数，不伪造实际用量占比。
+- 继承dev.1雷达代码；本机源码候选，不覆盖生产RC.2或自动开启激进档。
+
+## 2.9.5-dev.1: Delegation-time IQ comparison (unreleased)
+
+- Add optional CodexRadar total-score comparison only after the existing planner confirms ready SubAgents. A ready wave shares one bounded public snapshot; no local-only or already-running task triggers retrieval.
+- Preserve explicit model/effort and capability boundaries, Luna-only, Host checks and verified local failure evidence. Composite score/estimated cost/time can rank authorized candidates; lower effort requires distinct verified local evidence. `observe` preserves routes; `select` changes only authorized route fields.
+- Explicit data-use attestation/configuration, fixed endpoint and schema, no secrets or task data uploaded, bounded cache/refresh and fail-closed deterministic fallback. Separate plan-correlated receipts and read-only report counters.
+- Development candidate only: no production install/config changes, paid API requests, new Worker families, or Stable/Release promotion.
+
 ## 2.9.4-rc.2: 分阶段诊断、离线预检与30秒上限（2026-11-02）
 
 - 新增 `decision_check [request.json]`：不调用 API、不写账本，独立核对生效配置和上下文字段，明确报告 `state.task_scope` 层级错误和六轴枚举错误。配置有效不等于凭据可用；显式 `--check-credential` 才在受控子进程中读取当前凭据，不发送 HTTP 请求。

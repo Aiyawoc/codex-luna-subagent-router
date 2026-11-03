@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import delegation_policy
+
 import argparse
 import json
 import os
@@ -48,7 +50,7 @@ def _read_routing(path: Path) -> dict[str, Any]:
         raise ConfigurationError("routing config root must be an object")
     if value.get("schema_version") not in ("2.0", "2.1"):
         raise ConfigurationError("evidence calibration helper supports routing schema 2.0/2.1 only")
-    if value.get("routing_mode") not in {"luna_only", "adaptive"}:
+    if value.get("routing_mode") not in delegation_policy.MODES:
         raise ConfigurationError("routing config has an unsupported routing_mode")
     return value
 
@@ -80,7 +82,7 @@ def configure(path: Path, mode: str, *, dry_run: bool = False) -> dict[str, Any]
     if mode not in MODES:
         raise ConfigurationError(f"mode must be one of: {', '.join(MODES)}")
     data = _read_routing(path)
-    if mode == "conservative" and data["routing_mode"] != "adaptive":
+    if mode == "conservative" and data["routing_mode"] not in delegation_policy.ADAPTIVE_MODES:
         raise ConfigurationError("conservative evidence calibration is available only in adaptive mode")
     current = data.get("evidence_calibration", "off")
     if current not in MODES:

@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import delegation_policy
+
 import argparse
 import json
 import os
@@ -18,7 +20,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     tomllib = None
 
-ROUTING_MODES = ("luna_only", "adaptive")
+ROUTING_MODES = delegation_policy.MODES
 REQUEST_USER_INPUT_FEATURE = "default_mode_request_user_input"
 START_MARKER = "<!-- codex-luna-subagent-router:delegation-authorization:start -->"
 END_MARKER = "<!-- codex-luna-subagent-router:delegation-authorization:end -->"
@@ -424,7 +426,7 @@ def configure(
     if routing_scope not in {"user", "project", "none"}:
         raise ConfigurationError("routing_scope must be user, project, or none")
     if routing_mode not in {*ROUTING_MODES, "none"}:
-        raise ConfigurationError("routing_mode must be luna_only, adaptive, or none")
+        raise ConfigurationError("routing_mode must be luna_only, adaptive, adaptive_aggressive, or none")
     if (routing_scope == "none") != (routing_mode == "none"):
         raise ConfigurationError("routing_scope and routing_mode must both be none, or both select a managed routing config")
 
@@ -552,13 +554,13 @@ def _parser() -> argparse.ArgumentParser:
         "--routing-scope",
         choices=("user", "project", "none"),
         default="none",
-        help="Where to write the two-mode cost-aware routing config.",
+        help="Where to write the three-mode cost-aware routing config.",
     )
     parser.add_argument(
         "--routing-mode",
-        choices=("luna_only", "adaptive", "none"),
+        choices=(*ROUTING_MODES, "none"),
         default="none",
-        help="luna_only for maximum economy, adaptive for cheapest-sufficient automatic routing.",
+        help="luna_only for economy; adaptive ownership goal ~30%; adaptive_aggressive ~50%; evaluation goals, not usage quotas.",
     )
     parser.add_argument("--project-root", help="Required by any project-scoped choice.")
     parser.add_argument(

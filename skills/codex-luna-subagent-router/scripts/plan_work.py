@@ -8,6 +8,7 @@ from pathlib import Path
 import route_advisor as advisor
 import outcome_store as store
 import configure_subagent_limit as concurrency
+import delegation_policy
 
 RETAIN_REASONS = {"critical_path", "context_not_transferable", "permission_boundary", "external_side_effect", "already_completed"}
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$")
@@ -65,7 +66,7 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
     tasks = payload.get("tasks")
     if not isinstance(tasks, list) or not 1 <= len(tasks) <= 32:
         raise advisor.AdvisorError("plan accepts 1..32 bounded tasks, not 32 concurrent Workers")
-    if routing_mode not in ("adaptive", "luna_only"):
+    if routing_mode not in delegation_policy.MODES:
         raise advisor.AdvisorError("invalid routing_mode")
     if not isinstance(open_workers, int) or isinstance(open_workers, bool) or open_workers < 0:
         raise advisor.AdvisorError("open-workers must be the current materialized PendingInit/Running Worker count")
@@ -73,7 +74,7 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         raise advisor.AdvisorError("runtime-health must be unknown, healthy, or degraded")
     limit = session_limit(max_workers, project_root)
     by_id, decisions, groups = {}, [], []
-    allowed = {"task_id", "task_family", "axes", "depends_on", "write_paths", "read_paths", "batch_key", "retain_reason", "independent_review"}
+    allowed = {"task_id", "task_family", "axes", "depends_on", "write_paths", "read_paths", "batch_key", "retain_reason", "independent_review", "work_package"}
     for t in tasks:
         if not isinstance(t, dict) or set(t) - allowed:
             raise advisor.AdvisorError("task contains unsupported fields; do not include prompt text")
@@ -84,6 +85,8 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         for key in ("task_family", "axes"):
             if key not in t:
                 raise advisor.AdvisorError(f"task missing {key}")
+        advisor._validate_axes(t["axes"])
+        delegation_policy.profile(t)
         normalized_paths(t.get("write_paths", []))
         normalized_paths(t.get("read_paths", []))
         if t.get("retain_reason") is not None and t["retain_reason"] not in RETAIN_REASONS:
@@ -155,6 +158,7 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
             and axes["verifiability"] == "yes"
             and axes["failure_cost"] != "high"
             and axes["context_volume"] != "high"
+            and (routing_mode == "luna_only" or delegation_policy.profile(task)["kind"] == "mechanical")
         )
 
     def has_local_tool_peer(tid):
@@ -184,8 +188,8 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
 
     for tid, t in by_id.items():
         rec = advisor.recommend(task_family=t["task_family"], axes=t["axes"], lead_model=lead_model, lead_effort=lead_effort,
-                                calibration=calibration if routing_mode == "adaptive" else "off", registry=registry, scope=scope,
-                                sol_medium_supported=sol_medium_supported is True and routing_mode == "adaptive" and not t.get("independent_review"))
+                                calibration=calibration if routing_mode in delegation_policy.ADAPTIVE_MODES else "off", registry=registry, scope=scope,
+                                sol_medium_supported=sol_medium_supported is True and routing_mode in delegation_policy.ADAPTIVE_MODES and not t.get("independent_review"))
         retained = t.get("retain_reason")
         decision, reason = rec["decision"], rec["selection_reason"]
         trigger = rec.get("delegation_trigger")
@@ -226,6 +230,16 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
             reason = retained or "already_completed"
             decision, trigger, lead_only_reason = "lead_only", None, reason
             execution_shape, execution_reason = "local_serial", reason
+        elif t.get("work_package", {}).get("handoff_ready") is False:
+            decision, reason = "lead_only", "handoff_not_ready; prepare only the missing ownership boundary, not the whole implementation"
+            trigger, lead_only_reason = None, reason
+            execution_shape, execution_reason = "local_serial", reason
+        elif decision == "lead_only" and execution_shape == "local_serial":
+            promoted = delegation_policy.promotion(t, rec, routing_mode)
+            if promoted is not None:
+                trigger, reason = promoted
+                decision, lead_only_reason = "delegate", None
+                execution_shape, execution_reason = "subagent", reason
         elif decision == "delegate":
             execution_shape, execution_reason = "subagent", reason
         item = dict(
@@ -242,6 +256,7 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
             minimum_capability=rec["minimum_capability"],
             route_direction=rec["route_direction"],
             history_rule=rec["history_rule"],
+            work_package=delegation_policy.profile(t),
         )
         decisions.append(item)
         if decision != "delegate":
@@ -262,6 +277,9 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         group["read_paths"] += normalized_paths(t.get("read_paths", []))
         group["write_paths"] += normalized_paths(t.get("write_paths", []))
         group["depends_on"] = sorted(set(group["depends_on"]) | graph[tid])
+        # Phase hints do not enlarge the packet's declared path/permission scope.
+        group["owned_stages"] = sorted(set(group.get("owned_stages", ())) |
+                                       set(delegation_policy.profile(t)["stages"]))
         item["worker_id"] = group["worker_id"]
     # Retained/active ownership matters just as much as Worker-vs-Worker ownership.
     retained_work = [d["task_id"] for d in decisions if d["decision"] != "delegate" and d["task_id"] not in completed]
@@ -312,6 +330,7 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         if d["decision"] == "lead_only" and d["execution_shape"] == "local_serial" and d["reason"] != "already_completed"
     ]
     return dict(version=1, routing_mode=routing_mode, lead_model=lead_model, lead_effort=lead_effort,
+                delegation_policy=delegation_policy.describe(routing_mode),
                 effective_wave_limit=limit, open_workers=open_workers,
                 open_workers_semantics="materialized_pendinginit_or_running_only",
                 runtime_health=runtime_health, effective_runtime_health=effective_runtime_health,

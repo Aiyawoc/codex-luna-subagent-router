@@ -95,6 +95,7 @@ def _turn_summary(turn_rows):
 
 
 def collect(scope_id, project_root=None):
+    import radar_selection
     registry = store.default_registry_path()
     usage_path = token_usage.default_usage_path(registry)
     outcomes = route_advisor.stats(registry, scope=scope_id)
@@ -153,6 +154,7 @@ def collect(scope_id, project_root=None):
         "turns": {"summary": _turn_summary(turns), "records": turns},
         "planning": planning,
         "decisions": decisions,
+        "radar_selection": radar_selection.statistics(registry, scope_id),
         "host_shadow": host_shadow,
         "host_shadow_readiness": host_shadow_readiness,
         "route_economics": economics,
@@ -241,6 +243,7 @@ def markdown(payload):
     data = payload["data"]
     outcomes, subagents, turns = data["outcomes"], data["subagents"], data["turns"]["summary"]
     planning, decisions = data.get("planning", {}), data.get("decisions", {})
+    radar = data.get("radar_selection", {})
     host_shadow = data.get("host_shadow", {})
     host_shadow_readiness = data.get("host_shadow_readiness", {})
     economics = data.get("route_economics", {})
@@ -320,6 +323,10 @@ def markdown(payload):
         f"| subagent | {planning.get('execution_shapes', {}).get('subagent', 0)} |",
         f"| Planned Worker | {planning.get('planned_workers', 0)} |",
         f"| Health probe | {planning.get('health_probes', 0)} |",
+        f"| 独立所有权新增委派 | {planning.get('ownership_promotions', 0)} |",
+        "",
+        "策略分布：" + json.dumps(planning.get("routing_modes", {}), ensure_ascii=False, sort_keys=True),
+        "adaptive约30% / adaptive_aggressive约50%仅为用量观察目标；不能用规划次数或Worker数量代替实际主子净增量，未计算时保持未知。",
         "",
         "## Decision Shadow",
         "",
@@ -339,6 +346,16 @@ def markdown(payload):
         "跳过原因：" + json.dumps(decisions.get('checkpoint_events', {}).get('skip_reasons', {}), ensure_ascii=False, sort_keys=True),
         "",
         "仅统计被观察到的规划入口；attempted 不等于计费请求。规划关联不证明 Desktop 自然触发，分类差异不等于判断质量。",
+        "",
+        "## Radar 模型比较",
+        "",
+        f"| 规划比较记录 | {radar.get('records', 0)} |",
+        "|---|---:|",
+        f"| 数据读取尝试 | {radar.get('fetch_attempts', 0)} |",
+        f"| 已调整的计划 | {radar.get('changed_plans', 0)} |",
+        "原因：" + json.dumps(radar.get('reasons', {}), ensure_ascii=False, sort_keys=True),
+        "",
+        "仅在已确认需要派遣时比较；评分不是代码成功率，费用是API等价估算而非订阅账单。",
         "",
         "## Native Host Shadow",
         "",

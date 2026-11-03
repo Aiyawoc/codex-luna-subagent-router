@@ -2,6 +2,8 @@
 """Three-tier advice, receipt-based outcome collection and read-only statistics."""
 from __future__ import annotations
 
+import delegation_policy
+
 import argparse
 import errno
 import json
@@ -381,6 +383,8 @@ def _parser():
                      help="unknown probes one real Worker first; healthy releases the ready wave; degraded holds new spawns.")
     sub.add_argument("--no-decision-api", action="store_true",
                      help="Skip optional Decision API for this plan without changing saved settings.")
+    sub.add_argument("--no-radar", action="store_true",
+                     help="Skip optional public IQ fetch/selection without changing saved settings.")
     return p
 
 
@@ -405,10 +409,10 @@ def main(argv=None):
             scope, root = store.resolve_scope(args.project_root, args.global_scope)
         config = store.effective_config(root) if args.command in ("begin", "record", "recommend", "plan") else {}
         calibration = getattr(args, "calibration", None) or config.get("evidence_calibration", "off")
-        if args.command in ("begin", "record") and (config.get("routing_mode") != "adaptive" or calibration != "conservative"):
+        if args.command in ("begin", "record") and (config.get("routing_mode") not in delegation_policy.ADAPTIVE_MODES or calibration != "conservative"):
             raise AdvisorError("collection is off; explicitly enable adaptive + conservative in effective routing.json")
         if args.command == "recommend":
-            if config.get("routing_mode") != "adaptive":
+            if config.get("routing_mode") not in delegation_policy.ADAPTIVE_MODES:
                 raise AdvisorError("effective routing mode is not adaptive; use the Luna-only policy")
             output = recommend(task_family=args.task_family, axes=_axes_from_args(args), lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, sol_medium_supported=args.sol_medium_supported)
         elif args.command in ("begin", "record"):
@@ -457,6 +461,12 @@ def main(argv=None):
             payload = {k: v for k, v in request.items() if k != "decision_context"}
             output = plan_work(payload, lead_model=args.lead_model, lead_effort=args.lead_effort, calibration=calibration, registry=path, scope=scope, routing_mode=config.get("routing_mode", "luna_only"), max_workers=plan_limit(config, args.max_workers), open_workers=args.open_workers, project_root=root, runtime_health=args.runtime_health, sol_medium_supported=args.sol_medium_supported)
             output["plan_id"] = uuid.uuid4().hex
+            if "radar_selection" in config or args.no_radar:
+                import radar_selection
+                output = radar_selection.apply(
+                    output, config, registry=path, scope=scope, calibration=calibration,
+                    caller_disabled=args.no_radar, sol_medium_supported=args.sol_medium_supported,
+                )
             _record_planning_observation(output, path, scope, root)
             try:
                 import decision_plan

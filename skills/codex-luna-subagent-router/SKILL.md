@@ -1,11 +1,11 @@
 ---
 name: codex-luna-subagent-router
-description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存在能力差距或需要独立复核时使用；支持 luna_only/adaptive、整组任务规划，以及本 Skill 安装、升级和配置。
+description: 成本优先的 Codex SubAgent 路由。支持 luna_only/adaptive/adaptive_aggressive、独立工作包委派、整组规划与安装配置。
 ---
 
 # Agent Router
 
-可靠完成、降低成本；主 Agent 保留用户选择的模型/effort，遵守权限与精确绑定。
+成本优先；主Agent模型/effort不变，遵守权限及精确绑定。
 
 ## 入口
 
@@ -14,38 +14,41 @@ description: 成本优先的 Codex SubAgent 路由。在委派有净收益、存
 安装／升级按 `references/codex-guided-install.md` 盘点并询问；第七项选供应商、密钥与自动调用，默认关闭。配置用 `configure_decision_engine --scope user --open-terminal`；先复用密钥，不进聊天／配置。项目 `routing.json` 优先，缺失按 `luna_only`；校准缺失或 `off` 不读历史。
 
 - `luna_only`：只用 `gpt-6-luna`；能力不足由 Lead 接管。
-- `adaptive`：`gpt-6-luna` → `gpt-6.1-sol` → `gpt-6-astra`；Terra 不参与新自动路由，`gpt-6-sol` 仅历史兼容。
+- `adaptive`：更早移交独立分析/实现，观察目标约30%；`adaptive_aggressive`：更积极移交完整实施/验证，目标约50%。比例不是配额，不为凑数创建Worker，见 `references/adaptive-ownership.md`。
+- 两档共用 `gpt-6-luna` → `gpt-6.1-sol` → `gpt-6-astra` 白名单，不增加并发/权限，不引入Terra/旧型号。
 - Sol 不得用旧 `gpt-5.6` alias 做自动 spawn；精确绑定不可证明时 `lead_only`，不静默替换。
 
 自动 Shadow 须开启；请求带真实 `decision_context`，先 `decision_check request.json` 离线预检，再 `route_advisor plan`，不另调API。详见 `references/decision-layer.md`；缺证据跳过，观察不改权限或路由。
 
 ## Adaptive Capability Gap Gate + Advisor
 
-在 `lead_only` 前检查能力差距。Lead 分类子目标，使用本地 `scripts/route_advisor.py`：零模型调用、零网络调用。
+先用 `scripts/route_advisor.py` 分类：零模型调用、零网络调用；规划中的显式可选观察/雷达例外。
 
 分类轴：`task_kind / task_scope / reasoning_depth / verifiability / failure_cost / context_volume`。task family 是可复用的非敏感类别。
 
-清晰局部实现、机械检查、普通 scan/read-heavy 用 Luna；高歧义多步 debug、跨模块因果、race / concurrency / lifecycle / ordering、困难 invariant 用 Sol；架构级高歧义与高失败代价再评估 Astra。复杂因果任务不得伪标为廉价 leaf/scan。
+清晰局部实现与机械检查用Luna；跨模块因果、race/concurrency/lifecycle/ordering用Sol；高风险架构评估Astra。复杂因果不得伪标廉价leaf/scan。
 
 文件数不代表能力差距。`Luna max` 仍是 Luna；当前层 max 向上时目标 effort 至少 medium。明显 gap 不先浪费一次低阶 attempt。Advisor 输入失效先修正；工具不可用则读 `references/routing-policy.md` 静态回退，不因脚本故障购买更贵模型。
 
 ## 整组任务规划
 
-非 micro 在 `lead_only` 前先读 `work-planning.md` 做 Delegation Opportunity Scan；发现可独立拥有且边际净收益为正的工作就列为候选，“Lead 自己能做”不是理由。
+非 micro 在 `lead_only` 前按 `work-planning.md` 扫描委派机会；明确目标/边界后就移交，不先替Worker完成调查。机械工具留Lead，分析不能冒充机械查询。
 
 多候选用 `route_advisor.py plan` 生成 RoutePlan 2.1；共享上下文可合并，独立任务同波再 wait。复杂任务 0 Worker 须有 `lead_only_reason`；不设总配额。
 
-Astra/Sol Lead 不重复廉价 Worker 的工作；关键路径、权限及不可交接上下文留 Lead。已派目标不重复实现，规划不等于 spawn。
+仅ready Worker可读雷达选型，见 `references/radar-selection.md`；仍须核验Host身份。
+
+Lead保留决策和验收，不重复Worker工作。优先级不等于必须Lead执行；显式retain边界不变，规划不等于spawn。
 
 ## 采集闭环
 
-仅 `adaptive + evidence_calibration=conservative` 使用。Worker Materialized 后 `begin` 固化 scope、六轴、请求路由与 task ID 的哈希回执；未创建成功的 spawn 不留 pending receipt。
+两档adaptive均仅在 `evidence_calibration=conservative` 使用历史。Worker Materialized 后 `begin` 固化scope、六轴、路由与task ID哈希；未创建成功不留pending回执。
 
 验收后、close 前 `finalize`。身份未知、阻塞、取消、early stop 或 Lead 返工只能 `partial`；精确 model+effort 可验证且验收通过才 `verified_pass`，明确失败且身份已知才 `verified_fail`。profile 名称不等于身份，禁止伪造证据。
 
-finalize 幂等，冲突报错；retry 用新 task ID/回执。记录失败须披露，不阻塞 stop/close。结束用 `stats` 检查 pending，不猜测补写；跳过 begin 不产生质量回执。
+finalize幂等，retry用新task ID/回执。记录失败披露但不阻塞stop/close；结束用`stats`查pending，不猜测补写；跳过begin不产生回执。
 
-只存受控 metadata；不得记录 prompt、正文、源码、完整日志、账号/密钥。summary 也需去敏。详见 `references/outcome-collection.md`。
+只存脱敏metadata；不得记录 prompt、源码、正文、完整日志或账号密钥。见 `references/outcome-collection.md`。
 
 ## Token 统计
 

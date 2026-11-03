@@ -29,6 +29,7 @@ jobs:
           VERSION=$(cat skills/codex-luna-subagent-router/VERSION)
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]
           [[ "$GITHUB_REF_NAME" == "publish/v$VERSION" ]]
+          [[ -f "docs/v$VERSION-release-notes.md" ]] || { echo 'Missing exact-version RC release notes' >&2; exit 1; }
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v5
         with:
@@ -104,6 +105,6 @@ jobs:
             exit 1
           fi
           gh release create "$TAG" --target "$TARGET" --title "$TAG" --prerelease --draft \
-            --notes "Agent Router $TAG release candidate. Feature-frozen for real Host capability/event and benchmark field acceptance. Native evidence, benchmark review and Decision providers remain non-authoritative. Includes complete packages plus opt-in local-marketplace plugin packages. See CHANGELOG.md and docs/v2.9-roadmap.md for the current acceptance scope."
+            --notes-file "docs/v$VERSION-release-notes.md"
           gh release upload "$TAG" packages/*
           gh release edit "$TAG" --draft=false

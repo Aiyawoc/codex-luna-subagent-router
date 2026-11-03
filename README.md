@@ -1,5 +1,7 @@
 # Agent Router
 
+测试候选 **v2.9.5-rc.1**：`adaptive` 主动移交完整工作包，观察目标约30%；新增 `adaptive_aggressive` 面向约50%。两者都是验收目标而非自动用量配额，不扩大并发或自动使用更贵模型。见[策略说明](docs/v2.9.5-adaptive-ownership.md)及[本机升级验收](docs/v2.9.5-rc.1-test-guide.md)。
+
 **简体中文** | [English](README.en.md)
 
 **保持主 Agent 不变，把适合的子任务交给成本更低、但足够完成任务的 Worker。**
@@ -8,7 +10,7 @@
 
 当前稳定版：[**v2.9.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.3) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
-开发候选：**v2.9.4-rc.2** 将有预算、可去重的 Decision Shadow 接入正常规划入口，并输出可关联的触发/跳过证据。自动调用须明确开启，旧配置不会静默产生费用；仍不改变 Worker 路由。见 [接入与验收](docs/v2.9.4-shadow-checkpoints.md)。
+本RC继承 **v2.9.4-rc.2** 的 Decision Shadow 正常规划接入和30秒诊断边界；原配置仍须显式开启，Shadow不改变Worker路由。见[接入与验收](docs/v2.9.4-shadow-checkpoints.md)。
 
 RC.2 新增离线配置/上下文预检、可见终端配置、分阶段故障诊断与30秒上限；配置写入、凭据可读、API成功分开验收。见 [诊断与配置](docs/v2.9.4-rc.2-diagnostics.md)。
 

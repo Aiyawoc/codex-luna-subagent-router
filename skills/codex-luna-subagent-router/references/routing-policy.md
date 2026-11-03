@@ -1,5 +1,10 @@
 # 成本优先路由策略
 
+## 委派力度与能力层级分开
+
+`adaptive`和`adaptive_aggressive`共享本文模型/档位与失败约束；区别在工作包所有权，观察目标分别约30%/50%，不是实际用量或自动额度。完整执行形态用正常plan入口；单独recommend只提供模型基准。详见`adaptive-ownership.md`。
+
+
 ## 目标与三层
 
 ExpectedCost = 首次模型成本 + 失败/重试成本 + 上下文复制成本 + Lead 集成/验证成本。

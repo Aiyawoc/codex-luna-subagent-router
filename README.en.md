@@ -1,5 +1,7 @@
 # Agent Router
 
+Release candidate **v2.9.5-rc.1**: enhanced ownership delegation directly in adaptive (~30% evaluation goal), plus adaptive_aggressive (~50%). Goals are not quotas or measured achievements; model authority and concurrency limits are unchanged. See [policy notes](docs/v2.9.5-adaptive-ownership.md).
+
 [简体中文](README.md) | **English**
 
 **Keep the Lead model selected by the user, and delegate suitable subtasks to lower-cost Workers that are still sufficient for the job.**
@@ -8,7 +10,7 @@
 
 Current stable release: [**v2.9.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.3) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-Development candidate: **v2.9.4-rc.2** attaches explicitly opted-in, budgeted Decision Shadow checkpoints to the normal planner CLI, with correlated trigger/skip evidence. Existing configurations do not silently start automatic paid calls; Worker routing stays unchanged. See [integration and acceptance](docs/v2.9.4-shadow-checkpoints.md).
+Release candidate **v2.9.5-rc.1** strengthens `adaptive` delegation ownership (observational ~30% goal) and adds `adaptive_aggressive` (observational ~50% goal), without worker quotas, automatic model upgrades, or changed concurrency limits. Includes the opt-in v2.9.4-rc.2 Decision Shadow integration. See the [upgrade and test guide](docs/v2.9.5-rc.1-test-guide.md) and [ownership policy](docs/v2.9.5-adaptive-ownership.md).
 
 RC.2 separates offline configuration/context checks, visible credential setup, safe provider phase diagnostics and up-to-30-second budgets. Configuration, credential readability and API success are separate gates. See [diagnostics and setup](docs/v2.9.4-rc.2-diagnostics.md).
 

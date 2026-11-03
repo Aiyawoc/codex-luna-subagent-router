@@ -2,6 +2,8 @@
 """Read-only install preflight and seven-question setup inventory."""
 from __future__ import annotations
 
+import delegation_policy
+
 import argparse
 import json
 import os
@@ -144,8 +146,9 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
     add(1, "delegation", current_delegation, fresh or bool(stale_scopes) or not scopes,
         delegation_question)
     mode = routing.get("routing_mode")
-    add(2, "routing_mode", mode, fresh or mode not in ("adaptive", "luna_only"),
-        "自动 Worker 可以使用哪些模型层级？adaptive 按需在 Luna / Sol / Astra 间升降级；luna_only 把自动 Worker 限制在 Luna。")
+    add(2, "routing_mode", mode, fresh or mode not in delegation_policy.MODES,
+        "选择委派策略：luna_only 保持 Luna 限制；adaptive 更早移交独立工作包，观察目标约30%；"
+        "adaptive_aggressive 更积极移交完整实施与验证，观察目标约50%。两档 adaptive 使用同一模型白名单和并发上限；比例不是强制配额，也不保证节省。")
     cap_layers = []
     for layer_name, layer in (("user", config), ("project", local)):
         info = concurrency.analyze_config(layer)
@@ -169,7 +172,7 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
     calibration = routing.get("evidence_calibration")
     calibration_applicable = mode != "luna_only" or fresh
     add(4, "evidence_calibration", calibration, fresh or calibration not in ("off", "conservative"),
-        "如果路由模式为 adaptive，是否允许 Router 根据已验证历史结果保守优化未来类似任务的路由？选择 conservative（推荐）或 off；luna_only 不适用。",
+        "如果路由模式为 adaptive 或 adaptive_aggressive，是否允许 Router 根据已验证历史结果保守优化未来类似任务的路由？选择 conservative（推荐）或 off；luna_only 不适用。",
         applicable=calibration_applicable)
     token_mode = routing.get("token_accounting")
     accounting_scope = routing.get("token_accounting_scope")

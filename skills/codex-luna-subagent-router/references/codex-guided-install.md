@@ -1,5 +1,10 @@
 # Agent Router · Codex 引导安装与升级
 
+## 委派策略更新
+
+Q2现有三项：`luna_only`保留原边界；`adaptive`直接包含主动移交独立工作包，观察目标约30%；`adaptive_aggressive`更积极移交完整工作包，目标约50%。两档共用模型白名单、能力下限和并发上限，比例不保证达成。升级保留已有模式名，不自动切激进档；需告知adaptive行为增强。历史校准适用于两档adaptive。
+
+
 安装、升级是线性任务，不创建 Worker。v2.7.0 的 Core Optimization 不依赖 Decision Engine；正式 Release 前仅使用明确选择的 PR/分支产物。
 
 ## 必须全量更新
@@ -96,7 +101,7 @@ helper 直接安全合并 `config.toml`、重新解析 TOML 并验证有效 SubA
 
 **作用：允许 Router 使用过去已经真实验收过的 Worker 结果，保守调整以后相似任务的模型/effort；不是自由学习，也不会根据一次成功就降档。**
 
-仅 adaptive 提供 **`conservative`（推荐）** / off。luna_only 时本项不适用。升级模式保留已有明确设置；全新安装在用户选择 adaptive 后重新询问。
+两档 adaptive 均提供 **`conservative`（推荐）** / off。luna_only 时本项不适用。升级模式保留已有明确设置；全新安装在用户选择 adaptive 后重新询问。
 
 ```bash
 ./bin/router configure_evidence_calibration.py --scope user --mode conservative

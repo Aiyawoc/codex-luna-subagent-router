@@ -14,6 +14,7 @@ COMMANDS = {
     'host_adapter', 'host_shadow', 'host_transport', 'route_economics', 'cost_review',
     'plugin_control', 'plugin_hook', 'system_diagnostics', 'host_capabilities',
     'app_server_events', 'native_execution', 'benchmark_store', 'model_bindings',
+    'configure_radar_selection',
 }
 ALIASES = {'diagnostics': 'system_diagnostics'}
 

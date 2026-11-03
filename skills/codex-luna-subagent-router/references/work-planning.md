@@ -1,5 +1,10 @@
 # 整组任务规划与一致委派
 
+## v2.9.5 所有权策略
+
+`adaptive`本身面向约30%的委派用量观察目标；新增`adaptive_aggressive`面向约50%。两者不是配额，不改变模型/权限/并发上限。按`adaptive-ownership.md`在最小调查后移交完整bounded包；同层同档不自动否决所有权收益。机械只读任务可留工具并行，需要分析的任务不因只读收回Lead。已有retain_reason仍是显式保留；优先级本身用依赖表达。
+
+
 目标是减少昂贵 Lead 的总工作量，不是凑 Worker 数。Astra high 主要派 Luna 本身不是错误；当实际子目标需要复杂因果推理时，必须按能力选 Sol，不能仅凭实现/扫描标签降档。
 
 ## Delegation Opportunity Scan
@@ -21,7 +26,7 @@
 v2.7 起，“可并行”不再自动等于“应该创建 SubAgent”。planner 对每个候选先区分：
 
 - `local_serial`：micro、关键路径、共享状态或转交成本高于收益，由 Lead 串行完成。
-- `local_parallel_tools`：至少两个彼此独立、只读、可验证、非 high failure cost、非 deep/high-context 的 scan / verification / leaf 任务。由 Lead 在同一推理上下文中使用原生并行工具调用，不创建新模型上下文。
+- `local_parallel_tools`：至少两个彼此独立、只读、可验证的机械 scan / verification / leaf 任务；在两档adaptive中需要 shallow + low context，不能包含独立分析。由 Lead 在同一推理上下文中使用原生并行工具调用，不创建新模型上下文。
 - `subagent`：需要独立 reasoning ownership、capability gap、context isolation、independent review 或真正独立实现的工作。
 
 `local_parallel_tools` 只优化工具级并行，不把深度分析、独立复核或高上下文扫描偷回 Lead。单个只读 scan 仍可因廉价 Worker 路由收益而委派；只有形成至少两个合格的本地并行候选时才启用该形态。

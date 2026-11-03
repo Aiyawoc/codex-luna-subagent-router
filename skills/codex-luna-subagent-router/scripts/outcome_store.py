@@ -1,6 +1,8 @@
 """Local receipts and JSONL outcomes. No engine hooks or model/network calls."""
 from __future__ import annotations
 
+import delegation_policy
+
 import hashlib
 import json
 import os
@@ -105,7 +107,7 @@ def effective_config(root=None):
     for path in paths:
         if path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(data, dict) or data.get("routing_mode") not in ("adaptive", "luna_only"):
+            if not isinstance(data, dict) or data.get("routing_mode") not in delegation_policy.MODES:
                 raise StoreError("invalid routing config")
             if data.get("evidence_calibration", "off") not in ("off", "conservative"):
                 raise StoreError("invalid evidence calibration")

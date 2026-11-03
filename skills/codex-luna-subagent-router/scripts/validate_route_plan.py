@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import delegation_policy
+
 import argparse
 import json
 import re
@@ -18,7 +20,7 @@ import sol_policy
 import outcome_store
 
 SUPPORTED_SCHEMA_VERSIONS = ("2.0", "2.1")
-ALLOWED_ROUTING_MODES = ("luna_only", "adaptive")
+ALLOWED_ROUTING_MODES = delegation_policy.MODES
 ALLOWED_LEVELS = ("low", "medium", "high", "xhigh", "max")
 ALLOWED_LEAD_LEVELS = ("none",) + ALLOWED_LEVELS
 ALLOWED_SURFACES = ("native_subagent", "app_thread")
@@ -328,7 +330,7 @@ def validate_plan(data: Any) -> list[str]:
             if routing_mode == "luna_only" and model != "gpt-6-luna":
                 errors.append(f'{path}.model: luna_only mode requires "gpt-6-luna" unless user explicitly overrides')
             legacy_v20_model = schema_version == "2.0" and model in {m for m, _ in LEGACY_PROFILE_BY_ROUTE}
-            if routing_mode == "adaptive" and model not in ADAPTIVE_MODELS and not legacy_v20_model:
+            if routing_mode in delegation_policy.ADAPTIVE_MODES and model not in ADAPTIVE_MODELS and not legacy_v20_model:
                 errors.append(f"{path}.model: adaptive mode must use an approved built-in model")
 
         if not _is_nonempty_string(model):

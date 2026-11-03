@@ -165,7 +165,7 @@ class PlanningDelegationTests(unittest.TestCase):
         )
         self.assertEqual(result["ready_worker_ids"], ["debug-one", "debug-two"])
 
-    def test_single_same_tier_task_can_still_remain_with_lead(self) -> None:
+    def test_single_same_tier_reasoning_package_can_be_delegated(self) -> None:
         payload = {
             "version": 1,
             "tasks": [
@@ -191,9 +191,9 @@ class PlanningDelegationTests(unittest.TestCase):
                 open_workers=0,
             )
         decision = result["decisions"][0]
-        self.assertEqual(decision["decision"], "lead_only")
-        self.assertIsNone(decision["delegation_trigger"])
-        self.assertIn("no clear delegation benefit", decision["lead_only_reason"])
+        self.assertEqual(decision["decision"], "delegate")
+        self.assertEqual(decision["delegation_trigger"], "bounded_ownership")
+        self.assertIsNone(decision["lead_only_reason"])
 
 
 class RegistryTests(unittest.TestCase):

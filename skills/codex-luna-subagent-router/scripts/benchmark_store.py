@@ -26,7 +26,7 @@ WORKLOADS = (
     "worker-reuse",
     "interrupt-isolation",
 )
-VARIANTS = ("host_default", "router_luna_only", "router_adaptive")
+VARIANTS = ("host_default", "router_luna_only", "router_adaptive", "router_adaptive_aggressive")
 OUTCOMES = ("pass", "fail", "incomplete")
 EVIDENCE = ("full", "partial", "unknown")
 PRIMITIVES = (

@@ -1,6 +1,8 @@
 """Sanitized planner observations for v2.7 execution-shape/runtime-health reporting."""
 from __future__ import annotations
 
+import delegation_policy
+
 from collections import Counter
 from pathlib import Path
 import uuid
@@ -30,7 +32,7 @@ def from_plan(plan, scope_id):
     action = plan.get("runtime_health_action")
     if action not in ACTIONS:
         raise store.StoreError("plan contains an unknown runtime health action")
-    return {
+    row = {
         "schema_version": VERSION,
         "plan_id": plan.get("plan_id") or uuid.uuid4().hex,
         "scope_id": scope_id,
@@ -50,6 +52,15 @@ def from_plan(plan, scope_id):
         "health_probe": plan.get("health_probe_worker_id") is not None,
         "recorded_at": store.timestamp(),
     }
+    policy = plan.get("delegation_policy")
+    if policy is not None:
+        if policy != delegation_policy.describe(plan.get("routing_mode")):
+            raise store.StoreError("invalid delegation policy metadata")
+        row["delegation_policy_version"] = policy["version"]
+        row["ownership_promotions"] = sum(
+            d.get("delegation_trigger") in delegation_policy.OWNERSHIP_TRIGGERS
+            for d in plan.get("decisions", []))
+    return row
 
 
 def validate(row):
@@ -60,13 +71,21 @@ def validate(row):
         "runtime_health", "effective_runtime_health", "runtime_health_action",
         "health_probe", "recorded_at",
     }
-    if not isinstance(row, dict) or set(row) != required or row.get("schema_version") != VERSION:
+    optional = {"delegation_policy_version", "ownership_promotions"}
+    if (not isinstance(row, dict) or not required.issubset(row)
+            or set(row) - required - optional or row.get("schema_version") != VERSION):
         raise store.StoreError("invalid planning observation schema")
+    if set(row) & optional:
+        if (not optional.issubset(row) or row.get("delegation_policy_version") != delegation_policy.VERSION
+                or type(row.get("ownership_promotions")) is not int
+                or type(row.get("task_count")) is not int
+                or not 0 <= row["ownership_promotions"] <= row["task_count"]):
+            raise store.StoreError("invalid ownership policy observation")
     if not isinstance(row["plan_id"], str) or len(row["plan_id"]) != 32:
         raise store.StoreError("invalid plan id")
     if not isinstance(row["scope_id"], str) or not (row["scope_id"] == "global" or row["scope_id"].startswith("project-")):
         raise store.StoreError("invalid planning scope")
-    if row["routing_mode"] not in ("adaptive", "luna_only"):
+    if row["routing_mode"] not in delegation_policy.MODES:
         raise store.StoreError("invalid planning routing mode")
     if row["runtime_health"] not in ("unknown", "healthy", "degraded") or row["effective_runtime_health"] not in ("unknown", "healthy", "degraded"):
         raise store.StoreError("invalid runtime health")
@@ -115,6 +134,12 @@ def _statistics_rows(rows, invalid, scope=None):
         "ready_workers": sum(r["ready_workers"] for r in rows),
         "health_probes": sum(1 for r in rows if r["health_probe"]),
         "runtime_health_actions": dict(actions),
+        "routing_modes": dict(Counter(row["routing_mode"] for row in rows)),
+        "policy_version_counts": dict(Counter(row.get("delegation_policy_version", "legacy") for row in rows)),
+        "ownership_promotions": sum(row.get("ownership_promotions", 0) for row in rows),
+        "target_usage_shares": dict(delegation_policy.TARGET_SHARES),
+        "observed_usage_share": None,
+        "share_interpretation": "30%/50% are evaluation goals, not measured usage, Worker counts or enforced quotas.",
         "invalid_planning_rows": invalid,
         "latest_recorded_at": max((r["recorded_at"] for r in rows), default=None),
     }

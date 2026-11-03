@@ -1,5 +1,10 @@
 # Compact Worker 任务包
 
+## 工作包所有权
+
+两档adaptive尽早交出可验收结果，不让Lead先完成全部探索再委派。一个叶子Worker可拥有同一目标的调查、实现、测试及局部修正；planner的work_package/owned_stages只作范围内阶段提示，不扩展权限或强迫无必要阶段。独立复核不与实现合并。见`adaptive-ownership.md`。
+
+
 目标：给 Worker **足够完成任务的最少上下文**。不要为了形式填空字段或复制 Lead 已读过的大段内容。
 
 ## 人类可读
