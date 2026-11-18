@@ -15,6 +15,7 @@ COMMANDS = {
     'plugin_control', 'plugin_hook', 'system_diagnostics', 'host_capabilities',
     'app_server_events', 'native_execution', 'benchmark_store', 'model_bindings',
     'configure_radar_selection',
+    'delegation_stats',
 }
 ALIASES = {'diagnostics': 'system_diagnostics'}
 

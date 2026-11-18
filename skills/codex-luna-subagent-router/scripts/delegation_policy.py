@@ -6,7 +6,7 @@ responsible for dependency, ownership, capacity and materialization checks.
 """
 from __future__ import annotations
 
-VERSION = "2026-11-02.ownership-v1"
+VERSION = "2026-11-18.ownership-v2"
 MODES = ("luna_only", "adaptive", "adaptive_aggressive")
 ADAPTIVE_MODES = ("adaptive", "adaptive_aggressive")
 TARGET_SHARES = {"adaptive": 0.30, "adaptive_aggressive": 0.50}
@@ -72,6 +72,19 @@ def promotion(task, recommendation, mode):
         return None
     axes = task["axes"]
     if mode == "adaptive":
+        # Explicit end-to-end ownership is a positive benefit even when the
+        # *reasoning* itself is shallow. Do not infer this from file count or
+        # an ordinary, short implementation task: the caller must declare a
+        # ready, bounded delivery contract with its validation/repair phases.
+        explicit = task.get("work_package", {})
+        if (explicit.get("handoff_ready") is True
+                and pack["kind"] == "delivery"
+                and task.get("write_paths")
+                and {"implement", "test", "repair"}.issubset(pack["stages"])
+                and axes["verifiability"] == "yes"
+                and axes["failure_cost"] != "high"):
+            return ("bounded_ownership",
+                    "explicit complete delivery contract transfers implementation, testing and local repair to one Worker")
         if axes["reasoning_depth"] not in ("medium", "deep") and axes["context_volume"] != "high":
             return None
         return ("bounded_ownership",

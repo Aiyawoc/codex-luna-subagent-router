@@ -116,11 +116,13 @@ helper 直接安全合并 `config.toml`、重新解析 TOML 并验证有效 SubA
 
 ### 5. Token 统计与完成摘要
 
+**rc.3默认推荐关闭。** 新安装 `token_accounting=off`，使用Codex原生用量视图；只有明确需要回溯旧Token审计时选择Router hooks或手动模式。升级保持旧的明确on/off、原Hook、旧账本，不自动改变用户已有统计授权。`bin/router delegation_stats --json`不需要开启Token采集。
+
 **作用：观察主 Agent / SubAgent 的实际 Token 用量、缓存输入、输出和 complete/partial/unavailable 状态。它独立于路由，不会因为开启统计而改变模型选择。**
 
 选项：
 
-- **自动统计（hooks）**：推荐给开发/调优用户；自动采集 UserPromptSubmit、Stop、SubagentStart、SubagentStop。
+- **自动统计（hooks）**：旧版兼容/专项调试选项；自动采集 UserPromptSubmit、Stop、SubagentStart、SubagentStop。
 - **手动统计**：不安装 hooks，按需运行采集命令。
 - **关闭**：不记录新的 Router usage；路由本身仍正常工作。
 

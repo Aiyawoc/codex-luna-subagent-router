@@ -175,6 +175,7 @@ class ModeTests(unittest.TestCase):
         self.assertIsNone(stats["observed_usage_share"])
         self.assertNotIn("src/", json.dumps(row))
         row.pop("delegation_policy_version"); row.pop("ownership_promotions")
+        row.pop("handoff_candidates"); row.pop("delegated_work_packages"); row.pop("planned_worker_routes")
         self.assertEqual(planning_store.validate(row), row)
 
     def test_switch_is_idempotent_preserves_other_features_and_calibration(self):

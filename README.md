@@ -1,6 +1,6 @@
 # Agent Router
 
-测试候选 **v2.9.5-rc.2**：Sol/Astra 更新为 GPT-6.2，旧版退出新自动路由；增加受限的 GPT-6.1 Terra max 经济备选。保留 RC.1 的主动委派策略、已有模式和权限边界。见[本版说明与验收](docs/v2.9.5-rc.2-release-notes.md)及[策略说明](docs/v2.9.5-adaptive-ownership.md)。
+测试候选 **v2.9.5-rc.3（开发中）**：在RC.2的GPT-6.2 Sol/Astra和Terra max基础上，强化早期工作包委派，并增加不依赖Token账本的`delegation_stats`。新安装Router Token统计默认off；升级保留用户原有选择与账本。见[RC.3开发与验收范围](docs/v2.9.5-rc.3-lean-delegation.md)及[RC.2模型迁移](docs/v2.9.5-rc.2-release-notes.md)。
 
 **简体中文** | [English](README.en.md)
 
@@ -39,7 +39,8 @@ Release 继续提供原有 `router-*` 完整包，另外提供四个平台的 `r
 | **Worker 复用** | 同一工作流、上下文仍有价值且能力足够时，可复用已完成 Worker。 |
 | **证据复用** | Lead 把仍有效的已确认事实、证据位置和已完成探索交给 Worker；fresh Worker 也无需重复已经充分的探索。 |
 | **验证结果校准** | 可选使用本地已验证结果，对后续路由做保守校准。 |
-| **Token 统计** | 可选统计主／子 Agent 的总量、输入、缓存输入、输出与完整度。 |
+| **精简分派统计** | `router delegation_stats --json` 统计委派候选、ready计划、已关联的启动回执和独立验收；不扫描Token日志。 |
+| **Token 统计（旧版可选）** | 新安装默认关闭；已有启用状态与历史数据升级原样保留，可选旧版完整Token统计。 |
 | **数据简报** | `router report` 以固定面板汇总统计，同时保存 Markdown、JSON 和 CSV。 |
 | **统一诊断** | `router diagnostics --json` 只读汇总安装、配置、hooks、账本、插件与 Native Shadow 状态；不会刷新日志或修改 Host trust。 |
 | **固定工作负载评估** | `router benchmark_store` 记录 Host default / Luna-only / Adaptive 的成功率、Token、耗时、工具/Worker/重试和可证明成本；只供人工 review，不自动改路由。 |

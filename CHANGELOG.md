@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.5-rc.3 · Lean Delegation candidate (2026-11-18)
+
+- 新安装默认关闭 Router Token Accounting，交给Codex原生用量视图；升级保留用户已有on/off、hooks和历史Token账本。完整Token读取、导出与手动统计均保留为明确启用的兼容功能，不自动删除数据或信任。
+- 新增不访问Token账本/转录的 `bin/router delegation_stats --json`：按规划识别可移交工作包和ready Worker；通过Materialized后执行的带 `--plan-id` / `--worker-id` 的Outcome begin建立脱敏关联；区分计划、报告的实际创建、完成、可信验收，不根据规划伪造spawn。
+- `adaptive`支持显式 `handoff_ready=true` 且声明implement/test/repair闭环的低风险、可验证有界交付，即使纯推理强度为shallow；机械查询、micro、高风险仅按原能力和收益规则，不为比例达标强制创建Worker。`adaptive_aggressive`保持更积极工作包移交。
+- 新规划日志仅增加哈希Worker键、脱敏model/effort与候选计数；新增独立`delegation-links.jsonl`，不修改旧outcomes/receipts格式。未知模型身份不能变成verified pass。保留原3 Worker单波、权限、依赖冲突、Materialization Gate、Decision Shadow和Radar边界。
+- 本候选需要独立CI、发行包和真实Desktop安装/派遣验收；离线测试不证明Host真实选型或成本节省。详细操作见 `docs/v2.9.5-rc.3-lean-delegation.md`。
+
 ## 2.9.5-rc.2: GPT-6.2 models and Terra max economy option (2026-11-18)
 
 - 新自动Sol/Astra Worker更新为`gpt-6.2-sol` / `gpt-6.2-astra`，保留同名托管profile与既有effort边界；原`routing.json`、Decision Shadow和用户选择保持有效。

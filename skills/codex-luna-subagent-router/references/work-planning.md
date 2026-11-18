@@ -7,6 +7,8 @@
 
 目标是减少昂贵 Lead 的总工作量，不是凑 Worker 数。Astra high 主要派 Luna 本身不是错误；当实际子目标需要复杂因果推理时，必须按能力选 Sol，不能仅凭实现/扫描标签降档。
 
+v2.9.5-rc.3要求将分派机会扫描前置：先取得最小真实项目证据（范围、关键依赖和安全边界），**在Lead展开深入排查或改写文件前**形成初始工作包清单。遇到不明确的所有权，只补齐缺少的handoff边界，不让Lead代替Worker完成整个调查。明确闭环的浅层有界交付可使用 `work_package: {"kind":"delivery","handoff_ready":true,"stages":["implement","test","repair"]}`；须真实存在write_paths且任务可验证/非高风险。
+
 ## Delegation Opportunity Scan
 
 在规划 `lead_only | delegate` 之前，先问“有没有一个 Worker 可以独立拥有结果”，而不是先问“Lead 能不能自己做”。对非 micro 任务按下面五类机会扫描：
@@ -49,6 +51,8 @@ plan 输出新增 `execution_shape` / `execution_reason`，并列出 `local_para
 ```
 
 在项目工作目录运行，配置自动读取。`--project-root /repo` 是全局参数，置于 `plan` 之前。输入模板 `examples/work-plan.json` 不含任务正文，真正的目标和验收稍后放进 Worker packet。路径只用于当前规划，不写进 outcome。
+
+规划结果额外显示 `handoff_candidates`、`delegated_work_packages` 与各decision的 `handoff_candidate`。这是决策候选，不代表已spawn；`ready_worker_ids`仍只代表允许尝试Materialization的工作包。新闭环见`lean-delegation.md`。
 
 每个任务有 task_id、task_family、六轴，可选 depends_on、read_paths、write_paths、batch_key、retain_reason、independent_review。相似任务按同一标准分类，不能为了让 Lead 有活干，把一个写成 bounded、另一个任意写成 micro。
 

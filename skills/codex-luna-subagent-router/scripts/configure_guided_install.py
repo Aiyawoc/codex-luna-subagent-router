@@ -321,6 +321,10 @@ def build_routing_config(routing_mode: str) -> dict[str, Any]:
         "context_budget_policy": "minimal_sufficient",
         "result_budget_policy": "concise_sufficient",
         "max_concurrent_workers": 3,
+        # New installations use Codex's native usage view by default. The
+        # legacy collection path stays available via explicit Q5 opt-in;
+        # upgrades preserve existing on/off and managed hook definitions.
+        "token_accounting": "off",
         "execution_policy": {
             "prefer_local_parallel_tools": True,
             "materialization_gate": True,

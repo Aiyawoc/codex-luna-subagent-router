@@ -30,6 +30,8 @@ stats 默认所有 scope，不需要六轴；显示模型/effort/outcome/scope �
 
 保存返回的 receipt_id，不要重复创造 ID。scope 自动识别命令 cwd 的 Git 顶层，不是 Skill 安装目录。非 Git 项目使用 `--project-root /repo`（在 begin 前）；`--global-scope` 明确无项目。全局安装/全局 Adaptive 不意味着全局 evidence。
 
+rc.3新增**可选轻量分派关联**：当本轮 `route_advisor plan` 有保存成功的计划，且对应Worker已被Host确认Materialized后，在上述begin命令追加 `--plan-id ACTUAL_PLAN_ID --worker-id ACTUAL_READY_WORKER_ID`。两项须同时出现；从当前scope保存的规划中核对ready和model+effort，收据只保存哈希后的Worker键。原begin调用与历史回执保持兼容。`bin/router delegation_stats --json`可只看分派决策、真实回执和验收，不读Token。详见`lean-delegation.md`。
+
 ## 完成后 finalize
 
 未取得可信 runtime model/effort，或被 Lead 实质返工时：

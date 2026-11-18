@@ -5,14 +5,24 @@ import delegation_policy
 
 from collections import Counter
 from pathlib import Path
+import hashlib
+import re
 import uuid
 
 import outcome_store as store
 import runtime_support
 
 VERSION = "1.0"
+LEGACY_POLICY_VERSIONS = frozenset({"2026-11-02.ownership-v1", delegation_policy.VERSION})
 SHAPES = ("local_serial", "local_parallel_tools", "subagent")
 ACTIONS = ("probe_first_real_worker", "use_ready_wave", "hold_new_spawns")
+
+
+def worker_key(scope_id, worker_id):
+    """Stable, non-reversible local linkage; never store worker labels or paths."""
+    if not isinstance(worker_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{5,127}", worker_id):
+        raise store.StoreError("invalid worker id")
+    return hashlib.sha256((scope_id + "\0" + worker_id).encode()).hexdigest()
 
 
 def default_path(registry=None):
@@ -60,6 +70,17 @@ def from_plan(plan, scope_id):
         row["ownership_promotions"] = sum(
             d.get("delegation_trigger") in delegation_policy.OWNERSHIP_TRIGGERS
             for d in plan.get("decisions", []))
+        # Source of truth for new, non-token delegation metrics. A planned or
+        # ready worker is NOT considered spawned until a linked receipt exists.
+        ready = set(plan.get("ready_worker_ids", []))
+        row["handoff_candidates"] = sum(d.get("handoff_candidate") is True for d in plan.get("decisions", []))
+        row["delegated_work_packages"] = sum(d.get("decision") == "delegate" for d in plan.get("decisions", []))
+        row["planned_worker_routes"] = [
+            {"worker_key": worker_key(scope_id, worker["worker_id"]),
+             "model": worker["model"], "effort": worker["effort"],
+             "ready": worker["worker_id"] in ready}
+            for worker in plan.get("workers", [])
+        ]
     return row
 
 
@@ -71,16 +92,41 @@ def validate(row):
         "runtime_health", "effective_runtime_health", "runtime_health_action",
         "health_probe", "recorded_at",
     }
-    optional = {"delegation_policy_version", "ownership_promotions"}
+    optional = {"delegation_policy_version", "ownership_promotions", "handoff_candidates",
+                "delegated_work_packages", "planned_worker_routes"}
     if (not isinstance(row, dict) or not required.issubset(row)
             or set(row) - required - optional or row.get("schema_version") != VERSION):
         raise store.StoreError("invalid planning observation schema")
-    if set(row) & optional:
-        if (not optional.issubset(row) or row.get("delegation_policy_version") != delegation_policy.VERSION
+    old_optional = {"delegation_policy_version", "ownership_promotions"}
+    new_optional = optional - old_optional
+    if set(row) & old_optional:
+        if (not old_optional.issubset(row) or row.get("delegation_policy_version") not in LEGACY_POLICY_VERSIONS
                 or type(row.get("ownership_promotions")) is not int
                 or type(row.get("task_count")) is not int
                 or not 0 <= row["ownership_promotions"] <= row["task_count"]):
             raise store.StoreError("invalid ownership policy observation")
+    if set(row) & new_optional:
+        if not new_optional.issubset(row) or not old_optional.issubset(row):
+            raise store.StoreError("incomplete delegation observation")
+        for field in ("handoff_candidates", "delegated_work_packages"):
+            if type(row[field]) is not int or not 0 <= row[field] <= row["task_count"]:
+                raise store.StoreError("invalid delegation opportunity count")
+        if row["delegated_work_packages"] > row["handoff_candidates"]:
+            raise store.StoreError("delegations cannot exceed available handoff candidates")
+        routes = row["planned_worker_routes"]
+        if not isinstance(routes, list) or len(routes) != row["planned_workers"]:
+            raise store.StoreError("invalid planned worker routes")
+        keys = set()
+        for route in routes:
+            if (not isinstance(route, dict) or set(route) != {"worker_key", "model", "effort", "ready"}
+                    or not isinstance(route["worker_key"], str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", route["worker_key"])
+                    or (route["model"], route["effort"]) not in store.PAIRS
+                    or type(route["ready"]) is not bool or route["worker_key"] in keys):
+                raise store.StoreError("invalid worker linkage metadata")
+            keys.add(route["worker_key"])
+        if sum(route["ready"] for route in routes) != row["ready_workers"]:
+            raise store.StoreError("ready worker linkage does not match recorded count")
     if not isinstance(row["plan_id"], str) or len(row["plan_id"]) != 32:
         raise store.StoreError("invalid plan id")
     if not isinstance(row["scope_id"], str) or not (row["scope_id"] == "global" or row["scope_id"].startswith("project-")):
@@ -137,6 +183,9 @@ def _statistics_rows(rows, invalid, scope=None):
         "routing_modes": dict(Counter(row["routing_mode"] for row in rows)),
         "policy_version_counts": dict(Counter(row.get("delegation_policy_version", "legacy") for row in rows)),
         "ownership_promotions": sum(row.get("ownership_promotions", 0) for row in rows),
+        "handoff_candidates": sum(row.get("handoff_candidates", 0) for row in rows),
+        "delegated_work_packages": sum(row.get("delegated_work_packages", 0) for row in rows),
+        "plans_with_linkage": sum("planned_worker_routes" in row for row in rows),
         "target_usage_shares": dict(delegation_policy.TARGET_SHARES),
         "observed_usage_share": None,
         "share_interpretation": "30%/50% are evaluation goals, not measured usage, Worker counts or enforced quotas.",

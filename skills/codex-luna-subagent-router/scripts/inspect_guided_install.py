@@ -198,7 +198,7 @@ def inspect(codex_home, project_root=None, install_mode=None, skills_dir=None):
         "summary": tokens.hook_state.summary_mode(routing), "required_hook_events": list(required_events),
         "lifecycle_hooks": "on" if tokens.hook_state.lifecycle_enabled(routing) else "off",
         "current_hook_events": hook_events}, fresh or needs,
-        "是否统计主 Agent / SubAgent 的实际 Token 用量和完成状态？可选择自动 hooks、手动采集或关闭；统计不改变路由结果。")
+        "是否统计主 Agent / SubAgent 的Token？推荐关闭并使用Codex原生用量视图；旧Router统计可选择自动hooks或手动。升级保留已有选择与历史，不删除数据。")
     feature = config.get("features", {}).get("default_mode_request_user_input")
     add(6, "default_mode_request_user_input", feature, fresh or feature is None,
         "是否允许 Agent 在确实需要你选择配置或范围时使用结构化交互界面提问？可开启、关闭或保持现状；这只影响交互体验，不改变路由、模型或并发。")

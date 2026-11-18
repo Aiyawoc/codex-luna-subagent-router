@@ -1,6 +1,6 @@
 # Agent Router
 
-Release candidate **v2.9.5-rc.2** updates Sol/Astra to GPT-6.2, retires their older versions from new automatic routes, and adds a restricted GPT-6.1 Terra max economy option. RC.1 ownership policy, configured modes and authority boundaries remain in place. See [release and acceptance notes](docs/v2.9.5-rc.2-release-notes.md).
+Development candidate **v2.9.5-rc.3** retains GPT-6.2 Sol/Astra and GPT-6.1 Terra max, prioritizes earlier handoff of bounded delivery, and introduces `router delegation_stats --json` without reading Token logs. New installs default Router Token Accounting to off; upgrades preserve existing opt-ins and ledgers. See [RC.3 scope and acceptance](docs/v2.9.5-rc.3-lean-delegation.md).
 
 [简体中文](README.md) | **English**
 

@@ -355,6 +355,8 @@ def _parser():
             sub.add_argument("--route-binding", choices=("installed_profile", "live_spawn"), required=True)
         if name == "begin":
             sub.add_argument("--task-id", required=True)
+            sub.add_argument("--plan-id", help="Exact persisted planner observation; optional legacy begin remains supported.")
+            sub.add_argument("--worker-id", help="Exact ready worker_id in that plan, not a runtime Agent ID.")
         if name == "record":
             sub.add_argument("--outcome", choices=OUTCOMES, required=True)
             sub.add_argument("--verification-summary", required=True)
@@ -420,32 +422,65 @@ def main(argv=None):
         elif args.command in ("begin", "record"):
             data = dict(scope_id=scope, task_family=args.task_family, axes=_axes_from_args(args), model=args.model, effort=args.effort, route_binding=args.route_binding)
             if args.command == "begin":
+                if bool(args.plan_id) != bool(args.worker_id):
+                    raise AdvisorError("--plan-id and --worker-id must be supplied together")
+                key = None
+                if args.plan_id:
+                    import planning_store
+                    if args.task_id != args.worker_id:
+                        raise AdvisorError("linked begin must use the planned worker group id as task-id")
+                    key = planning_store.worker_key(scope, args.worker_id)
+                    rows, invalid = planning_store.read(planning_store.default_path(path))
+                    if root is not None:
+                        local, bad = planning_store.read(planning_store.project_path(root))
+                        rows += local
+                        invalid += bad
+                    if invalid:
+                        raise AdvisorError("planning ledger has invalid rows; inspect before linking")
+                    matching = [r for r in rows if r["plan_id"] == args.plan_id and r["scope_id"] == scope]
+                    if len(matching) != 1:
+                        raise AdvisorError("plan id missing or ambiguous in current scope")
+                    selected = [r for r in matching[0].get("planned_worker_routes", ())
+                                if r["worker_key"] == key and r["ready"] is True]
+                    if len(selected) != 1 or (selected[0]["model"], selected[0]["effort"]) != (args.model, args.effort):
+                        raise AdvisorError("worker is not ready in plan or model/effort do not match")
                 output = store.begin(path, data, args.task_id)
+                if key is not None:
+                    try:
+                        import delegation_links
+                        delegation_links.append(path, plan_id=args.plan_id, worker_key=key,
+                                                receipt_id=output["receipt_id"], scope_id=scope)
+                        output["delegation_linkage"] = "recorded"
+                    except (ValueError, OSError, TypeError, KeyError):
+                        output["delegation_linkage"] = "unavailable"
+                        output["delegation_linkage_error"] = "linkage unavailable; receipt remains valid; do not retry Worker"
             else:
                 data.update(outcome=args.outcome, verification_summary=args.verification_summary, identity_verified=args.identity_verified)
                 output = append_record(path, data)
         elif args.command == "finalize":
             output = store.finalize(path, args.receipt_id, args.outcome, args.verification_summary, observed_model=args.observed_model, observed_effort=args.observed_effort, identity_source=args.identity_source, completion_reason=args.completion_reason)
-            # Usage is orthogonal to quality: a failed/partial outcome still costs tokens.
-            # Its failure cannot undo a successful outcome settlement or keep a Worker alive.
+            # Lean installations do not scan or even read the optional legacy
+            # Token ledger on ordinary finalize. Existing explicit accounting
+            # opt-ins and explicit usage args preserve the legacy behavior.
             try:
-                import token_usage as usage
-                upath = usage.default_usage_path(path)
-                if args.usage_agent_id or args.usage_parent_id:
-                    if not (args.usage_agent_id and args.usage_parent_id):
-                        raise AdvisorError("both usage identities are required")
-                    usage.attach(upath, path, args.usage_agent_id, args.usage_parent_id, args.receipt_id)
-                linked = usage.for_receipt(upath, args.receipt_id)
-                if linked:
-                    usage_scope, usage_root = store.resolve_scope(args.project_root, args.global_scope)
-                    if usage.enabled(usage_root) and usage_scope == linked["scope_id"]:
-                        usage.collect(upath, linked["agent_id"], linked["parent_id"], linked["scope_id"],
-                                      transcript=args.usage_transcript, root=usage_root)
-                        # collect() refreshes the Worker lifetime row. Finalize must
-                        # continue returning the receipt's frozen per-attempt interval.
-                        linked = usage.for_receipt(upath, args.receipt_id) or linked
-                    output["token_usage"] = linked["snapshot"]
-                    output["token_usage_summary"] = usage.summary(linked["snapshot"])
+                usage_scope, usage_root = store.resolve_scope(args.project_root, args.global_scope)
+                explicit_usage = bool(args.usage_agent_id or args.usage_parent_id or args.usage_transcript)
+                if explicit_usage or store.effective_config(usage_root).get("token_accounting") == "on":
+                    import token_usage as usage
+                    upath = usage.default_usage_path(path)
+                    if args.usage_agent_id or args.usage_parent_id:
+                        if not (args.usage_agent_id and args.usage_parent_id):
+                            raise AdvisorError("both usage identities are required")
+                        usage.attach(upath, path, args.usage_agent_id, args.usage_parent_id, args.receipt_id)
+                    linked = usage.for_receipt(upath, args.receipt_id)
+                    if linked:
+                        if usage.enabled(usage_root) and usage_scope == linked["scope_id"]:
+                            usage.collect(upath, linked["agent_id"], linked["parent_id"], linked["scope_id"],
+                                          transcript=args.usage_transcript, root=usage_root)
+                            # Keep the receipt-bound interval, not lifetime totals.
+                            linked = usage.for_receipt(upath, args.receipt_id) or linked
+                        output["token_usage"] = linked["snapshot"]
+                        output["token_usage_summary"] = usage.summary(linked["snapshot"])
             except (ValueError, OSError, TypeError, KeyError):
                 output["token_usage_error"] = "usage unavailable; outcome remains finalized"
         elif args.command == "query":

@@ -195,10 +195,25 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
         trigger = rec.get("delegation_trigger")
         lead_only_reason = rec.get("lead_only_reason")
         execution_shape, execution_reason = ("subagent", reason) if decision == "delegate" else ("local_serial", reason)
+        pack = delegation_policy.profile(t)
+        # An opportunity is a potentially transferable package, *not* a
+        # command to spawn. Record it before the local-tool/benefit decisions
+        # so zero-Worker plans have an honest, inspectable denominator.
+        handoff_candidate = bool(
+            t["axes"]["task_scope"] != "micro"
+            and tid not in completed and tid not in in_progress
+            and not retained and pack["handoff_ready"]
+            and pack["kind"] != "mechanical"
+            and rec.get("route_direction") in ("up", "same", "down")
+            and rec.get("history_rule") != "verified-failure-exhausted"
+            and not (routing_mode == "luna_only" and rec["model"] != "gpt-6-luna")
+        )
         if routing_mode == "luna_only" and rec["model"] != "gpt-6-luna":
             decision, reason, trigger, lead_only_reason = "lead_only", "luna_only capability boundary", None, "luna_only capability boundary"
             execution_shape, execution_reason = "local_serial", reason
-        elif t.get("independent_review") and t["axes"]["task_scope"] != "micro" and rec.get("history_rule") != "verified-failure-exhausted":
+        elif (t.get("independent_review") and t["axes"]["task_scope"] != "micro"
+              and rec.get("route_direction") in ("up", "same", "down")
+              and rec.get("history_rule") != "verified-failure-exhausted"):
             decision, reason, trigger, lead_only_reason = "delegate", "explicit bounded independent review", "independent_review", None
             execution_shape, execution_reason = "subagent", reason
         elif (
@@ -256,7 +271,8 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
             minimum_capability=rec["minimum_capability"],
             route_direction=rec["route_direction"],
             history_rule=rec["history_rule"],
-            work_package=delegation_policy.profile(t),
+            work_package=pack,
+            handoff_candidate=handoff_candidate or decision == "delegate",
         )
         decisions.append(item)
         if decision != "delegate":
@@ -331,6 +347,8 @@ def plan_work(payload, *, lead_model, lead_effort, calibration, registry, scope,
     ]
     return dict(version=1, routing_mode=routing_mode, lead_model=lead_model, lead_effort=lead_effort,
                 delegation_policy=delegation_policy.describe(routing_mode),
+                handoff_candidates=sum(d["handoff_candidate"] for d in decisions),
+                delegated_work_packages=sum(d["decision"] == "delegate" for d in decisions),
                 effective_wave_limit=limit, open_workers=open_workers,
                 open_workers_semantics="materialized_pendinginit_or_running_only",
                 runtime_health=runtime_health, effective_runtime_health=effective_runtime_health,

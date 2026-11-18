@@ -73,6 +73,11 @@ def main():
         plan=json.loads(execute([*launcher(root),'route_advisor','--project-root',str(project),'plan',str(root/'examples/work-plan.json'),
                                 '--lead-model','gpt-6.2-astra','--lead-effort','high','--open-workers','0'],project,env))
         assert plan['effective_wave_limit']==2
+        # New lightweight metrics never infer actual Worker creation from a
+        # ready planner response, and work even with Token accounting off.
+        delegation=json.loads(execute([*launcher(root),'delegation_stats','--all-scopes','--json'],project,env))
+        assert delegation['planning_observations'] >= 1
+        assert delegation['linked_materialized_worker_attempts'] == 0
         # No shell Python/Bash on PATH; native entry performs initial install and upgrade.
         saved=rpath.read_bytes()
         (home/'hooks.json').write_text('{"hooks":{}}')

@@ -2,6 +2,8 @@
 
 `adaptive` 本身吸收主动委派改进，面向可拆分的中大型任务，观察目标约30%的子线程用量；新增 `adaptive_aggressive` 面向约50%。不另设balanced/proactive开关，不把百分比当运行时配额。`luna_only` 保留原有模型与执行形态边界。
 
+v2.9.5-rc.3：当用户/Lead已经可靠定义完整交付合同（明确handoff_ready、write_paths、implement/test/repair、有界、可验证、非高风险）时，`adaptive`允许浅层工作直接交Worker；这不等于无条件派发所有浅层修改。最小证据收集后，应先形成可独立验证的工作包再决定Lead还是Worker；禁止Lead先实现完再做委派扫描。
+
 ## 两档差异
 
 | 规则 | adaptive | adaptive_aggressive |
@@ -43,6 +45,8 @@ kind为 `mechanical / analysis / delivery`。stages仅描述同一目标和权�
 - Decisions仍Shadow；雷达仍独立opt-in且只在ready Worker之后运行。切换策略不启用外部API或改动密钥。
 
 ## 百分比验收
+
+rc.3提供另一套与Token用量比例无关的**轻量分派指标**：规划中的handoff_candidates/实际已计划移交工作包、带plan_id关联且在Materialized后创建的Outcome回执、完成与可信独立验收。它们测量的是计划尝试和关联覆盖，不是模型总用量比例，也不是Codex进程内权威spawn事件。没有回执的历史工作保持unknown。见`lean-delegation.md`。
 
 30%/50%是可拆分中大型工作流的观察目标，不是任务数量或强制控制变量。简单任务不纳入该目标组。按同一父会话/工作流和同一时间区间核对主子净增量；去除继承基线、重复快照，失败和重试用量也保留。缓存是输入子项，推理是输出子项；不完整采集保留未知，不补零。
 
