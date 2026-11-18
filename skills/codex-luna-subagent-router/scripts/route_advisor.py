@@ -37,11 +37,13 @@ ROUTE_EFFORTS = ("low", "medium", "high", "xhigh", "max")
 LEAD_EFFORTS = ("none",) + ROUTE_EFFORTS
 EFFORT_RANK = {e: i for i, e in enumerate(ROUTE_EFFORTS)}
 TIER_BY_MODEL = {
-    "gpt-6-luna": "luna", "gpt-6.1-sol": "sol", "gpt-6-astra": "astra",
+    "gpt-6-luna": "luna", "gpt-6.1-terra": "terra",
+    "gpt-6.2-sol": "sol", "gpt-6.2-astra": "astra",
     # Legacy Lead identities remain understandable during migration, but are never automatic Worker routes.
+    "gpt-6.1-sol": "sol", "gpt-6-astra": "astra",
     "gpt-6-sol": "sol", "gpt-5.6-luna": "luna", "gpt-5.6-sol": "sol", "gpt-5.6": "sol",
 }
-TIER_RANK = {"luna": 0, "sol": 1, "astra": 2}
+TIER_RANK = {"luna": 0, "terra": 1, "sol": 2, "astra": 3}
 ROUTES = tuple((m, e, TIER_BY_MODEL[m] + "_" + e, TIER_BY_MODEL[m]) for m, e in store.PAIRS)
 ROUTE_INDEX = {(m, e): i for i, (m, e, _, _) in enumerate(ROUTES)}
 PROFILE_BY_ROUTE = {(m, e): p for m, e, p, _ in ROUTES}
@@ -114,7 +116,7 @@ def classify_static(axes):
     """Preserve v2.5.0 static policy; workload planning does not force upgrades."""
     kind, scope, depth, verifiable, failcost, volume = (axes[k] for k in ("task_kind", "task_scope", "reasoning_depth", "verifiability", "failure_cost", "context_volume"))
     def pick(tier, effort, rule):
-        model = {"luna": "gpt-6-luna", "sol": "gpt-6.1-sol", "astra": "gpt-6-astra"}[tier]
+        model = {"luna": "gpt-6-luna", "sol": "gpt-6.2-sol", "astra": "gpt-6.2-astra"}[tier]
         return _route(model, effort), rule
     if scope == "micro":
         return pick("luna", "low", "micro-task")

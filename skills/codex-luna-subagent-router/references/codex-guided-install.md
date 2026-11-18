@@ -13,6 +13,8 @@ Q2现有三项：`luna_only`保留原边界；`adaptive`直接包含主动移交
 
 新版仍清理本 Skill 历史托管 terra-medium.toml/terra-high.toml，其它自定义 profiles 保留。config.toml、非托管 AGENTS.md、routing.json 的选择单独保留/迁移。outcomes.jsonl 与同目录回执文件不在 Skill 包内，不能因升级删除；旧 global 数据不自动重分项目。
 
+2.9.5-rc.2 将同名托管 Sol/Astra profiles 绑定更新为 GPT-6.2，并新增 GPT-6.1 Terra max；原模型ID仍用于历史账本和旧Lead识别。routing.json 的既有模式、并发、授权、Decision/Radar及统计选择无需因模型更新而改变。新profile和旧型号退役规则见 `routing-policy.md`；安装后仍需当前Host精确支持证据。
+
 ## 安装前只读盘点与安装方式（必须先完成）
 
 先从**新版本完整包**运行：
@@ -64,8 +66,9 @@ Q2现有三项：`luna_only`保留原边界；`adaptive`直接包含主动移交
 
 **作用：决定自动 Worker 能使用哪些模型层级，以及是否允许根据能力差距向上路由。不会切换用户当前主 Agent。**
 
-- **`adaptive`（推荐）**：`gpt-6-luna → gpt-6.1-sol → gpt-6-astra`。普通实现/扫描优先 Luna，高歧义多步因果、race/concurrency/lifecycle 等可升 Sol，专家级高风险架构反证可升 Astra；同时也允许昂贵 Lead 向下委派给更便宜 Worker。
-- **`luna_only`**：自动 Worker 只允许 Luna；Luna 能力不足时交回当前 Lead，不自动创建 Sol/Astra Worker。适合需要严格 Worker 成本上限的用户。
+- **`adaptive`（推荐）**：静态基准 `gpt-6-luna → gpt-6.2-sol → gpt-6.2-astra`。普通实现/扫描优先 Luna，高歧义多步因果、race/concurrency/lifecycle 等可升 Sol，专家级高风险架构反证可升 Astra；昂贵 Lead 可向下委派。新增 GPT-6.1 Terra max 仅供有界可验证任务的受限经济比较，不改变静态默认或 Sol/Astra 能力下限。
+- **`adaptive_aggressive`**：同一模型、档位、权限和并发边界，更积极移交浅层但可独立交付的完整工作包。
+- **`luna_only`**：自动 Worker 只允许 Luna；Luna 能力不足时交回当前 Lead，不自动创建 Terra/Sol/Astra Worker。适合需要严格 Worker 成本上限的用户。
 
 主 Agent 始终保持用户自己选择的模型和 reasoning。当前层 max 跨层向上时，上层 Worker effort 至少 medium；不会先牺牲性地用低阶模型失败一次再升级。
 
@@ -138,7 +141,7 @@ helper 直接安全合并 `config.toml`、重新解析 TOML 并验证有效 SubA
 
 ### 6. Default 模式结构化提问
 
-**作用：只决定 Agent 需要用户选择配置/范围时，是否使用结构化交互界面；不影响是否委派、Luna/Sol/Astra 路由、并发、Calibration 或 Token 统计。**
+**作用：只决定 Agent 需要用户选择配置/范围时，是否使用结构化交互界面；不影响是否委派、模型路由、并发、Calibration 或 Token 统计。**
 
 选项：
 
@@ -244,11 +247,11 @@ Decision Engine 现为第七项**显式选择**（但仍默认关闭）；Agents
 /path/to/skill/bin/router route_advisor stats --json
 /path/to/skill/bin/router route_advisor stats --current-scope --json
 /path/to/skill/bin/router route_advisor plan /path/to/work-plan.json \
-  --lead-model gpt-6-astra --lead-effort high \
+  --lead-model gpt-6.2-astra --lead-effort high \
   --open-workers 0 --runtime-health unknown
 ```
 
-stats 默认全部 scope；query 保留精确 family/六轴查询。详情：outcome-collection.md、work-planning.md。Luna 五档、Sol medium/high/xhigh/max、Astra high/xhigh/max profiles 不变，RoutePlan 2.1 不变。
+stats 默认全部 scope；query 保留精确 family/六轴查询。详情：outcome-collection.md、work-planning.md。现有 Luna 五档、Sol medium/high/xhigh/max、Astra high/xhigh/max profile 名称保留；新增 Terra max。Sol medium 证据门、Sol max 显式指定和 RoutePlan 2.1 继续有效。
 
 升级后本地包验收：
 

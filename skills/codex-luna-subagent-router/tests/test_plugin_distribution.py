@@ -173,7 +173,7 @@ class PluginDistributionTests(unittest.TestCase):
         self.assertEqual(ps.owned_hook_count(hooks), 0)
         self.assertIn("user keep", json.dumps(hooks))
         self.assertTrue(control.inspect(self.root)["active"])
-        self.assertEqual(len(list((self.home / "agents").glob("*.toml"))), 12)
+        self.assertEqual(len(list((self.home / "agents").glob("*.toml"))), 13)
 
     def test_fresh_does_not_turn_off_into_on(self):
         value = tokens.read_json(self.routing); value["token_accounting"] = "off"
@@ -253,6 +253,66 @@ class PluginDistributionTests(unittest.TestCase):
         control.activate(other, install_mode="upgrade", confirm=True, host_installed_reviewed=True, setup_reviewed=True, quiescent=True)
         self.assertEqual(ps.read_owner()["transaction_id"], txid)
         self.assertEqual(ps.read_owner()["version"], "2.8.4")
+        self.assertEqual(self.ledger.read_text(), "preserve historical bytes\n")
+
+    def prepare_previous_model_plugin(self):
+        """Activate a 12-profile predecessor with an original complete install."""
+        previous = self.base / "previous plugin cache"
+        shutil.copytree(self.root, previous)
+        core = previous / "core" / ps.CORE_NAME
+        (core / "assets/codex-agents/terra-max.toml").unlink()
+        for path in (core / "assets/codex-agents").glob("*.toml"):
+            path.write_text(path.read_text(encoding="utf-8").replace(
+                "gpt-6.2-sol", "gpt-6.1-sol").replace("gpt-6.2-astra", "gpt-6-astra"), encoding="utf-8")
+        (core / "VERSION").write_text("2.9.5-rc.1\n", encoding="utf-8")
+        metadata = tokens.read_json(previous / ".codex-plugin/plugin.json")
+        metadata["version"] = "2.9.5-rc.1"
+        write_json(previous / ".codex-plugin/plugin.json", metadata)
+        seal_core(core); seal_plugin(previous)
+        shutil.copytree(core, self.legacy)
+        shutil.copytree(core / "assets/codex-agents", self.home / "agents")
+        original = {p.name: p.read_bytes() for p in (self.home / "agents").glob("*.toml")}
+        write_json(self.home / "hooks.json", {"hooks": {}})
+        control.activate(previous, install_mode="upgrade", confirm=True,
+                         host_installed_reviewed=True, setup_reviewed=True, quiescent=True)
+        (self.core / "VERSION").write_text("2.9.5-rc.2\n", encoding="utf-8")
+        metadata = tokens.read_json(self.root / ".codex-plugin/plugin.json")
+        metadata["version"] = "2.9.5-rc.2"
+        write_json(self.root / ".codex-plugin/plugin.json", metadata)
+        seal_core(self.core); seal_plugin(self.root)
+        return original
+
+    def test_model_profile_upgrade_and_rollback_preserve_original_twelve_profiles(self):
+        original = self.prepare_previous_model_plugin()
+        transaction = ps.read_owner()["transaction_id"]
+        self.activate(install_mode="upgrade")
+        agents = self.home / "agents"
+        profiles = {p.name: p.read_bytes() for p in agents.glob("*.toml")}
+        self.assertEqual(len(profiles), 13)
+        self.assertIn(b'model = "gpt-6.2-sol"', profiles["sol-high.toml"])
+        self.assertIn(b'model = "gpt-6.2-astra"', profiles["astra-max.toml"])
+        self.assertIn(b'model = "gpt-6.1-terra"', profiles["terra-max.toml"])
+        self.assertEqual(ps.read_owner()["transaction_id"], transaction)
+        self.assertEqual(self.routing.read_bytes(), self.saved_routing)
+        self.assertEqual(self.ledger.read_text(), "preserve historical bytes\n")
+        control.rollback(confirm=True, quiescent=True, host_disabled_reviewed=True)
+        self.assertEqual({p.name: p.read_bytes() for p in agents.glob("*.toml")}, original)
+        self.assertEqual((self.legacy / "VERSION").read_text(), "2.9.5-rc.1\n")
+        self.assertEqual(self.routing.read_bytes(), self.saved_routing)
+        self.assertEqual(self.ledger.read_text(), "preserve historical bytes\n")
+        runtime.verify_package(self.legacy)
+
+    def test_model_profile_upgrade_refuses_to_overwrite_user_changes(self):
+        self.prepare_previous_model_plugin()
+        edited = self.home / "agents/sol-high.toml"
+        edited.write_bytes(edited.read_bytes() + b"\n# user customization\n")
+        before = {p.name: p.read_bytes() for p in (self.home / "agents").glob("*.toml")}
+        owner_before = ps.owner_path().read_bytes()
+        with self.assertRaisesRegex(ValueError, "managed files changed since activation"):
+            self.activate(install_mode="upgrade")
+        self.assertEqual({p.name: p.read_bytes() for p in (self.home / "agents").glob("*.toml")}, before)
+        self.assertEqual(ps.owner_path().read_bytes(), owner_before)
+        self.assertEqual(self.routing.read_bytes(), self.saved_routing)
         self.assertEqual(self.ledger.read_text(), "preserve historical bytes\n")
 
     def test_deactivate_prevents_all_hook_writes(self):

@@ -106,6 +106,8 @@ REASON_LABELS.update({
 })
 
 MODEL_NAMES = {
+    "gpt-6.2-sol": "Sol", "gpt-6.2-astra": "Astra",
+    "gpt-6.1-terra": "Terra",
     "gpt-6-luna": "Luna", "gpt-6.1-sol": "Sol", "gpt-6-sol": "Sol", "gpt-6-astra": "Astra",
     "gpt-5.6-luna": "Luna", "gpt-5.6-sol": "Sol",
 }

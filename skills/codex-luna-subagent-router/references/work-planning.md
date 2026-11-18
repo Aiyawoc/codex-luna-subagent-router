@@ -45,7 +45,7 @@ plan 输出新增 `execution_shape` / `execution_reason`，并列出 `local_para
 
 ```bash
 /path/to/skill/bin/router route_advisor plan /path/to/work-plan.json \
-  --lead-model gpt-6-astra --lead-effort high --open-workers ACTUAL_ACTIVE_COUNT
+  --lead-model gpt-6.2-astra --lead-effort high --open-workers ACTUAL_ACTIVE_COUNT
 ```
 
 在项目工作目录运行，配置自动读取。`--project-root /repo` 是全局参数，置于 `plan` 之前。输入模板 `examples/work-plan.json` 不含任务正文，真正的目标和验收稍后放进 Worker packet。路径只用于当前规划，不写进 outcome。

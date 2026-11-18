@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -70,7 +71,7 @@ def main():
         rpath.write_text(json.dumps({'schema_version':'2.0','routing_mode':'adaptive','token_accounting':'off'}))
         (home/'config.toml').write_text('[agents]\nmax_concurrent_threads_per_session = 2\n')
         plan=json.loads(execute([*launcher(root),'route_advisor','--project-root',str(project),'plan',str(root/'examples/work-plan.json'),
-                                '--lead-model','gpt-6-astra','--lead-effort','high','--open-workers','0'],project,env))
+                                '--lead-model','gpt-6.2-astra','--lead-effort','high','--open-workers','0'],project,env))
         assert plan['effective_wave_limit']==2
         # No shell Python/Bash on PATH; native entry performs initial install and upgrade.
         saved=rpath.read_bytes()
@@ -80,6 +81,13 @@ def main():
         execute([*launcher(root),'install','--global','--install-mode','fresh'],project,env)
         execute([*launcher(root),'install','--global','--install-mode','upgrade'],project,env)
         installed=base/'installed skills/codex-luna-subagent-router'
+        profiles={p.name:tomllib.loads(p.read_text(encoding='utf-8')) for p in (home/'agents').glob('*.toml')}
+        assert len(profiles)==13
+        for family,model in [('sol','gpt-6.2-sol'),('astra','gpt-6.2-astra')]:
+            assert all(value['model']==model for name,value in profiles.items() if name.startswith(family+'-'))
+        assert profiles['terra-max.toml']['model']=='gpt-6.1-terra'
+        assert profiles['terra-max.toml']['model_reasoning_effort']=='max'
+        assert not any(name in profiles for name in ('terra-medium.toml','terra-high.toml'))
         assert rpath.read_bytes()==saved and ledger.read_text()=='historical-data-must-not-change\n'
         assert (home/'hooks.json').read_text()=='{"hooks":{}}'
         execute([*launcher(installed),'doctor','--verify'],project,env)
@@ -124,7 +132,7 @@ def main():
         automatic=json.loads(execute([
             *launcher(installed),'route_advisor','--global-scope','plan',
             str(installed/'examples/work-plan-shadow.json'),
-            '--lead-model','gpt-6-astra','--lead-effort','high',
+            '--lead-model','gpt-6.2-astra','--lead-effort','high',
             '--open-workers','0','--runtime-health','healthy',
         ],project,env))
         observation=automatic['decision_observation']

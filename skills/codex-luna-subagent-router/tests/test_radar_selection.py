@@ -40,7 +40,7 @@ def payload(rows=None):
                 author_test_interval=dict(started_at="2026-11-02T03:00:00Z",
                                           completed_at="2026-11-02T04:00:00Z"),
                 rows=rows or [row(), row(effort="medium", score=91, cost=.5, seconds=80),
-                              row("gpt-6.1-sol", "high", 120, .5, 70)])
+                              row("gpt-6.2-sol", "high", 120, .5, 70)])
 
 
 def raw(data=None):
@@ -55,7 +55,7 @@ def make_plan(registry, *, ready=True):
     result = plan_work.plan_work(dict(version=1, tasks=[dict(
         task_id="radar-fixture-task", task_family="fixture-implementation", axes=AXES,
         read_paths=["src/input.py"], write_paths=["src/output.py"],
-    )]), lead_model="gpt-6-astra", lead_effort="high", calibration="off",
+    )]), lead_model="gpt-6.2-astra", lead_effort="high", calibration="off",
         registry=registry, scope="global", runtime_health="healthy")
     result["plan_id"] = "1" * 32
     if not ready:
@@ -224,20 +224,37 @@ class SelectionTests(unittest.TestCase):
     def test_explicit_ceiling_can_select_another_approved_model(self):
         result = self.choose(config=dict(tier_ceiling="sol", effort_ceiling="high"))
         self.assertTrue(result["changed"])
-        self.assertEqual(result["recommended"], dict(model="gpt-6.1-sol", effort="high"))
+        self.assertEqual(result["recommended"], dict(model="gpt-6.2-sol", effort="high"))
 
     def test_luna_only_not_overridden(self):
         self.plan["routing_mode"] = "luna_only"
         result = self.choose(config=dict(tier_ceiling="sol", effort_ceiling="high"))
         self.assertFalse(result["changed"])
 
-    def test_unknown_legacy_terra_ultra_do_not_enter_pool(self):
+    def test_legacy_models_ineligible_terra_and_ultra_do_not_enter_pool(self):
         self.rows.extend([row("gpt-5.6-luna", "max", 150, 0, 0),
+                          row("gpt-6.1-sol", "high", 150, 0, 0),
+                          row("gpt-6-astra", "high", 150, 0, 0),
                           row("gpt-6.1-terra", "max", 150, 0, 0),
                           row("gpt-6-luna", "ultra", 150, 0, 0)])
         result = self.choose(config=dict(tier_ceiling="astra", effort_ceiling="max"))
         self.assertTrue(all((r["model"], r["effort"]) in store.PAIRS for r in result["candidates"]))
-        self.assertNotIn(("gpt-6.1-sol", "max"), [(r["model"], r["effort"]) for r in result["candidates"]])
+        self.assertNotIn(("gpt-6.2-sol", "max"), [(r["model"], r["effort"]) for r in result["candidates"]])
+        self.assertNotIn(("gpt-6.1-terra", "max"), [(r["model"], r["effort"]) for r in result["candidates"]])
+
+    def test_terra_max_can_win_for_eligible_evidence_work(self):
+        self.worker["axes"] = dict(AXES, task_kind="scan")
+        self.rows.append(row("gpt-6.1-terra", "max", 130, .5, 70))
+        result = self.choose(config=dict(tier_ceiling="terra", effort_ceiling="max"))
+        self.assertTrue(result["changed"])
+        self.assertEqual(result["recommended"], dict(model="gpt-6.1-terra", effort="max"))
+
+    def test_terra_max_never_replaces_a_sol_capability_floor(self):
+        self.worker.update(model="gpt-6.2-sol", effort="high", axes=dict(AXES, task_kind="scan"))
+        self.rows.append(row("gpt-6.1-terra", "max", 150, 0, 0))
+        result = self.choose(config=dict(tier_ceiling="astra", effort_ceiling="max"))
+        self.assertNotEqual(result["recommended"]["model"], "gpt-6.1-terra")
+        self.assertGreater(result["rejections"].get("below_capability_floor", 0), 0)
 
     def test_high_risk_does_not_reduce_effort(self):
         self.worker["axes"] = dict(AXES, failure_cost="high")
@@ -270,8 +287,8 @@ class SelectionTests(unittest.TestCase):
         before = copy.deepcopy(self.plan)
         out = self.apply(config=cfg(mode="select", tier_ceiling="sol", effort_ceiling="high"), fetcher=lambda _: raw())
         self.assertEqual(self.plan, before)
-        self.assertEqual(out["workers"][0]["model"], "gpt-6.1-sol")
-        self.assertEqual(out["decisions"][0]["model"], "gpt-6.1-sol")
+        self.assertEqual(out["workers"][0]["model"], "gpt-6.2-sol")
+        self.assertEqual(out["decisions"][0]["model"], "gpt-6.2-sol")
         for key in ("lead_model", "lead_effort", "planned_waves", "ready_worker_ids", "effective_wave_limit", "open_workers"):
             self.assertEqual(out[key], before[key])
         self.assertEqual(out["workers"][0]["agent_profile"], "sol_high")
@@ -347,7 +364,7 @@ class SetupTests(unittest.TestCase):
 
     def test_invalid_config_not_accepted(self):
         for bad in (dict(fetch_timeout_ms=0), dict(refresh_seconds=True), dict(mode="execute_script"),
-                    dict(tier_ceiling="terra"), dict(max_benchmark_cost_ratio=float("nan")), dict(endpoint="evil")):
+                    dict(tier_ceiling="unknown"), dict(max_benchmark_cost_ratio=float("nan")), dict(endpoint="evil")):
             with self.subTest(bad=bad):
                 with self.assertRaises(ValueError): selection.settings(bad)
 
@@ -372,7 +389,7 @@ class PlannerEntryTests(unittest.TestCase):
         out = io.StringIO()
         with patch("sys.stdout", out):
             code = route_advisor.main(["--global-scope", "--registry", str(self.registry),
-                "plan", str(self.request), "--lead-model", "gpt-6-astra", "--lead-effort", "high",
+                "plan", str(self.request), "--lead-model", "gpt-6.2-astra", "--lead-effort", "high",
                 "--open-workers", "0", "--runtime-health", "healthy", "--no-decision-api", *flags])
         self.assertEqual(code, 0)
         return json.loads(out.getvalue())
@@ -381,7 +398,7 @@ class PlannerEntryTests(unittest.TestCase):
         import decision_plan
         with patch.object(snapshots, "load", return_value=(snapshots.parse(raw(), now=NOW), "cache", False)) as load:
             result = self.run_plan()
-        self.assertEqual(result["workers"][0]["model"], "gpt-6.1-sol")
+        self.assertEqual(result["workers"][0]["model"], "gpt-6.2-sol")
         self.assertEqual(result["decision_observation"]["reason"], "disabled")
         self.assertEqual(result["radar_selection"]["origin"], "pre_dispatch")
         load.assert_called_once()

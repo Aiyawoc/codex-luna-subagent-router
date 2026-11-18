@@ -1,4 +1,4 @@
-# v2.5.1 验收
+# 当前验收与既有回归
 
 ## 采集与存储
 
@@ -18,6 +18,6 @@ Astra high 下两个独立同类 bounded 任务可同时派两个 Luna；三独�
 
 ## 原有回归
 
-RoutePlan 2.1、Luna→Sol capability gap、max 跨层 medium 下限、Sol 精确 ID、Terra 退役、单任务 2 attempt、权限/写入隔离、fresh/TASK_ACK/简洁回传/early stop、引导五项和 instruction budget 均保留。
+RoutePlan 2.1、Luna→Sol capability gap、max 跨层 medium 下限、Sol 精确 ID、旧 Terra 退役、单任务 2 attempt、权限/写入隔离、fresh/TASK_ACK/简洁回传/early stop 和 instruction budget 均保留。当前配置按七项引导；6.2升级须验证旧账本身份保留、旧profile同名更新，以及6.1 Terra max受限经济备选不降低Sol/Astra能力下限。
 
 新增 Python 测试只证明脚本规则，不替代 Codex App 的自然派遣、scope、登记与实际身份验收。

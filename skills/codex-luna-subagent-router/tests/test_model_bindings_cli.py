@@ -13,6 +13,20 @@ import model_bindings as bindings
 
 
 class ModelInventoryCliTests(Sandbox):
+    def test_cli_distinguishes_current_and_retired_generations(self):
+        (self.project / 'AGENTS.md').write_text(
+            'Current gpt-6.2-sol, gpt-6.2-astra, gpt-6.1-terra. '
+            'Avoid gpt-6.1-sol and gpt-6-astra.', encoding='utf-8')
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(bindings.main(['--project-root', str(self.project),
+                '--working-directory', str(self.project), '--json']), 0)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result['instruction_model_mentions'][0]['models'],
+                         ['gpt-6-astra', 'gpt-6.1-sol'])
+        self.assertTrue(result['read_only'])
+        self.assertFalse(self.upath.exists())
+
     def test_explicit_project_root_from_outside_defaults_to_project(self):
         (self.project / 'AGENTS.md').write_text('Do not use gpt-5.6-luna.', encoding='utf-8')
         before = Path.cwd()

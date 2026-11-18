@@ -34,7 +34,7 @@ def settings(value):
             raise ValueError("invalid_radar_config")
     if cfg["mode"] not in ("observe", "select"):
         raise ValueError("invalid_radar_mode")
-    if cfg["tier_ceiling"] not in ("baseline", "luna", "sol", "astra"):
+    if cfg["tier_ceiling"] not in ("baseline", "luna", "terra", "sol", "astra"):
         raise ValueError("invalid_radar_ceiling")
     if cfg["effort_ceiling"] not in ("baseline", *advisor.ROUTE_EFFORTS):
         raise ValueError("invalid_radar_ceiling")

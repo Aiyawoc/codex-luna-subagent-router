@@ -15,8 +15,8 @@ description: 成本优先的 Codex SubAgent 路由。支持 luna_only/adaptive/a
 
 - `luna_only`：只用 `gpt-6-luna`；能力不足由 Lead 接管。
 - `adaptive`：更早移交独立分析/实现，观察目标约30%；`adaptive_aggressive`：更积极移交完整实施/验证，目标约50%。比例不是配额，不为凑数创建Worker，见 `references/adaptive-ownership.md`。
-- 两档共用 `gpt-6-luna` → `gpt-6.1-sol` → `gpt-6-astra` 白名单，不增加并发/权限，不引入Terra/旧型号。
-- Sol 不得用旧 `gpt-5.6` alias 做自动 spawn；精确绑定不可证明时 `lead_only`，不静默替换。
+- 基准 `gpt-6-luna` → `gpt-6.2-sol` → `gpt-6.2-astra`；`gpt-6.1-terra/max`受限经济备选见 `references/routing-policy.md`。
+- 旧Sol/Astra退出自动候选，历史身份保留；精确绑定不可证明时 `lead_only`，不静默替换。
 
 自动 Shadow 须开启；请求带真实 `decision_context`，先 `decision_check request.json` 离线预检，再 `route_advisor plan`，不另调API。详见 `references/decision-layer.md`；缺证据跳过，观察不改权限或路由。
 
@@ -68,4 +68,4 @@ finalize幂等，retry用新task ID/回执。记录失败披露但不阻塞stop/
 
 每子任务最多 2 attempt；capability-gap 默认 1 个窄而高价值高级 Worker。每波最多 `min(3, Codex显式上限)`，扣除当前 PendingInit/Running，不扣历史 Completed；同波禁止重叠写入/未解决依赖。
 
-当前 Lead 是 GPT-6 Astra，或准备创建 Astra Worker 时才额外加载 `references/astra-guidance.md`；其他模型不要加载。微任务不预读全部文档或形式化创建 Worker。
+Astra Lead（含旧型号）或将创建 Astra Worker 时读 `references/astra-guidance.md`，其他模型不要加载。微任务不预读全部文档或形式化创建 Worker。

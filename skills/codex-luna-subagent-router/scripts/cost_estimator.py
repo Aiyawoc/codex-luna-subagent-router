@@ -4,7 +4,7 @@ from __future__ import annotations
 from decimal import Decimal, ROUND_HALF_UP
 
 
-PROFILE_VERSION = "openai-standard-2026-09-30"
+PROFILE_VERSION = "openai-standard-2026-11-18"
 LONG_CONTEXT_THRESHOLD = 272_000
 MILLION = Decimal(1_000_000)
 
@@ -16,6 +16,20 @@ RATES = {
         "short": {"input": Decimal("0.10"), "cached": Decimal("0.01"), "output": Decimal("0.50")},
         "long": {"input": Decimal("0.20"), "cached": Decimal("0.02"), "output": Decimal("0.75")},
     },
+    "gpt-6.1-terra": {
+        "short": {"input": Decimal("1.00"), "cached": Decimal("0.05"), "output": Decimal("5.00")},
+        "long": {"input": Decimal("2.00"), "cached": Decimal("0.10"), "output": Decimal("7.50")},
+    },
+    "gpt-6.2-sol": {
+        "short": {"input": Decimal("2.00"), "cached": Decimal("0.10"), "output": Decimal("10.00")},
+        "long": {"input": Decimal("4.00"), "cached": Decimal("0.20"), "output": Decimal("15.00")},
+    },
+    "gpt-6.2-astra": {
+        "short": {"input": Decimal("8.00"), "cached": Decimal("0.40"), "output": Decimal("40.00")},
+        "long": {"input": Decimal("16.00"), "cached": Decimal("0.80"), "output": Decimal("60.00")},
+    },
+    # Retired Worker routes retain their own historical rates. Never attribute
+    # their token usage to the current model generation.
     "gpt-6.1-sol": {
         "short": {"input": Decimal("2.00"), "cached": Decimal("0.10"), "output": Decimal("10.00")},
         "long": {"input": Decimal("4.00"), "cached": Decimal("0.20"), "output": Decimal("15.00")},

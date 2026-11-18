@@ -17,6 +17,7 @@ SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import sol_policy
+import terra_policy
 import outcome_store
 
 SUPPORTED_SCHEMA_VERSIONS = ("2.0", "2.1")
@@ -44,19 +45,18 @@ CAPABILITY_RANK = {name: index for index, name in enumerate(CAPABILITY_LEVELS)}
 ADAPTIVE_MODELS = tuple(dict.fromkeys(model for model, _ in outcome_store.PAIRS))
 MODEL_CAPABILITY = {
     "gpt-6-luna": "luna",
+    "gpt-6.1-terra": "terra",
     "gpt-5.6-terra": "terra",
+    "gpt-6.2-sol": "sol",
     "gpt-6.1-sol": "sol",
     "gpt-6-sol": "sol",  # Historical v2.7 Lead identity only.
     "gpt-5.6": "sol",  # Lead/API alias only; not an automatic Worker route.
+    "gpt-6.2-astra": "astra",
     "gpt-6-astra": "astra",
 }
 PROFILE_BY_ROUTE = {
     (model, effort): MODEL_CAPABILITY[model] + "_" + effort
     for model, effort in outcome_store.PAIRS
-}
-LEGACY_PROFILE_BY_ROUTE = {
-    ("gpt-6-sol", "high"): "sol_high",
-    ("gpt-6-sol", "xhigh"): "sol_xhigh",
 }
 CN_LEVEL = {
     "none": "无",
@@ -79,11 +79,14 @@ DIRECTION_LABEL = {
 }
 MODEL_LABEL = {
     "gpt-6-luna": "gpt-6-luna",
+    "gpt-6.1-terra": "gpt-6.1-terra (Terra)",
     "gpt-5.6-terra": "gpt-5.6-terra",
-    "gpt-6.1-sol": "gpt-6.1-sol (Sol)",
+    "gpt-6.2-sol": "gpt-6.2-sol (Sol)",
+    "gpt-6.1-sol": "gpt-6.1-sol (legacy Sol)",
     "gpt-6-sol": "gpt-6-sol (legacy Sol)",
     "gpt-5.6": "gpt-5.6 (Sol alias)",
-    "gpt-6-astra": "gpt-6-astra",
+    "gpt-6.2-astra": "gpt-6.2-astra",
+    "gpt-6-astra": "gpt-6-astra (legacy Astra)",
 }
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{5,127}$")
 
@@ -329,8 +332,7 @@ def validate_plan(data: Any) -> list[str]:
                 errors.append(f"{path}.override_source: must be null without an override")
             if routing_mode == "luna_only" and model != "gpt-6-luna":
                 errors.append(f'{path}.model: luna_only mode requires "gpt-6-luna" unless user explicitly overrides')
-            legacy_v20_model = schema_version == "2.0" and model in {m for m, _ in LEGACY_PROFILE_BY_ROUTE}
-            if routing_mode in delegation_policy.ADAPTIVE_MODES and model not in ADAPTIVE_MODELS and not legacy_v20_model:
+            if routing_mode in delegation_policy.ADAPTIVE_MODES and model not in ADAPTIVE_MODELS:
                 errors.append(f"{path}.model: adaptive mode must use an approved built-in model")
 
         if not _is_nonempty_string(model):
@@ -362,6 +364,18 @@ def validate_plan(data: Any) -> list[str]:
                             f"{path}.capability_gap_reason: required when minimum_capability exceeds Lead capability"
                         )
 
+        if model == terra_policy.TERRA_MODEL:
+            if effort != "max":
+                errors.append(f"{path}.reasoning_effort: the Terra economic option supports max only")
+            if not override and not terra_policy.eligible(worker.get("axes")):
+                errors.append(f"{path}.axes: automatic Terra max requires bounded verifiable evidence work")
+            axes = worker.get("axes")
+            if not override and isinstance(axes, dict) and (
+                    axes.get("task_kind") != task_kind or axes.get("failure_cost") != failure_cost):
+                errors.append(f"{path}.axes: Terra classification must agree with task_kind and failure_cost")
+            if minimum_capability in ("sol", "astra"):
+                errors.append(f"{path}.model: Terra max cannot replace a Sol/Astra capability floor")
+
         if isinstance(model, str) and isinstance(effort, str) and (model, effort) in sol_policy.NEW_PAIRS:
             if worker.get("host_effort_verified") is not True or not _is_nonempty_string(worker.get("host_effort_evidence")):
                 errors.append(f"{path}.host_effort_verified: new Sol efforts need current Host model/effort evidence; no silent fallback")
@@ -382,8 +396,6 @@ def validate_plan(data: Any) -> list[str]:
         profile = worker.get("agent_profile")
         if binding == "installed_profile":
             expected = PROFILE_BY_ROUTE.get((model, effort))
-            if expected is None and schema_version == "2.0":
-                expected = LEGACY_PROFILE_BY_ROUTE.get((model, effort))
             if expected is None:
                 errors.append(
                     f"{path}.agent_profile: no installed cost-aware profile exists for model={model} effort={effort}; "

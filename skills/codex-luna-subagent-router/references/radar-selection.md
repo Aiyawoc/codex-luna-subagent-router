@@ -1,4 +1,4 @@
-# Delegation-time model score comparison (development candidate)
+# Delegation-time model score comparison (v2.9.5-rc.2 candidate)
 
 This feature is separate from the Decisions API's Shadow task assessment. It only reads the total-score table requested by the user:
 
@@ -27,12 +27,23 @@ To authorize bounded actual selection, change `--mode observe` to `--mode select
 
 Defaults: 2,500 ms total fetch deadline; reuse a snapshot for 300 seconds; reject batches completed more than 72 hours ago; same-protocol and provenance checks. `tier_ceiling=baseline` and `effort_ceiling=baseline` prohibit an external score from independently purchasing a higher model tier or effort. The benchmark cost ceiling defaults to 1.0 times the current candidate's benchmark cost, **not a cap on actual subscription spend**. Expanding ceilings requires explicit `--tier-ceiling`, `--effort-ceiling`, and optionally `--max-benchmark-cost-ratio` settings; do not expand them merely to obtain a different model in a demo.
 
+To consider the new Terra max economy option where a Luna baseline would otherwise block it, the user must authorize appropriate tier and effort ceilings. For example, preview the following configuration after obtaining data-use permission:
+
+```sh
+bin/router configure_radar_selection --scope user --enable --mode select \
+  --tier-ceiling terra --effort-ceiling max --confirm-data-use --dry-run
+```
+
+Remove `--dry-run` only when applying that authorized configuration. These ceilings allow comparison; they do not force Terra, relax its task-eligibility gate, expand `luna_only`, or remove the existing benchmark-cost and score floors. Existing installations retain their saved ceilings on upgrade.
+
 Disable: `bin/router configure_radar_selection --scope user`.
 Skip for one plan: add `--no-radar`. A completely offline baseline should specify **both** `--no-radar` and `--no-decision-api` because those are independent opt-ins.
 
 ## Selection policy
 
-Hard gates come first: existing automatic model/effort whitelist, task capability tier, user's Luna-only policy, explicit upper tier/effort ceilings, Host-specific Sol-medium restrictions, local verified failures and existing wave/delegation benefit. Sol max remains explicit-only; old GPT-5.6 routes, Terra and ultra are not enabled by a website row. Crossing above/below the Lead capability direction is prohibited because that could invalidate wave scheduling.
+Hard gates come first: current automatic model/effort whitelist, task capability tier, user's Luna-only policy, explicit upper tier/effort ceilings, Host-specific effort evidence, local verified failures and existing wave/delegation benefit. Sol/Astra now use `gpt-6.2-sol` / `gpt-6.2-astra`. Sol medium retains its evidence gate and Sol max remains explicit-only. Retired Sol/Astra versions, GPT-5.6 Terra and ultra are not enabled by a website row. Crossing above/below the Lead capability direction is prohibited because that could invalidate wave scheduling.
+
+`gpt-6.1-terra/max` is the only new Terra candidate. It requires a non-micro, bounded task; full verifiability; low/medium failure cost; shallow/medium reasoning; and kind scan/research/review/verification/other. Implementation, deep debugging and architecture are ineligible, and a Sol/Astra minimum capability never falls to Terra. Static baseline choices are unchanged. Exact Host support and all configured ceilings still apply even when the public table contains other Terra efforts.
 
 A lower effort in the same capability tier additionally requires at least **two distinct identity-verified local successful receipts** for the same project/family/axes, within the existing 90-day evidence window. It is prohibited for high-failure-cost or not-fully-verifiable tasks. `evidence_calibration=off` does not read history and therefore cannot establish this lower-effort evidence. External high scores do not override recent local failures or verified-failure escalation.
 
@@ -59,3 +70,5 @@ Parallel planners share a refresh lease and a 300-second attempt cooldown; no au
 Planning output includes `radar_selection`: source/batch/digest/timestamps, fetch-versus-cache, baseline, recommended candidate, eligible metrics, rejection reasons and whether the change was applied. A separate sanitized `radar-selections.jsonl` links comparisons to `plan_id`; it contains no file paths, private task facts or secrets. `report` only reads its counts, reasons and applied-change totals, without fetching or calling a model.
 
 The score must not be called “real-time intelligence”: it is the latest available batch at retrieval. One batch fetched many times is still one measurement. Field evidence of task quality/cost improvement and authorized endpoint availability remain required before promoting this experimental selection as a default.
+
+The RC.2 live read on 2026-11-18 successfully fetched and parsed the pinned endpoint through `radar_snapshot.isolated_fetch` / `parse`. The batch included GPT-6.2 Sol/Astra and GPT-6.1 Terra rows. This proves retrieval and protocol compatibility at that time, not current installation enablement, provider integration permission, actual Worker identity, or task-quality gains. Batch identity and digest are recorded in the RC.2 release notes; the benchmark dataset is not bundled.

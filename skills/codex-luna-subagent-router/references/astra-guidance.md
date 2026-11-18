@@ -1,6 +1,6 @@
-# GPT-6 Astra 按需校准
+# Astra 按需校准（GPT-6.2与历史Lead）
 
-只在 Astra Lead/Worker 时读取，不作为所有模型常驻上下文。官方 Model Guidance 指出 Astra 可能比工作流期望更少委派，建议明确何时和多少工作交给 SubAgent；以下按本项目成本目标应用，而不机械追求并行。
+只在 Astra Lead/Worker 时读取，不作为所有模型常驻上下文。新自动 Worker 使用 GPT-6.2 Astra；历史 Astra Lead 仍按真实身份识别。官方6.2迁移指南建议明确完成目标、合理假设和项目约定；以下保留本项目的委派与成本边界，不以模型升级放宽权限或追求并行数量。
 
 ## Astra Lead（包括 high）
 
@@ -24,6 +24,7 @@ conservative 下使用 begin/finalize/stats；日志失败不能阻止及时关�
 
 ## 依据
 
+- GPT-6.2 Astra 模型：https://developers.openai.com/api/docs/models/gpt-6.2-astra
 - https://developers.openai.com/api/docs/guides/latest-model
 - https://learn.chatgpt.com/docs/agent-configuration/subagents
 - Eric Provencher, Rethinking skills and prompts for GPT-6 Astra（既有研究依据）：https://x.com/pvncher/status/2095991462416490862

@@ -28,10 +28,13 @@ AXES = {
 }
 PAIRS = tuple((model, effort) for model, efforts in (
     ("gpt-6-luna", ("low", "medium", "high", "xhigh", "max")),
-    ("gpt-6.1-sol", ("medium", "high", "xhigh", "max")),
-    ("gpt-6-astra", ("high", "xhigh", "max")),
+    ("gpt-6.1-terra", ("max",)),
+    ("gpt-6.2-sol", ("medium", "high", "xhigh", "max")),
+    ("gpt-6.2-astra", ("high", "xhigh", "max")),
 ) for effort in efforts)
 LEGACY_PAIRS = tuple((model, effort) for model, efforts in (
+    ("gpt-6.1-sol", ("medium", "high", "xhigh", "max")),
+    ("gpt-6-astra", ("high", "xhigh", "max")),
     ("gpt-6-sol", ("high", "xhigh")),
     ("gpt-5.6-luna", ("low", "medium", "high", "xhigh", "max")),
     ("gpt-5.6-sol", ("high", "xhigh")),

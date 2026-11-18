@@ -9,12 +9,13 @@ REPO_ROOT = ROOT.parents[1]
 
 
 class ThreeTierRoutingTests(unittest.TestCase):
-    def test_runtime_policy_uses_luna_sol_astra_only(self) -> None:
+    def test_static_three_tier_policy_has_a_guarded_terra_option(self) -> None:
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         policy = (ROOT / "references" / "routing-policy.md").read_text(encoding="utf-8")
-        self.assertIn("`gpt-6-luna` → `gpt-6.1-sol` → `gpt-6-astra`", skill)
-        self.assertIn("luna < sol < astra", policy)
-        self.assertIn("Terra 不再进入新自动路由", policy)
+        self.assertIn("`gpt-6-luna` → `gpt-6.2-sol` → `gpt-6.2-astra`", skill)
+        self.assertIn("luna < terra < sol < astra", policy)
+        self.assertIn("GPT-6.1 Terra max", policy)
+        self.assertIn("静态基准", policy)
         self.assertNotIn("Luna → Terra →", skill)
 
     def test_new_example_contains_no_terra_route(self) -> None:
@@ -22,17 +23,18 @@ class ThreeTierRoutingTests(unittest.TestCase):
         self.assertNotIn("gpt-5.6-terra", text)
         self.assertNotIn('"minimum_capability": "terra"', text)
 
-    def test_eval_model_set_excludes_terra(self) -> None:
+    def test_eval_model_set_includes_current_terra_only(self) -> None:
         data = json.loads((ROOT / "evals" / "cases.json").read_text(encoding="utf-8"))
         cases = {case["id"]: case for case in data["cases"]}
         self.assertEqual(
             cases["three-tier-auto-models"]["expected_auto_models"],
-            ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"],
+            ["gpt-6-luna", "gpt-6.1-terra", "gpt-6.2-sol", "gpt-6.2-astra"],
         )
         self.assertEqual(cases["luna-read-heavy-stays-luna"]["forbid_model"], "gpt-5.6-terra")
 
-    def test_terra_profiles_are_not_bundled(self) -> None:
+    def test_only_terra_max_is_bundled(self) -> None:
         profiles = ROOT / "assets" / "codex-agents"
+        self.assertTrue((profiles / "terra-max.toml").is_file())
         self.assertFalse((profiles / "terra-medium.toml").exists())
         self.assertFalse((profiles / "terra-high.toml").exists())
 

@@ -23,6 +23,8 @@ Windows 使用 `bin/router.cmd`。省略 working-directory 时，当前目录在
 
 旧默认值和旧角色产生warning，不自动迁移。路径用摘要标识；配置文本、提示词、认证数据和实际路径不进入输出。不会读取会话正文、刷新历史统计或创建Worker。
 
+2.9.5-rc.2 当前绑定为 GPT-6 Luna、GPT-6.1 Terra max、GPT-6.2 Sol/Astra。旧 Sol/Astra 配置属于待复核候选来源；完整升级只更新 Router 托管 profiles，不根据盘点结果改写用户自定义角色、当前 Lead 或历史观察。能力确认必须针对当前 Host 的精确模型和档位，旧版本证据不能替代6.2证据。
+
 ## 对现有旧模型调用的归因
 
 优先利用已经存在的一条调用，记录相互对应的创建请求model/effort/agent_type、Host child标识和实际上下文。当前配置只能解释候选来源，不能重建历史。显式旧请求与旧观察一致不应误报成Host替换模型。

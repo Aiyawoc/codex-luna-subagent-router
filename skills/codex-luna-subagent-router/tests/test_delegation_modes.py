@@ -62,7 +62,7 @@ class ModeTests(unittest.TestCase):
             self.assertFalse(metadata["changes_model_authority"])
 
     def test_single_same_tier_deep_package_does_not_need_sibling(self):
-        p = self.plan([task(kind="debug", depth="deep", write=False)], lead="gpt-6.1-sol")
+        p = self.plan([task(kind="debug", depth="deep", write=False)], lead="gpt-6.2-sol")
         self.assertEqual(p["ready_worker_ids"], ["bounded-task"])
         self.assertEqual(p["decisions"][0]["delegation_trigger"], "bounded_ownership")
 
@@ -82,17 +82,17 @@ class ModeTests(unittest.TestCase):
             t = task(kind="scan", depth="shallow", write=False)
             self.assertEqual(self.plan([t], mode=mode, effort="medium")["workers"], [])
             ts = [task(f"scan-{i}", "scan", "shallow", False) for i in range(2)]
-            p = self.plan(ts, mode=mode, lead="gpt-6-astra")
+            p = self.plan(ts, mode=mode, lead="gpt-6.2-astra")
             self.assertEqual(len(p["local_parallel_task_ids"]), 2)
             self.assertEqual(p["workers"], [])
 
     def test_reasoning_scans_not_confiscated_as_parallel_tools(self):
         ts = [task(f"scan-{i}", "scan", "medium", False) for i in range(2)]
         for mode in policy.ADAPTIVE_MODES:
-            p = self.plan(ts, mode=mode, lead="gpt-6-astra")
+            p = self.plan(ts, mode=mode, lead="gpt-6.2-astra")
             self.assertEqual(p["local_parallel_task_ids"], [])
             self.assertEqual(len(p["ready_worker_ids"]), 2)
-        old = self.plan(ts, mode="luna_only", lead="gpt-6-astra")
+        old = self.plan(ts, mode="luna_only", lead="gpt-6.2-astra")
         self.assertEqual(len(old["local_parallel_task_ids"]), 2)
         self.assertIsNone(old["delegation_policy"]["target_subagent_usage_share"])
 
@@ -109,7 +109,7 @@ class ModeTests(unittest.TestCase):
     def test_unknown_lead_and_unready_ownership_do_not_gain_authority(self):
         self.assertEqual(self.plan(mode="adaptive_aggressive", lead="unknown-host-model")["workers"], [])
         t = task(); t["work_package"] = {"handoff_ready": False}
-        p = self.plan([t], mode="adaptive_aggressive", lead="gpt-6-astra")
+        p = self.plan([t], mode="adaptive_aggressive", lead="gpt-6.2-astra")
         self.assertEqual(p["workers"], [])
         self.assertIn("handoff_not_ready", p["decisions"][0]["reason"])
         t = task(); t["read_paths"] = []; t["write_paths"] = []

@@ -27,7 +27,7 @@ class ModelPolicyTests(unittest.TestCase):
     def test_obsolete_models_fail_automatic_dispatch_in_both_bindings(self):
         example = json.loads((CORE/'examples/route-plan.valid.json').read_text(encoding='utf-8'))
         for mode in ('adaptive', 'luna_only'):
-            for model in (OLD, 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-sol'):
+            for model in (OLD, 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-6-astra'):
                 for binding in ('installed_profile', 'live_spawn'):
                     with self.subTest(mode=mode, model=model, binding=binding):
                         value = copy.deepcopy(example)

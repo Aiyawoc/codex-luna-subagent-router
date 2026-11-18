@@ -1,18 +1,18 @@
 # Agent Router
 
-测试候选 **v2.9.5-rc.1**：`adaptive` 主动移交完整工作包，观察目标约30%；新增 `adaptive_aggressive` 面向约50%。两者都是验收目标而非自动用量配额，不扩大并发或自动使用更贵模型。见[策略说明](docs/v2.9.5-adaptive-ownership.md)及[本机升级验收](docs/v2.9.5-rc.1-test-guide.md)。
+测试候选 **v2.9.5-rc.2**：Sol/Astra 更新为 GPT-6.2，旧版退出新自动路由；增加受限的 GPT-6.1 Terra max 经济备选。保留 RC.1 的主动委派策略、已有模式和权限边界。见[本版说明与验收](docs/v2.9.5-rc.2-release-notes.md)及[策略说明](docs/v2.9.5-adaptive-ownership.md)。
 
 **简体中文** | [English](README.en.md)
 
 **保持主 Agent 不变，把适合的子任务交给成本更低、但足够完成任务的 Worker。**
 
-**Agent Router** 是一个面向 Codex 的成本优先 SubAgent 路由 Skill。它可以按任务复杂度在 **Luna / Sol / Astra + reasoning effort** 之间选择 Worker，支持整组任务规划、并发执行、验证结果校准，以及可选的主／子 Agent token 统计。
+**Agent Router** 是一个面向 Codex 的成本优先 SubAgent 路由 Skill。它可以按任务复杂度在 **Luna / Terra / Sol / Astra + reasoning effort** 之间选择 Worker，支持整组任务规划、并发执行、验证结果校准，以及可选的主／子 Agent token 统计。Terra 当前仅提供受限的 max 经济备选。
 
 当前稳定版：[**v2.9.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.3) · [更新记录](CHANGELOG.md) · [MIT License](LICENSE)
 
 本RC继承 **v2.9.4-rc.2** 的 Decision Shadow 正常规划接入和30秒诊断边界；原配置仍须显式开启，Shadow不改变Worker路由。见[接入与验收](docs/v2.9.4-shadow-checkpoints.md)。
 
-RC.2 新增离线配置/上下文预检、可见终端配置、分阶段故障诊断与30秒上限；配置写入、凭据可读、API成功分开验收。见 [诊断与配置](docs/v2.9.4-rc.2-diagnostics.md)。
+v2.9.4-rc.2 新增的离线配置/上下文预检、可见终端配置、分阶段故障诊断与30秒上限继续保留；配置写入、凭据可读、API成功分开验收。见 [诊断与配置](docs/v2.9.4-rc.2-diagnostics.md)。
 
 
 **v2.9.3 Stable 热修复**：修复 macOS Keychain 已有凭据读取及覆盖写入时错误释放指针导致的 SIGSEGV。延续 v2.9.2 的 Decisions API Shadow、第七项安全配置引导和 2.9.1 可靠性修复，不更改实际 Worker 路由。见 [热修复说明](docs/v2.9.3-release-notes.md) 与 [验收边界](docs/v2.9.3-stable-acceptance.md)。
@@ -35,7 +35,7 @@ Release 继续提供原有 `router-*` 完整包，另外提供四个平台的 `r
 |---|---|
 | **成本优先路由** | 主 Agent 保持用户当前选择；为可下放子任务选择最低足够的 Worker 模型与推理强度。 |
 | **整组任务规划** | 一次评估多个可下放子任务；独立任务可并发，有依赖或写入冲突时分波执行。 |
-| **三层模型** | `adaptive` 模式可在 Luna → Sol → Astra 中按任务需要升级能力；v2.8 自动 Worker runtime IDs 为 `gpt-6-luna → gpt-6.1-sol → gpt-6-astra`。 |
+| **模型与经济备选** | 静态基准为 `gpt-6-luna → gpt-6.2-sol → gpt-6.2-astra`；`gpt-6.1-terra/max` 仅在限定任务和证据条件下作为经济备选。 |
 | **Worker 复用** | 同一工作流、上下文仍有价值且能力足够时，可复用已完成 Worker。 |
 | **证据复用** | Lead 把仍有效的已确认事实、证据位置和已完成探索交给 Worker；fresh Worker 也无需重复已经充分的探索。 |
 | **验证结果校准** | 可选使用本地已验证结果，对后续路由做保守校准。 |
@@ -49,7 +49,8 @@ Release 继续提供原有 `router-*` 完整包，另外提供四个平台的 `r
 | 策略 | 自动 Worker | 适合场景 |
 |---|---|---|
 | **`luna_only`** | 自动 Worker 只使用 Luna；不适合 Luna 的工作由当前主 Agent 处理。 | 希望自动委派的成本边界最简单。 |
-| **`adaptive`** | 在 Luna → Sol → Astra 中选择最低足够的模型与强度。 | 希望兼顾成本、复杂任务可靠性和独立复核。 |
+| **`adaptive`** | 保留 Luna → Sol → Astra 静态基准；有证据的失败升级或已启用雷达可在受限场景选择 Terra max。 | 希望兼顾成本、复杂任务可靠性和独立复核。 |
+| **`adaptive_aggressive`** | 同一模型和权限边界，更积极移交可独立完成的工作包。 | 希望扩大有净收益的委派范围。 |
 
 通常：
 
@@ -57,7 +58,15 @@ Release 继续提供原有 `router-*` 完整包，另外提供四个平台的 `r
 - **Sol**：高歧义调试、跨模块因果、竞态和较深推理；
 - **Astra**：专家级架构、高失败代价分析和独立复核。
 
-Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker 使用的模型/强度。
+Router 不会替用户切换主 Agent；它只决定是否委派以及 Worker 使用的模型/强度。两档 adaptive 的约30%/50%仍是观察目标，不是自动用量配额或已测得的收益。
+
+### 本版模型迁移与网页评分
+
+升级保留 `sol_medium/high/xhigh/max`、`astra_high/xhigh/max` 等 profile 名称，将其模型绑定更新为6.2；新增 Terra max。原 `routing.json` 无需改写。旧 Sol/Astra 的历史身份、用量与价格保留，旧 Lead 仍可识别；用户明确指定模型时继续执行原有覆盖及 Host 精确支持检查。
+
+Terra max 仅适用于非 micro、有界、完全可验证、低/中失败代价、浅/中等推理的扫描、研究、复核、验证或 other 任务。它可参与 conservative 下有本地已验证失败证据的有界升级，也可参加已启用的雷达比较；不降低 Sol/Astra 的最低能力要求，不替代实施、深度调试或架构任务的原路线。静态默认与 `luna_only` 保持原边界。
+
+网页评分获取已经接入正常 `route_advisor plan`：有可立即派遣的 Worker 时，按需获取或复用 CodexRadar 的固定总分数据。功能默认关闭；`observe` 只记录，`select` 才在能力、Host证据和用户成本/档位上限内择优。它不是实时智商测量或通用多来源爬虫；数据不可用或无合格改进时保留基准。配置和数据使用条件见[雷达说明](skills/codex-luna-subagent-router/references/radar-selection.md)。
 
 ### Evidence reuse
 

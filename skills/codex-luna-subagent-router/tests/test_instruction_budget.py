@@ -29,7 +29,7 @@ class InstructionBudgetTests(unittest.TestCase):
     def test_astra_guidance_is_a_separate_reference(self) -> None:
         self.assertTrue((ROOT / "references" / "astra-guidance.md").is_file())
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("当前 Lead 是 GPT-6 Astra", skill)
+        self.assertIn("Astra Lead（含旧型号）", skill)
         self.assertIn("其他模型不要加载", skill)
 
 

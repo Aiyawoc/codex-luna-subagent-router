@@ -82,12 +82,12 @@ class SolEffortExpansionTests(unittest.TestCase):
     def test_xhigh_failure_still_escalates_to_astra_not_sol_max(self):
         failed = [dict(model=SOL, effort="xhigh", outcome="verified_fail", identity_verified=True)]
         result = advisor.apply_history(advisor._route(SOL, "xhigh"), axes(reasoning_depth="deep"), failed)
-        self.assertEqual((result["model"], result["effort"]), ("gpt-6-astra", "high"))
+        self.assertEqual((result["model"], result["effort"]), ("gpt-6.2-astra", "high"))
 
     def test_max_history_cannot_downshift_astra(self):
         successes = [dict(model=SOL, effort="max", outcome="verified_pass", identity_verified=True)] * 8
-        result = advisor.apply_history(advisor._route("gpt-6-astra", "high"), axes(task_kind="implementation"), successes)
-        self.assertEqual(result["model"], "gpt-6-astra")
+        result = advisor.apply_history(advisor._route("gpt-6.2-astra", "high"), axes(task_kind="implementation"), successes)
+        self.assertEqual(result["model"], "gpt-6.2-astra")
 
     def test_medium_history_does_not_lower_deep_debug_even_with_support(self):
         successes = [dict(model=SOL, effort="medium", outcome="verified_pass", identity_verified=True)] * 8

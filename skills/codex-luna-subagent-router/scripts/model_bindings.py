@@ -17,7 +17,6 @@ import runtime_support
 
 MAX_FILE = 128 * 1024
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}\Z')
-OLD_MODELS = re.compile(r'(?<![A-Za-z0-9_-])gpt-5\.6-(?:luna|sol)(?![A-Za-z0-9_-])')
 
 
 def _text(path):
@@ -88,9 +87,14 @@ MAX_CONFIG_PROFILES = 32
 MAX_ROLE_CANDIDATES = 128
 ROLE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z')
 RETIRED_MODELS = frozenset(('gpt-5.6', 'gpt-5.6-luna', 'gpt-5.6-sol',
-                            'gpt-5.6-terra', 'gpt-6-sol'))
+                            'gpt-5.6-terra', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-6-astra'))
+# Match exact identifiers; punctuation may terminate a mention, but a model
+# suffix or another version must not be reported as the retired identifier.
 INSTRUCTION_MODELS = re.compile(
-    r'(?<![A-Za-z0-9_.-])(?:gpt-5\.6(?:-(?:luna|sol|terra))?|gpt-6-sol)(?![A-Za-z0-9_-])')
+    r'(?<![A-Za-z0-9_.-])(?:'
+    + '|'.join(re.escape(model) for model in sorted(RETIRED_MODELS, key=lambda model: (-len(model), model)))
+    + r')(?![A-Za-z0-9_-]|\.[A-Za-z0-9])')
+OLD_MODELS = INSTRUCTION_MODELS
 
 
 class _InventoryReader:

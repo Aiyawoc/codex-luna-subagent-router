@@ -1,6 +1,6 @@
 ---
 name: codex-luna-subagent-router
-description: Use Agent Router for explicit installation/migration or cost-aware Luna/Sol/Astra SubAgent routing in a locally enabled Codex plugin. Preserve the Lead model and user authorization.
+description: Use Agent Router for explicit installation/migration or cost-aware Luna/Terra/Sol/Astra SubAgent routing in a locally enabled Codex plugin. Preserve the Lead model and user authorization.
 ---
 
 # Agent Router plugin entry

@@ -1,18 +1,18 @@
 # Agent Router
 
-Release candidate **v2.9.5-rc.1**: enhanced ownership delegation directly in adaptive (~30% evaluation goal), plus adaptive_aggressive (~50%). Goals are not quotas or measured achievements; model authority and concurrency limits are unchanged. See [policy notes](docs/v2.9.5-adaptive-ownership.md).
+Release candidate **v2.9.5-rc.2** updates Sol/Astra to GPT-6.2, retires their older versions from new automatic routes, and adds a restricted GPT-6.1 Terra max economy option. RC.1 ownership policy, configured modes and authority boundaries remain in place. See [release and acceptance notes](docs/v2.9.5-rc.2-release-notes.md).
 
 [简体中文](README.md) | **English**
 
 **Keep the Lead model selected by the user, and delegate suitable subtasks to lower-cost Workers that are still sufficient for the job.**
 
-**Agent Router** is a cost-first SubAgent routing Skill for Codex. It can choose **Luna / Sol / Astra + reasoning effort** per task, plan a whole workload, run independent Workers concurrently, calibrate routing from verified outcomes, and optionally track main/child token usage.
+**Agent Router** is a cost-first SubAgent routing Skill for Codex. It can choose **Luna / Terra / Sol / Astra + reasoning effort** per task, plan a whole workload, run independent Workers concurrently, calibrate routing from verified outcomes, and optionally track main/child token usage. Terra currently offers only a restricted max economy option.
 
 Current stable release: [**v2.9.3**](https://github.com/Aiyawoc/codex-luna-subagent-router/releases/tag/v2.9.3) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
 
-Release candidate **v2.9.5-rc.1** strengthens `adaptive` delegation ownership (observational ~30% goal) and adds `adaptive_aggressive` (observational ~50% goal), without worker quotas, automatic model upgrades, or changed concurrency limits. Includes the opt-in v2.9.4-rc.2 Decision Shadow integration. See the [upgrade and test guide](docs/v2.9.5-rc.1-test-guide.md) and [ownership policy](docs/v2.9.5-adaptive-ownership.md).
+This RC retains enhanced `adaptive` ownership (observational ~30% goal), `adaptive_aggressive` (observational ~50% goal), and the opt-in v2.9.4 Decision Shadow integration. The percentages are evaluation goals, not worker quotas or measured achievements. See the [ownership policy](docs/v2.9.5-adaptive-ownership.md) and [current migration notes](docs/v2.9.5-rc.2-release-notes.md).
 
-RC.2 separates offline configuration/context checks, visible credential setup, safe provider phase diagnostics and up-to-30-second budgets. Configuration, credential readability and API success are separate gates. See [diagnostics and setup](docs/v2.9.4-rc.2-diagnostics.md).
+The v2.9.4-rc.2 offline configuration/context checks, visible credential setup, safe provider phase diagnostics and up-to-30-second budgets remain available. Configuration, credential readability and API success are separate gates. See [diagnostics and setup](docs/v2.9.4-rc.2-diagnostics.md).
 
 
 **v2.9.3 Stable hotfix** corrects a macOS Keychain SIGSEGV on reading/updating an existing API credential. It retains the v2.9.2 Decisions API Shadow, seven-question onboarding and v2.9.1 reliability improvements without changing actual Worker routing. See [hotfix notes](docs/v2.9.3-release-notes.md) and [acceptance boundary](docs/v2.9.3-stable-acceptance.md).
@@ -35,7 +35,7 @@ Read [plugin installation, migration and rollback](skills/codex-luna-subagent-ro
 |---|---|
 | **Cost-first routing** | Keep the current Lead unchanged and choose the cheapest sufficient Worker model and reasoning effort for delegable work. |
 | **Whole-workload planning** | Evaluate multiple delegable tasks together; run independent work concurrently and serialize dependencies or write conflicts. |
-| **Three model tiers** | `adaptive` mode can move across Luna → Sol → Astra when more capability is needed; v2.8 uses `gpt-6-luna → gpt-6.1-sol → gpt-6-astra` for new automatic Workers. |
+| **Models and economy option** | The static baseline is `gpt-6-luna → gpt-6.2-sol → gpt-6.2-astra`; `gpt-6.1-terra/max` is an economy option only for eligible tasks with the required evidence. |
 | **Worker reuse** | Reuse a completed Worker when the workstream matches, context is still valuable, and the route remains sufficient. |
 | **Evidence reuse** | Pass still-valid confirmed facts, evidence locations, and completed exploration to Workers so fresh Workers do not repeat sufficient discovery. |
 | **Verified-outcome calibration** | Optionally use local verified results to adjust later routing conservatively. |
@@ -50,7 +50,8 @@ Read [plugin installation, migration and rollback](skills/codex-luna-subagent-ro
 | Mode | Automatic Workers | Best fit |
 |---|---|---|
 | **`luna_only`** | Automatic Workers use Luna only; work that is not suitable for Luna stays with the current Lead. | The simplest, most predictable automatic-Worker cost boundary. |
-| **`adaptive`** | Choose the cheapest sufficient route across Luna → Sol → Astra. | Balance cost, difficult-task reliability, and independent review. |
+| **`adaptive`** | Keep the Luna → Sol → Astra static baseline; verified-failure escalation or enabled radar selection can choose Terra max for eligible work. | Balance cost, difficult-task reliability, and independent review. |
+| **`adaptive_aggressive`** | The same model and authority boundaries, with earlier transfer of independent work packages. | Delegate more work when the expected net benefit is positive. |
 
 Typical routing intent:
 
@@ -59,6 +60,14 @@ Typical routing intent:
 - **Astra:** expert architecture, high-consequence analysis, and independent review.
 
 The Router does not switch the user's Lead model. It decides whether to delegate and which Worker model/effort to use.
+
+### Model migration and website scores
+
+The existing `sol_medium/high/xhigh/max` and `astra_high/xhigh/max` profile names now bind to GPT-6.2; Terra max is added separately. Existing `routing.json` choices need no rewrite. Historical Sol/Astra identities, usage and rate cards remain intact, and older Lead identities remain recognizable. Explicit user overrides keep the existing exact Host support and permission checks.
+
+Terra max is limited to non-micro, bounded, fully verifiable scan, research, review, verification or other tasks with shallow/medium reasoning and low/medium failure cost. It may participate in bounded escalation based on locally verified failures under conservative calibration, or in enabled radar selection. It cannot lower a Sol/Astra capability floor or replace implementation, deep-debugging or architecture routes. The static defaults and `luna_only` boundary remain unchanged.
+
+Website score retrieval is already connected to `route_advisor plan`: a ready Worker wave may fetch or reuse the fixed CodexRadar total-score feed. It is disabled by default. `observe` records alternatives; `select` may apply an eligible improvement within capability, Host-evidence and configured cost/effort limits. This is a dated benchmark batch, not live intelligence measurement or a general multi-source crawler. Unavailable data or no eligible improvement preserves the baseline. See [radar configuration and data-use requirements](skills/codex-luna-subagent-router/references/radar-selection.md).
 
 ## Quick start
 

@@ -15,7 +15,7 @@
     {
       "id": "expensive-lead-downroute",
       "prompt": "当前主 Agent 很强，请扫描 80 个文件定位某 API 调用。",
-      "lead_model": "gpt-6-astra",
+      "lead_model": "gpt-6.2-astra",
       "routing_mode": "adaptive",
       "expected_delegate": true,
       "preferred_model_family": [
@@ -47,7 +47,7 @@
       "lead_model": "gpt-6-luna",
       "lead_reasoning_effort": "max",
       "routing_mode": "adaptive",
-      "expected_model": "gpt-6.1-sol",
+      "expected_model": "gpt-6.2-sol",
       "expected_minimum_capability": "sol",
       "expected_route_direction": "up",
       "expected_effort": [
@@ -64,8 +64,8 @@
       "lead_reasoning_effort": "max",
       "routing_mode": "adaptive",
       "allowed_models": [
-        "gpt-6.1-sol",
-        "gpt-6-astra"
+        "gpt-6.2-sol",
+        "gpt-6.2-astra"
       ],
       "expected_minimum_capability": "astra",
       "expected_route_direction": "up",
@@ -74,10 +74,10 @@
     {
       "id": "sol-max-expert-uproute-effort-floor",
       "prompt": "当前主 Agent 是 Sol max，执行专家级高失败代价独立审查，需要升级 Astra。",
-      "lead_model": "gpt-6.1-sol",
+      "lead_model": "gpt-6.2-sol",
       "lead_reasoning_effort": "max",
       "routing_mode": "adaptive",
-      "expected_model": "gpt-6-astra",
+      "expected_model": "gpt-6.2-astra",
       "expected_route_direction": "up",
       "minimum_upward_effort": "medium",
       "expected_effort": [
@@ -89,7 +89,7 @@
     {
       "id": "sol-simple-scan-downroute",
       "prompt": "当前主 Agent 是 Sol，只需扫描大量文件并列出某 API 的调用点，不做复杂推理。",
-      "lead_model": "gpt-6.1-sol",
+      "lead_model": "gpt-6.2-sol",
       "routing_mode": "adaptive",
       "preferred_model_family": [
         "gpt-6-luna"
@@ -99,7 +99,7 @@
     {
       "id": "astra-mechanical-downroute",
       "prompt": "当前主 Agent 是 Astra，任务只是机械检查 60 个配置文件中的同一键。",
-      "lead_model": "gpt-6-astra",
+      "lead_model": "gpt-6.2-astra",
       "routing_mode": "adaptive",
       "preferred_model_family": [
         "gpt-6-luna"
@@ -128,7 +128,7 @@
       "id": "adaptive-hard-debug",
       "prompt": "根据少量日志和并发代码定位高歧义竞态根因。",
       "routing_mode": "adaptive",
-      "expected_model": "gpt-6.1-sol",
+      "expected_model": "gpt-6.2-sol",
       "expected_effort": [
         "high",
         "xhigh"
@@ -139,19 +139,20 @@
       "prompt": "对关键迁移方案做高失败代价、独立反证审查。",
       "routing_mode": "adaptive",
       "allowed_models": [
-        "gpt-6.1-sol",
-        "gpt-6-astra"
+        "gpt-6.2-sol",
+        "gpt-6.2-astra"
       ],
       "minimum_effort": "high"
     },
     {
       "id": "three-tier-auto-models",
-      "prompt": "列出 adaptive 自动候选模型。",
+      "prompt": "列出 adaptive 自动候选模型，说明 Terra max 的受限经济备选条件和静态基准。",
       "routing_mode": "adaptive",
       "expected_auto_models": [
         "gpt-6-luna",
-        "gpt-6.1-sol",
-        "gpt-6-astra"
+        "gpt-6.1-terra",
+        "gpt-6.2-sol",
+        "gpt-6.2-astra"
       ],
       "forbid_model": "gpt-5.6-terra"
     },
@@ -160,7 +161,7 @@
       "prompt": "Luna max 处理 bounded deep debug，verifiability=partial，failure_cost=medium。",
       "routing_mode": "adaptive",
       "advisor": "route_advisor.py",
-      "expected_model": "gpt-6.1-sol",
+      "expected_model": "gpt-6.2-sol",
       "expected_effort": "high",
       "expected_route_direction": "up"
     },
@@ -208,12 +209,12 @@
       "evidence_calibration": "conservative",
       "history": {
         "verified_fail": {
-          "model": "gpt-6.1-sol",
+          "model": "gpt-6.2-sol",
           "effort": "high",
           "count": 1
         }
       },
-      "expected_model": "gpt-6.1-sol",
+      "expected_model": "gpt-6.2-sol",
       "expected_effort": "xhigh"
     },
     {
@@ -246,7 +247,7 @@
       "id": "sol-runtime-id",
       "prompt": "为一个困难调试 Worker 选择 Sol high。",
       "routing_mode": "adaptive",
-      "expected_model": "gpt-6.1-sol",
+      "expected_model": "gpt-6.2-sol",
       "forbid_model": "gpt-5.6",
       "expected_profile": "sol_high"
     },
@@ -255,7 +256,7 @@
       "prompt": "本次这个 Worker 明确使用 Astra xhigh。",
       "routing_mode": "luna_only",
       "expected_override_source": "user",
-      "expected_model": "gpt-6-astra",
+      "expected_model": "gpt-6.2-astra",
       "expected_effort": "xhigh"
     },
     {
@@ -263,7 +264,7 @@
       "prompt": "Luna max 遇到明确跨模块 race，客观最低能力已判定为 Sol。",
       "routing_mode": "adaptive",
       "lead_model": "gpt-6-luna",
-      "expected_first_worker_model": "gpt-6.1-sol",
+      "expected_first_worker_model": "gpt-6.2-sol",
       "forbid": [
         "luna_probe_first",
         "mechanical_model_ladder"

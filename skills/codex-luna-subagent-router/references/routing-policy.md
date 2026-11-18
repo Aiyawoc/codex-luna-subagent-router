@@ -5,13 +5,13 @@
 `adaptive`和`adaptive_aggressive`共享本文模型/档位与失败约束；区别在工作包所有权，观察目标分别约30%/50%，不是实际用量或自动额度。完整执行形态用正常plan入口；单独recommend只提供模型基准。详见`adaptive-ownership.md`。
 
 
-## 目标与三层
+## 目标与能力层级
 
 ExpectedCost = 首次模型成本 + 失败/重试成本 + 上下文复制成本 + Lead 集成/验证成本。
 
 委派比较的是**边际净收益**：避免的 Lead 工作 + 并行推进价值 + 上下文隔离价值 + 独立证据/复核价值 − Worker startup/交接/整合成本。只要该值为正且边界允许，就可以委派；不要求 Worker 收益必须“明显大于”全部开销。证据不足时仍保守留在 Lead。
 
-不内置固定美元价。相对层级为 `luna < sol < astra`：Luna 经济、Sol 中等、Astra 专家。Terra 不再进入新自动路由，仅保留旧 RoutePlan 解析兼容。
+不内置固定美元价。Router 的相对能力层级为 `luna < terra < sol < astra`，不是网页分数排名。静态基准仍按 Luna / Sol / Astra 分配；新增的 GPT-6.1 Terra max 仅作为下述受限经济备选。旧 GPT-5.6 Terra 保留历史兼容，不恢复自动路由。
 
 ## Capability Gap 与确定性 Advisor
 
@@ -27,11 +27,25 @@ Lead 提供非敏感 task_family 和 task_kind/task_scope/reasoning_depth/verifi
 
 不存在 gap 时再用普通成本门决定下放、同层或 Lead。并发数是上限，不是配额；不要为保持 Lead 忙碌增加昂贵工作。若运行中 Worker 的预期新增信息价值已低于成本，且不承担必要独立验收，stop 并 close。
 
-## 两种模式
+## 模式与当前模型
 
 luna_only 自动 Worker 只允许 gpt-6-luna，low/medium/high/xhigh/max 选最低足够；Luna 不足交回 Lead。
 
-adaptive 自动候选仅 gpt-6-luna / gpt-6.1-sol / gpt-6-astra。已安装 profiles：Luna 五档、Sol medium/high/xhigh/max、Astra high/xhigh/max。gpt-6-sol 仅作为 v2.7 历史 outcome/usage/Lead identity 读取兼容，不参与新的自动 Worker 路由或校准。
+adaptive / adaptive_aggressive 的静态基准为 gpt-6-luna / gpt-6.2-sol / gpt-6.2-astra；gpt-6.1-terra 仅有 max 经济备选。当前 profiles：Luna low/medium/high/xhigh/max、Terra max、Sol medium/high/xhigh/max、Astra high/xhigh/max。支持集合不等于无条件自动候选，Sol medium 的 Host 证据门和 Sol max 的用户显式指定门继续有效，不新增 Sol/Astra low 或 ultra。
+
+### GPT-6.1 Terra max 经济备选
+
+仅限非 micro、task_scope=bounded、verifiability=yes、failure_cost=low/medium、reasoning_depth=shallow/medium，且 task_kind 属于 scan/research/review/verification/other 的工作。实施、深度 debug、race、lifecycle 和 architecture 仍按原最低能力处理；minimum_capability=sol/astra 不降到 Terra。
+
+本轮不改变静态默认路线。conservative 下已有匹配的本地 verified_fail 证据时，Terra max 可参与合格任务的有界失败升级；仍遵守最低能力、失败组合否决和最多2次attempt，不先制造失败来触发它。
+
+启用 radar select 后，Terra max 也可进入符合条件任务的经济比较，但仍需当前 Host 对精确 model+effort 的证据，并满足原模型/effort 上限、成本上限、已验证失败与委派方向约束。网页高分不能单独授权升级。luna_only 不自动创建 Terra；其它 Terra 档位不因一个 max 评分而获得授权，详见 `radar-selection.md`。
+
+### GPT-6.2 升级与旧型号退役
+
+现有 sol_medium/high/xhigh/max、astra_high/xhigh/max profile 名称保持不变，完整升级时将托管绑定更新为 gpt-6.2-sol / gpt-6.2-astra；无需为本次模型变更改写 routing.json。安装配置不是 Host 已接受模型的证明，旧版本的能力快照也不能当作6.2精确支持证据。
+
+gpt-6.1-sol / gpt-6-sol / gpt-5.6-sol / gpt-6-astra 及既有更旧型号退出新自动候选；历史 outcome/usage 的 model、effort、价格及 Lead identity 保留原值，不重标为6.2。旧模型成功样本不自动成为新模型的同模型能力证据。用户明确覆盖仍按原规则核实，不因自动退役而改写当前 Lead；这也不表示 OpenAI 已关闭旧模型的服务。
 
 旧 `gpt-5.6` alias 不用于自动 installed profile / RoutePlan / spawn。未预装组合只有 live spawn 精确支持 model+effort 才允许；不能验证时 lead_only，不静默继承。用户本轮明确覆盖可记录，但不能越过平台/权限边界。
 

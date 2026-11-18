@@ -13,10 +13,11 @@ from pathlib import Path
 
 import cost_estimator
 import outcome_store as store
+import terra_policy
 import token_usage
 
 
-CURRENT_MODELS = ("gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra")
+CURRENT_MODELS = ("gpt-6-luna", "gpt-6.1-terra", "gpt-6.2-sol", "gpt-6.2-astra")
 MODEL_RANK = {model: index for index, model in enumerate(CURRENT_MODELS)}
 EFFORT_RANK = {name: index for index, name in enumerate(("low", "medium", "high", "xhigh", "max"))}
 SAFE_TASK_KINDS = frozenset(("leaf", "scan", "implementation", "verification"))
@@ -132,6 +133,9 @@ def collect(registry=None, usage_path=None, *, scope=None, min_candidate_passes=
             comparable_groups += 1
         for candidate_route, candidate_values, candidate_avg in route_items:
             if candidate_avg is None:
+                continue
+            if candidate_route[0] == terra_policy.TERRA_MODEL and (
+                    candidate_route != terra_policy.TERRA_PAIR or not terra_policy.eligible(axes)):
                 continue
             if candidate_values["outcomes"].get("verified_fail", 0) or candidate_values["outcomes"].get("partial", 0):
                 continue

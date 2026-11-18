@@ -77,6 +77,14 @@ conservative 模式在结束前 finalize：有可信观察身份并通过验收�
 
 每子任务最多 2 attempt：保存旧证据，必要时 stop/finalize，close 旧 Worker thread；fresh retry：创建新 `task_id`、新回执和 fresh 新 Worker。不要将新的独立目标送进旧线程，除非满足上面的条件复用规则。
 
+### GPT-6.2 前缀与模型迁移
+
+官方说明 GPT-6.2 在检测到对话前缀被修改、模型降级、终端用户或组织变化时会丢弃既有推理项。保持已有历史的内容和顺序，不为更新模型名称重写历史消息、请求身份或账本。升级不会把运行中的旧 Worker 变成6.2；后续需要改变 model/effort 的工作按现有 fresh retry 规则创建新 Worker，沿用总计最多2次 attempt 的上限。
+
+新 Worker 通过 `evidence_reuse` 接收最小充分的已验证事实；不得承诺旧模型的内部推理或缓存会跨模型继续有效。同模型的正常条件复用不变。Router 不管理 Responses API 会话存储，本版不新增会话复制、历史清洗或自动重试接口。
+
+官方依据：https://developers.openai.com/api/docs/guides/latest-model
+
 ## 叶子边界
 
 Worker 不创建 SubAgent，不改模型/effort，不扩大权限，不执行最终不可逆动作。派遣前授权、精确 model+effort、同波写入隔离和最小上下文要求不因采集或复用而放宽。

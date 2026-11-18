@@ -46,7 +46,7 @@ class RouteEconomicsTests(unittest.TestCase):
         records = [outcome("r1"), outcome("r2", "verified_fail"), outcome("r3")]
         receipts = {
             "r1": usage("gpt-6-luna", "high"),
-            "r2": usage("gpt-6.1-sol", "high"),
+            "r2": usage("gpt-6.2-sol", "high"),
             "r3": usage("gpt-6-luna", "high"),
         }
         with patch.object(route_economics.store, "read_records", return_value=(records, {"invalid_lines": 0})), \
@@ -57,7 +57,7 @@ class RouteEconomicsTests(unittest.TestCase):
         self.assertFalse(result["authoritative"])
         self.assertTrue(result["routing_unchanged"])
         luna = next(item for item in result["routes"] if item["model"] == "gpt-6-luna")
-        sol = next(item for item in result["routes"] if item["model"] == "gpt-6.1-sol")
+        sol = next(item for item in result["routes"] if item["model"] == "gpt-6.2-sol")
         self.assertEqual(luna["attempts"], 2)
         self.assertEqual(luna["outcomes"], {"verified_pass": 2})
         self.assertEqual(sol["outcomes"], {"verified_fail": 1})
@@ -82,7 +82,7 @@ class RouteEconomicsTests(unittest.TestCase):
         self.assertEqual(result["routes"], [])
 
     def test_incomplete_cached_detail_is_not_estimated(self):
-        bad = usage("gpt-6.1-sol", "high")
+        bad = usage("gpt-6.2-sol", "high")
         bad["snapshot"]["counts"]["cached_input_tokens"] = None
         with patch.object(route_economics.store, "read_records", return_value=([outcome("r1")], {})), \
              patch.object(route_economics.token_usage, "for_receipt", return_value=bad):
@@ -94,7 +94,7 @@ class RouteEconomicsTests(unittest.TestCase):
 
     def test_large_receipt_interval_is_pricing_gap_not_assumed_long_request(self):
         large = usage(
-            "gpt-6.1-sol", "high",
+            "gpt-6.2-sol", "high",
             input_tokens=400_000, cached=200_000, output=40_000,
         )
         with patch.object(route_economics.store, "read_records", return_value=([outcome("r1")], {})), \

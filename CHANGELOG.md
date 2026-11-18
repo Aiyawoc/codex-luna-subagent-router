@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.5-rc.2: GPT-6.2 models and Terra max economy option (2026-11-18)
+
+- 新自动Sol/Astra Worker更新为`gpt-6.2-sol` / `gpt-6.2-astra`，保留同名托管profile与既有effort边界；原`routing.json`、Decision Shadow和用户选择保持有效。
+- 旧Sol/Astra退出新自动候选，保留旧Lead、请求/观察身份、历史outcome/usage与价格；不把旧模型样本改名为新模型证据。用户明确override继续受原Host与权限边界约束。
+- 新增`gpt-6.1-terra/max`受限经济备选，仅用于有界、可验证、低/中失败代价的浅/中等只读/复核类任务。静态基准不变；conservative下有本地失败证据的有界升级可选Terra，雷达select另受Host证据及用户tier/effort/成本上限约束，均不能降低Sol/Astra最低能力。
+- 继续沿用可选CodexRadar固定总分抓取、observe/select及失败回退；本轮真实网页读取和协议解析通过，不代表生产已启用或模型质量/节约收益验证。
+- 补充GPT-6.2前缀与fresh retry规则，不新增Responses会话管理，不改变每任务最多2次attempt、Luna-only或并发隔离。详细迁移、来源与验收边界见`docs/v2.9.5-rc.2-release-notes.md`。
+
 ## 2.9.5-rc.1: Ownership-aware Adaptive + Radar candidate (2026-11-03)
 
 - 晋升本机开发提交 `ddad15a`：已有 `adaptive` 增强完整工作包委派，观察目标约30%；新增 `adaptive_aggressive` 进一步委派浅层但可完整交付的工作包，观察目标约50%。百分比不进入生产配额控制，也不代表实测达标。

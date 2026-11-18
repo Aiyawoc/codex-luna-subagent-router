@@ -16,10 +16,10 @@ class UpwardRoutingPolicyTests(unittest.TestCase):
         self.assertIn("不先浪费一次低阶 attempt", text)
         self.assertIn("RoutePlan 2.1", text)
 
-    def test_routing_policy_defines_three_tiers_and_objective_signals(self) -> None:
+    def test_routing_policy_defines_current_tiers_and_objective_signals(self) -> None:
         text = (ROOT / "references" / "routing-policy.md").read_text(encoding="utf-8")
-        self.assertIn("luna < sol < astra", text)
-        self.assertNotIn("luna < terra < sol < astra", text)
+        self.assertIn("luna < terra < sol < astra", text)
+        self.assertIn("静态基准仍按 Luna / Sol / Astra 分配", text)
         self.assertIn("race / concurrency / lifecycle / ordering", text)
         self.assertIn("禁止牺牲性低价试错", text)
         self.assertIn("高阶 Worker 窄而贵", text)
@@ -31,13 +31,13 @@ class UpwardRoutingPolicyTests(unittest.TestCase):
 
         luna_race = cases["luna-max-cross-module-race-uproute"]
         self.assertEqual(luna_race["lead_model"], "gpt-6-luna")
-        self.assertEqual(luna_race["expected_model"], "gpt-6.1-sol")
+        self.assertEqual(luna_race["expected_model"], "gpt-6.2-sol")
         self.assertEqual(luna_race["expected_route_direction"], "up")
         self.assertEqual(luna_race["expected_minimum_capability"], "sol")
 
         sol_expert = cases["sol-max-expert-uproute-effort-floor"]
-        self.assertEqual(sol_expert["lead_model"], "gpt-6.1-sol")
-        self.assertEqual(sol_expert["expected_model"], "gpt-6-astra")
+        self.assertEqual(sol_expert["lead_model"], "gpt-6.2-sol")
+        self.assertEqual(sol_expert["expected_model"], "gpt-6.2-astra")
         self.assertEqual(sol_expert["minimum_upward_effort"], "medium")
 
     def test_read_heavy_no_longer_auto_routes_to_terra(self) -> None:
@@ -51,7 +51,7 @@ class UpwardRoutingPolicyTests(unittest.TestCase):
         with (ROOT / "evals" / "cases.json").open("r", encoding="utf-8") as handle:
             cases = {case["id"]: case for case in json.load(handle)["cases"]}
         case = cases["capability-gap-no-sacrificial-attempt"]
-        self.assertEqual(case["expected_first_worker_model"], "gpt-6.1-sol")
+        self.assertEqual(case["expected_first_worker_model"], "gpt-6.2-sol")
         self.assertIn("luna_probe_first", case["forbid"])
 
 

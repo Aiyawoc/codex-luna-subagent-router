@@ -16,7 +16,7 @@ import validate_route_plan  # noqa: E402
 class Gpt6WorkerFamilyTests(unittest.TestCase):
     def test_current_route_pairs_use_current_worker_family(self):
         models = {model for model, _ in outcome_store.PAIRS}
-        self.assertEqual(models, {"gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"})
+        self.assertEqual(models, {"gpt-6-luna", "gpt-6.1-terra", "gpt-6.2-sol", "gpt-6.2-astra"})
         routed = {model for model, _, _, _ in route_advisor.ROUTES}
         self.assertEqual(routed, models)
         self.assertNotIn("gpt-5.6-luna", routed)
@@ -24,6 +24,8 @@ class Gpt6WorkerFamilyTests(unittest.TestCase):
 
     def test_legacy_gpt56_pairs_are_read_compatibility_only(self):
         legacy = set(outcome_store.LEGACY_PAIRS)
+        self.assertIn(("gpt-6.1-sol", "medium"), legacy)
+        self.assertIn(("gpt-6-astra", "max"), legacy)
         self.assertIn(("gpt-6-sol", "high"), legacy)
         self.assertIn(("gpt-5.6-luna", "high"), legacy)
         self.assertIn(("gpt-5.6-sol", "high"), legacy)
@@ -31,12 +33,16 @@ class Gpt6WorkerFamilyTests(unittest.TestCase):
 
     def test_route_plan_current_models_are_gpt6_for_luna_and_sol(self):
         self.assertIn("gpt-6-luna", validate_route_plan.ADAPTIVE_MODELS)
-        self.assertIn("gpt-6.1-sol", validate_route_plan.ADAPTIVE_MODELS)
+        self.assertIn("gpt-6.2-sol", validate_route_plan.ADAPTIVE_MODELS)
+        self.assertIn("gpt-6.2-astra", validate_route_plan.ADAPTIVE_MODELS)
+        self.assertIn("gpt-6.1-terra", validate_route_plan.ADAPTIVE_MODELS)
+        self.assertNotIn("gpt-6.1-sol", validate_route_plan.ADAPTIVE_MODELS)
+        self.assertNotIn("gpt-6-astra", validate_route_plan.ADAPTIVE_MODELS)
         self.assertNotIn("gpt-6-sol", validate_route_plan.ADAPTIVE_MODELS)
         self.assertNotIn("gpt-5.6-luna", validate_route_plan.ADAPTIVE_MODELS)
         self.assertNotIn("gpt-5.6-sol", validate_route_plan.ADAPTIVE_MODELS)
         self.assertEqual(validate_route_plan.PROFILE_BY_ROUTE[("gpt-6-luna", "high")], "luna_high")
-        self.assertEqual(validate_route_plan.PROFILE_BY_ROUTE[("gpt-6.1-sol", "high")], "sol_high")
+        self.assertEqual(validate_route_plan.PROFILE_BY_ROUTE[("gpt-6.2-sol", "high")], "sol_high")
 
     def test_bundled_profiles_use_gpt6_runtime_ids(self):
         for name in ("low", "medium", "high", "xhigh", "max"):
@@ -45,11 +51,11 @@ class Gpt6WorkerFamilyTests(unittest.TestCase):
             self.assertNotIn("gpt-5.6-luna", text)
         for name in ("high", "xhigh"):
             text = (ROOT / "assets/codex-agents" / f"sol-{name}.toml").read_text(encoding="utf-8")
-            self.assertIn('model = "gpt-6.1-sol"', text)
+            self.assertIn('model = "gpt-6.2-sol"', text)
             self.assertNotIn('model = "gpt-6-sol"\n', text)
             self.assertNotIn("gpt-5.6-sol", text)
 
-    def test_current_surfaces_do_not_reintroduce_gpt56_worker_ids(self):
+    def test_current_surfaces_do_not_bind_gpt56_worker_ids(self):
         current_skill = (
             ROOT / "SKILL.md",
             ROOT / "references/routing-policy.md",
@@ -67,8 +73,8 @@ class Gpt6WorkerFamilyTests(unittest.TestCase):
         for path in current_skill + tuple(path for path in current_repo if path.is_file()):
             with self.subTest(path=path):
                 text = path.read_text(encoding="utf-8")
-                self.assertNotIn("gpt-5.6-luna", text)
-                self.assertNotIn("gpt-5.6-sol", text)
+                self.assertNotIn('model = "gpt-5.6-luna"', text)
+                self.assertNotIn('model = "gpt-5.6-sol"', text)
 
 
 if __name__ == "__main__":

@@ -81,7 +81,7 @@ class DecisionPlanTests(unittest.TestCase):
 
     def output(self):
         value = plan_work.plan_work(
-            self.payload, lead_model="gpt-6-astra", lead_effort="high", calibration="off",
+            self.payload, lead_model="gpt-6.2-astra", lead_effort="high", calibration="off",
             registry=self.registry, scope="global", routing_mode="adaptive", runtime_health="healthy")
         value["plan_id"] = uuid.uuid4().hex
         route_advisor._record_planning_observation(value, self.registry, "global", None)
@@ -373,7 +373,7 @@ class PlannerCLIIntegrationTests(unittest.TestCase):
                     env.pop(key, None)
                 env["NO_PROXY"] = "127.0.0.1,localhost"
                 cmd = [sys.executable, str(SCRIPTS / "route_advisor.py"), "--global-scope",
-                       "plan", str(request), "--lead-model", "gpt-6-astra", "--lead-effort", "high",
+                       "plan", str(request), "--lead-model", "gpt-6.2-astra", "--lead-effort", "high",
                        "--open-workers", "0", "--runtime-health", "healthy"]
                 processes = [subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env) for _ in range(3)]
                 outputs = []
